@@ -113,6 +113,9 @@ func handleGetTRC20TokenInfo(pool *nodepool.Pool) server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_token_info: failed to get decimals: %v", err)), nil
 		}
+		if decimals == nil || decimals.Sign() < 0 || decimals.Cmp(big.NewInt(77)) > 0 {
+			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_token_info: invalid decimals value: %s", decimals)), nil
+		}
 
 		result := map[string]any{
 			"contract_address": contract,
