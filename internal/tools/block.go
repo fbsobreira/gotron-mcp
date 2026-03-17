@@ -35,7 +35,6 @@ func handleGetBlock(pool *nodepool.Pool) server.ToolHandlerFunc {
 		limit := req.GetInt("limit", 50)
 		offset := req.GetInt("offset", 0)
 		txTypeFilter := req.GetString("transaction_type", "")
-		grpc := pool.Client()
 
 		var (
 			block *api.BlockExtention
@@ -44,14 +43,14 @@ func handleGetBlock(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 		if blockNum < 0 {
 			block, err = retry.Do(func() (*api.BlockExtention, error) {
-				return grpc.GetNowBlock()
+				return pool.Client().GetNowBlock()
 			})
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("get_block: failed to get latest block: %v", err)), nil
 			}
 		} else {
 			block, err = retry.Do(func() (*api.BlockExtention, error) {
-				return grpc.GetBlockByNum(int64(blockNum))
+				return pool.Client().GetBlockByNum(int64(blockNum))
 			})
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("get_block: failed to get block %d: %v", blockNum, err)), nil

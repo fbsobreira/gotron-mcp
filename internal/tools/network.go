@@ -55,20 +55,19 @@ func RegisterNetworkTools(s *server.MCPServer, pool *nodepool.Pool, network, nod
 func handleGetTransaction(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		txID := req.GetString("transaction_id", "")
-		grpc := pool.Client()
 		if txID == "" {
 			return mcp.NewToolResultError("transaction_id is required"), nil
 		}
 
 		tx, err := retry.Do(func() (*core.Transaction, error) {
-			return grpc.GetTransactionByID(txID)
+			return pool.Client().GetTransactionByID(txID)
 		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_transaction: %v", err)), nil
 		}
 
 		info, err := retry.Do(func() (*core.TransactionInfo, error) {
-			return grpc.GetTransactionInfoByID(txID)
+			return pool.Client().GetTransactionInfoByID(txID)
 		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_transaction: failed to get info: %v", err)), nil
@@ -153,10 +152,10 @@ func handleGetEnergyPrices(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 func handleGetNetwork(pool *nodepool.Pool, network, _ string) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		conn := pool.Client()
+		conn, activeNode := pool.ClientAndNode()
 		result := map[string]any{
 			"network": network,
-			"node":    pool.ActiveNode(),
+			"node":    activeNode,
 		}
 
 		block, err := conn.GetNowBlock()

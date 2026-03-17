@@ -72,10 +72,10 @@ func handleGetTRC20Balance(pool *nodepool.Pool) server.ToolHandlerFunc {
 			symbol = ""
 		}
 
-		dec := int(decimals.Int64())
-		if dec < 0 || dec > 77 {
-			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_balance: invalid decimals value: %d", dec)), nil
+		if decimals == nil || decimals.Sign() < 0 || decimals.Cmp(big.NewInt(77)) > 0 {
+			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_balance: invalid decimals value: %s", decimals)), nil
 		}
+		dec := int(decimals.Int64())
 
 		result := map[string]any{
 			"address":          addr,

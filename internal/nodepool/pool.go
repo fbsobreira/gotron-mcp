@@ -65,6 +65,13 @@ func (p *Pool) ActiveNode() string {
 	return p.active.Load().address
 }
 
+// ClientAndNode returns the active client and node address from a single
+// atomic load, ensuring both values refer to the same node.
+func (p *Pool) ClientAndNode() (*client.GrpcClient, string) {
+	n := p.active.Load()
+	return n.client, n.address
+}
+
 // SetAPIKey sets the API key on all connected clients.
 func (p *Pool) SetAPIKey(key string) error {
 	if err := p.primary.client.SetAPIKey(key); err != nil {
