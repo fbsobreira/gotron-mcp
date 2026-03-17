@@ -1,0 +1,43 @@
+version: 2
+
+builds:
+  - main: ./cmd/gotron-mcp
+    binary: gotron-mcp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/fbsobreira/gotron-mcp/internal/version.Version={{.Version}} -X github.com/fbsobreira/gotron-mcp/internal/version.Commit={{.ShortCommit}}
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+
+brews:
+  - repository:
+      owner: fbsobreira
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://gotron.sh"
+    description: "MCP server for TRON blockchain"
+    license: "LGPL-3.0"

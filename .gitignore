@@ -1,0 +1,35 @@
+# Binaries
+bin/
+/gotron-mcp
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test
+coverage.out
+*.test
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+vendor/
+
+# Environment
+.env
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Build
+dist/

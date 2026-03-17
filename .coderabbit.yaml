@@ -1,0 +1,116 @@
+language: en-US
+tone_instructions: >
+  Be direct and concise. Focus on actionable feedback.
+  Skip compliments and filler — just point out issues and suggest fixes.
+early_access: true
+enable_free_tier: true
+
+reviews:
+  profile: assertive
+  request_changes_workflow: true
+  high_level_summary: true
+  high_level_summary_placeholder: "@coderabbitai summary"
+  poem: false
+  collapse_walkthrough: true
+  sequence_diagrams: false
+  changed_files_summary: true
+  review_status: true
+  abort_on_close: true
+
+  path_filters:
+    - "!vendor/**"
+    - "!docs/**"
+    - "!**/*.sum"
+
+  path_instructions:
+    - path: "internal/tools/**/*.go"
+      instructions: >
+        MCP tool handlers for TRON blockchain operations. Each file registers
+        tools via Register*Tools functions. All addresses must be validated with
+        validateAddress() before gRPC calls. Write tools must return unsigned
+        transaction hex — never auto-sign. Amounts use SUN internally
+        (1 TRX = 1,000,000 SUN). Tool errors use mcp.NewToolResultError(),
+        not Go error returns. Fee limits must be validated (0-15000 TRX range).
+
+    - path: "internal/util/**/*.go"
+      instructions: >
+        Amount conversion utilities. TRXToSun/SunToTRX handle TRX↔SUN conversion.
+        FormatTRC20Amount/ParseTRC20Amount handle token-specific decimals using
+        math/big. All functions must handle edge cases: zero, negative values,
+        overflow. Table-driven tests required.
+
+    - path: "internal/health/**/*.go"
+      instructions: >
+        Health check endpoint with cached node status. Cache uses mutex-guarded
+        TTL pattern. The lock must be held across the check to prevent thundering
+        herd. All json.Marshal errors must be handled explicitly.
+
+    - path: "internal/config/**/*.go"
+      instructions: >
+        CLI flag and environment variable parsing. Precedence: flags > env > defaults.
+        Network presets map to default gRPC endpoints. Security-sensitive defaults:
+        bind address defaults to 127.0.0.1, insecure mode defaults to false.
+
+    - path: "internal/server/**/*.go"
+      instructions: >
+        MCP server orchestrator. Tool registration is mode-dependent: read tools
+        always registered, write tools only in local (stdio) mode, sign tools
+        only with --keystore flag. Version comes from internal/version package.
+
+    - path: "cmd/**/*.go"
+      instructions: >
+        Entry point. Handles gRPC client setup, MCP server creation, and transport
+        selection (stdio/SSE). SSE mode must have HTTP timeouts, graceful shutdown
+        via signal handling, and health endpoint. Version injected via ldflags.
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    base_branches:
+      - develop
+      - main
+
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: true
+
+  tools:
+    golangci-lint:
+      enabled: true
+    shellcheck:
+      enabled: true
+    gitleaks:
+      enabled: true
+    actionlint:
+      enabled: true
+    yamllint:
+      enabled: true
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  opt_out: false
+  learnings:
+    scope: auto
+  issues:
+    scope: auto
+  pull_requests:
+    scope: auto
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+
+code_generation:
+  unit_tests:
+    path_instructions:
+      - path: "internal/**/*.go"
+        instructions: >
+          Use Go standard testing package with table-driven tests. Test files
+          go alongside source files as *_test.go. Use t.Run for subtests.
+          Mock the gotron-sdk GrpcClient via interfaces for unit testing
+          tool handlers without a live node. Use -race flag in CI.

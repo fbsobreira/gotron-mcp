@@ -1,0 +1,15 @@
+.git
+.github
+.claude
+.gitignore
+.dockerignore
+.goreleaser.yml
+bin/
+dist/
+docs/
+coverage.out
+*.md
+!README.md
+LICENSE
+Makefile
+Dockerfile

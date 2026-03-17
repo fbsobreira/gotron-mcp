@@ -1,0 +1,128 @@
+package tools
+
+import (
+	"context"
+	"encoding/hex"
+	"fmt"
+
+	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
+	"github.com/fbsobreira/gotron-sdk/pkg/address"
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
+	"google.golang.org/protobuf/proto"
+)
+
+// RegisterWitnessReadTools registers list_witnesses.
+func RegisterWitnessReadTools(s *server.MCPServer, pool *nodepool.Pool) {
+	s.AddTool(
+		mcp.NewTool("list_witnesses",
+			mcp.WithDescription("List all super representatives (witnesses) on the TRON network"),
+		),
+		handleListWitnesses(pool),
+	)
+}
+
+// RegisterWitnessWriteTools registers vote_witness (local mode only).
+func RegisterWitnessWriteTools(s *server.MCPServer, pool *nodepool.Pool) {
+	s.AddTool(
+		mcp.NewTool("vote_witness",
+			mcp.WithDescription("Vote for super representatives. Returns unsigned transaction hex."),
+			mcp.WithString("from", mcp.Required(), mcp.Description("Voter address")),
+			mcp.WithObject("votes", mcp.Required(), mcp.Description("Map of witness address to vote count")),
+		),
+		handleVoteWitness(pool),
+	)
+}
+
+func handleListWitnesses(pool *nodepool.Pool) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		grpc := pool.Client()
+		witnesses, err := grpc.ListWitnesses()
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("list_witnesses: %v", err)), nil
+		}
+
+		var list []map[string]any
+		for _, w := range witnesses.Witnesses {
+			addr := address.HexToAddress(hex.EncodeToString(w.Address))
+			list = append(list, map[string]any{
+				"address":          addr.String(),
+				"vote_count":       w.VoteCount,
+				"url":              w.Url,
+				"total_produced":   w.TotalProduced,
+				"total_missed":     w.TotalMissed,
+				"latest_block_num": w.LatestBlockNum,
+				"is_jobs":          w.IsJobs,
+			})
+		}
+
+		result := map[string]any{
+			"witnesses": list,
+			"count":     len(list),
+		}
+
+		return mcp.NewToolResultJSON(result)
+	}
+}
+
+func handleVoteWitness(pool *nodepool.Pool) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		from := req.GetString("from", "")
+		grpc := pool.Client()
+		if err := validateAddress(from); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid from address: %v", err)), nil
+		}
+
+		args := req.GetArguments()
+		votesRaw, ok := args["votes"]
+		if !ok {
+			return mcp.NewToolResultError("votes parameter is required"), nil
+		}
+
+		votesMap, ok := votesRaw.(map[string]any)
+		if !ok {
+			return mcp.NewToolResultError("votes must be an object mapping witness addresses to vote counts"), nil
+		}
+
+		witnessVotes := make(map[string]int64)
+		for addr, count := range votesMap {
+			if err := validateAddress(addr); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid witness address %q: %v", addr, err)), nil
+			}
+			switch v := count.(type) {
+			case float64:
+				if v != float64(int64(v)) || v <= 0 {
+					return mcp.NewToolResultError(fmt.Sprintf("invalid vote count for %s: must be a positive integer", addr)), nil
+				}
+				witnessVotes[addr] = int64(v)
+			case int64:
+				if v <= 0 {
+					return mcp.NewToolResultError(fmt.Sprintf("invalid vote count for %s: must be a positive integer", addr)), nil
+				}
+				witnessVotes[addr] = v
+			default:
+				return mcp.NewToolResultError(fmt.Sprintf("invalid vote count for %s: must be a number", addr)), nil
+			}
+		}
+
+		tx, err := grpc.VoteWitnessAccount(from, witnessVotes)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("vote_witness: %v", err)), nil
+		}
+
+		txBytes, err := proto.Marshal(tx.Transaction)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("vote_witness: failed to serialize: %v", err)), nil
+		}
+
+		result := map[string]any{
+			"transaction_hex": hex.EncodeToString(txBytes),
+			"txid":            hex.EncodeToString(tx.Txid),
+			"from":            from,
+			"votes":           witnessVotes,
+			"type":            "VoteWitnessContract",
+		}
+
+		return mcp.NewToolResultJSON(result)
+	}
+}
