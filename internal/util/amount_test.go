@@ -1,6 +1,7 @@
 package util
 
 import (
+	"math"
 	"math/big"
 	"testing"
 )
@@ -50,6 +51,7 @@ func TestSunToTRX(t *testing.T) {
 		{"negative whole", -1_500_000, "-1.500000"},
 		{"negative fractional", -500_000, "-0.500000"},
 		{"negative one sun", -1, "-0.000001"},
+		{"min int64 overflow", math.MinInt64, "-9223372036854.775808"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

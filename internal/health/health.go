@@ -19,7 +19,7 @@ type Handler struct {
 	pool    *nodepool.Pool
 	network string
 
-	mu     sync.Mutex
+	mu     sync.RWMutex
 	cache  []byte
 	status int
 	expiry time.Time
@@ -36,20 +36,35 @@ func NewHandler(pool *nodepool.Pool, network string) *Handler {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
+	// Fast path: serve from cache under read lock
+	h.mu.RLock()
 	if time.Now().Before(h.expiry) {
-		w.WriteHeader(h.status)
-		_, _ = w.Write(h.cache)
+		status := h.status
+		cache := h.cache
+		h.mu.RUnlock()
+		w.WriteHeader(status)
+		_, _ = w.Write(cache)
+		return
+	}
+	h.mu.RUnlock()
+
+	// Slow path: refresh under write lock
+	h.mu.Lock()
+	// Double-check after acquiring write lock
+	if time.Now().Before(h.expiry) {
+		status := h.status
+		cache := h.cache
+		h.mu.Unlock()
+		w.WriteHeader(status)
+		_, _ = w.Write(cache)
 		return
 	}
 
 	body, statusCode := h.check()
-
 	h.cache = body
 	h.status = statusCode
 	h.expiry = time.Now().Add(cacheTTL)
+	h.mu.Unlock()
 
 	w.WriteHeader(statusCode)
 	_, _ = w.Write(body)

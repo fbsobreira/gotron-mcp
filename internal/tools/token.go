@@ -72,14 +72,19 @@ func handleGetTRC20Balance(pool *nodepool.Pool) server.ToolHandlerFunc {
 			symbol = ""
 		}
 
+		if decimals == nil || decimals.Sign() < 0 || decimals.Cmp(big.NewInt(77)) > 0 {
+			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_balance: invalid decimals value: %s", decimals)), nil
+		}
+		dec := int(decimals.Int64())
+
 		result := map[string]any{
 			"address":          addr,
 			"contract_address": contract,
-			"balance":          util.FormatTRC20Amount(balance, int(decimals.Int64())),
+			"balance":          util.FormatTRC20Amount(balance, dec),
 			"balance_raw":      balance.String(),
 			"token_name":       name,
 			"token_symbol":     symbol,
-			"decimals":         decimals.Int64(),
+			"decimals":         dec,
 		}
 
 		return mcp.NewToolResultJSON(result)
@@ -107,6 +112,9 @@ func handleGetTRC20TokenInfo(pool *nodepool.Pool) server.ToolHandlerFunc {
 		decimals, err := grpc.TRC20GetDecimals(contract)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_token_info: failed to get decimals: %v", err)), nil
+		}
+		if decimals == nil || decimals.Sign() < 0 || decimals.Cmp(big.NewInt(77)) > 0 {
+			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_token_info: invalid decimals value: %s", decimals)), nil
 		}
 
 		result := map[string]any{

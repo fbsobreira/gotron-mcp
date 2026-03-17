@@ -36,7 +36,8 @@ func New(primaryAddr string, opts []grpc.DialOption) (*Pool, error) {
 	return p, nil
 }
 
-// AddFallback connects a fallback node. Call after New.
+// AddFallback connects a fallback node. Must be called during initialization
+// before the pool is used concurrently (before serving requests).
 func (p *Pool) AddFallback(addr string, opts []grpc.DialOption) error {
 	fallbackClient := client.NewGrpcClient(addr)
 	if err := fallbackClient.Start(opts...); err != nil {
@@ -62,6 +63,13 @@ func (p *Pool) FallbackClient() *client.GrpcClient {
 // ActiveNode returns the address of the currently active node.
 func (p *Pool) ActiveNode() string {
 	return p.active.Load().address
+}
+
+// ClientAndNode returns the active client and node address from a single
+// atomic load, ensuring both values refer to the same node.
+func (p *Pool) ClientAndNode() (*client.GrpcClient, string) {
+	n := p.active.Load()
+	return n.client, n.address
 }
 
 // SetAPIKey sets the API key on all connected clients.

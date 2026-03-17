@@ -80,7 +80,7 @@ func RegisterContractWriteTools(s *server.MCPServer, pool *nodepool.Pool) {
 			mcp.WithString("method", mcp.Required(), mcp.Description("Method signature (e.g., 'transfer(address,uint256)')")),
 			mcp.WithString("params", mcp.Required(), mcp.Description("Method parameters as JSON string")),
 			mcp.WithNumber("fee_limit", mcp.Description("Fee limit in TRX (default: 100)")),
-			mcp.WithNumber("call_value", mcp.Description("TRX to send with call in SUN (default: 0)")),
+			mcp.WithNumber("call_value", mcp.Description("Amount to send with call in SUN (default: 0)")),
 		),
 		handleTriggerContract(pool),
 	)
@@ -145,6 +145,9 @@ func handleDecodeABIOutput(pool *nodepool.Pool) server.ToolHandlerFunc {
 		}
 
 		dataHex = strings.TrimPrefix(dataHex, "0x")
+		if len(dataHex) > 1<<20 {
+			return mcp.NewToolResultError("decode_abi_output: data exceeds maximum length"), nil
+		}
 		data, err := hex.DecodeString(dataHex)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("decode_abi_output: invalid hex data: %v", err)), nil

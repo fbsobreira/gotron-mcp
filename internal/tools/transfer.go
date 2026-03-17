@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/util"
@@ -106,8 +107,12 @@ func handleTransferTRC20(pool *nodepool.Pool) server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("transfer_trc20: failed to get decimals: %v", err)), nil
 		}
+		if decimals == nil || decimals.Sign() < 0 || decimals.Cmp(big.NewInt(77)) > 0 {
+			return mcp.NewToolResultError(fmt.Sprintf("transfer_trc20: invalid decimals value: %s", decimals)), nil
+		}
+		dec := int(decimals.Int64())
 
-		amount, err := util.ParseTRC20Amount(amountStr, int(decimals.Int64()))
+		amount, err := util.ParseTRC20Amount(amountStr, dec)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid amount: %v", err)), nil
 		}

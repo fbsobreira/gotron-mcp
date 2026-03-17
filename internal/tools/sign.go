@@ -14,6 +14,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const maxHexInputLen = 1 << 20 // 1 MB max hex string input
+
 // RegisterSignTools registers sign_transaction and broadcast_transaction (local mode + keystore only).
 func RegisterSignTools(s *server.MCPServer, pool *nodepool.Pool, keystorePath string) {
 	s.AddTool(
@@ -36,6 +38,8 @@ func RegisterSignTools(s *server.MCPServer, pool *nodepool.Pool, keystorePath st
 }
 
 func handleSignTransaction(keystorePath string) server.ToolHandlerFunc {
+	ks := keystore.NewKeyStore(keystorePath, keystore.StandardScryptN, keystore.StandardScryptP)
+
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		txHex := req.GetString("transaction_hex", "")
 		signer := req.GetString("signer", "")
@@ -43,6 +47,9 @@ func handleSignTransaction(keystorePath string) server.ToolHandlerFunc {
 
 		if txHex == "" {
 			return mcp.NewToolResultError("transaction_hex is required"), nil
+		}
+		if len(txHex) > maxHexInputLen {
+			return mcp.NewToolResultError("transaction_hex exceeds maximum length"), nil
 		}
 		if signer == "" {
 			return mcp.NewToolResultError("signer is required"), nil
@@ -60,8 +67,6 @@ func handleSignTransaction(keystorePath string) server.ToolHandlerFunc {
 		if err := proto.Unmarshal(txBytes, &tx); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to parse transaction: %v", err)), nil
 		}
-
-		ks := keystore.NewKeyStore(keystorePath, keystore.StandardScryptN, keystore.StandardScryptP)
 		accs := ks.Accounts()
 
 		var found *keystore.Account
@@ -101,6 +106,9 @@ func handleBroadcastTransaction(pool *nodepool.Pool) server.ToolHandlerFunc {
 		grpc := pool.Client()
 		if txHex == "" {
 			return mcp.NewToolResultError("signed_transaction_hex is required"), nil
+		}
+		if len(txHex) > maxHexInputLen {
+			return mcp.NewToolResultError("signed_transaction_hex exceeds maximum length"), nil
 		}
 
 		txBytes, err := hex.DecodeString(txHex)

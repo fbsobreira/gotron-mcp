@@ -2,6 +2,7 @@ package util
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 	"strings"
 )
@@ -52,6 +53,10 @@ func TRXToSun(trx string) (int64, error) {
 
 // SunToTRX converts SUN (int64) to a TRX string with 6 decimal places.
 func SunToTRX(sun int64) string {
+	if sun == math.MinInt64 {
+		// -9223372036854.775808 — can't negate without overflow
+		return "-9223372036854.775808"
+	}
 	sign := ""
 	if sun < 0 {
 		sign = "-"
