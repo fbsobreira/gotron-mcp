@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
+	"github.com/fbsobreira/gotron-mcp/internal/retry"
 	"github.com/fbsobreira/gotron-sdk/pkg/client"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -42,12 +43,16 @@ func handleGetBlock(pool *nodepool.Pool) server.ToolHandlerFunc {
 		)
 
 		if blockNum < 0 {
-			block, err = grpc.GetNowBlock()
+			block, err = retry.Do(func() (*api.BlockExtention, error) {
+				return grpc.GetNowBlock()
+			})
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("get_block: failed to get latest block: %v", err)), nil
 			}
 		} else {
-			block, err = grpc.GetBlockByNum(int64(blockNum))
+			block, err = retry.Do(func() (*api.BlockExtention, error) {
+				return grpc.GetBlockByNum(int64(blockNum))
+			})
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("get_block: failed to get block %d: %v", blockNum, err)), nil
 			}

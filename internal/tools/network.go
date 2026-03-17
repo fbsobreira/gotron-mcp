@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
+	"github.com/fbsobreira/gotron-mcp/internal/retry"
+	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -58,12 +60,16 @@ func handleGetTransaction(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError("transaction_id is required"), nil
 		}
 
-		tx, err := grpc.GetTransactionByID(txID)
+		tx, err := retry.Do(func() (*core.Transaction, error) {
+			return grpc.GetTransactionByID(txID)
+		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_transaction: %v", err)), nil
 		}
 
-		info, err := grpc.GetTransactionInfoByID(txID)
+		info, err := retry.Do(func() (*core.TransactionInfo, error) {
+			return grpc.GetTransactionInfoByID(txID)
+		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_transaction: failed to get info: %v", err)), nil
 		}
@@ -145,15 +151,15 @@ func handleGetEnergyPrices(pool *nodepool.Pool) server.ToolHandlerFunc {
 	}
 }
 
-func handleGetNetwork(pool *nodepool.Pool, network, node string) server.ToolHandlerFunc {
+func handleGetNetwork(pool *nodepool.Pool, network, _ string) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		grpc := pool.Client()
+		conn := pool.Client()
 		result := map[string]any{
 			"network": network,
-			"node":    node,
+			"node":    pool.ActiveNode(),
 		}
 
-		block, err := grpc.GetNowBlock()
+		block, err := conn.GetNowBlock()
 		if err == nil && block.BlockHeader != nil && block.BlockHeader.RawData != nil {
 			result["latest_block"] = block.BlockHeader.RawData.Number
 			result["block_timestamp"] = block.BlockHeader.RawData.Timestamp
@@ -181,5 +187,5 @@ func handleGetBandwidthPrices(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 // normalizeResult fixes the TRON protocol typo "SUCESS" → "SUCCESS".
 func normalizeResult(s string) string {
-	return strings.Replace(s, "SUCESS", "SUCCESS", 1)
+	return strings.ReplaceAll(s, "SUCESS", "SUCCESS")
 }

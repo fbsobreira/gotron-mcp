@@ -106,8 +106,12 @@ func handleTransferTRC20(pool *nodepool.Pool) server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("transfer_trc20: failed to get decimals: %v", err)), nil
 		}
+		dec := int(decimals.Int64())
+		if dec < 0 || dec > 77 {
+			return mcp.NewToolResultError(fmt.Sprintf("transfer_trc20: invalid decimals value: %d", dec)), nil
+		}
 
-		amount, err := util.ParseTRC20Amount(amountStr, int(decimals.Int64()))
+		amount, err := util.ParseTRC20Amount(amountStr, dec)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid amount: %v", err)), nil
 		}
