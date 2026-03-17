@@ -100,6 +100,10 @@ func TestIsRetryable(t *testing.T) {
 }
 
 func TestDo_BackoffTiming(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping backoff timing test in short mode")
+	}
+
 	start := time.Now()
 	calls := 0
 	_, _ = Do(func() (string, error) {
@@ -108,8 +112,10 @@ func TestDo_BackoffTiming(t *testing.T) {
 	})
 	elapsed := time.Since(start)
 
-	// With 3 retries, 2 sleeps: base 500ms + jitter, then 1s + jitter
-	// Minimum ~1.5s, maximum ~3.75s (with jitter)
+	// With 3 retries, 2 sleeps with jitter:
+	// Sleep 1: 500ms base + up to 250ms jitter
+	// Sleep 2: 1000ms base + up to 500ms jitter
+	// Lower bound ~500ms (base delays only), upper bound ~4.75s (max jitter)
 	if elapsed < 500*time.Millisecond {
 		t.Errorf("retries completed too fast: %v (expected backoff delays)", elapsed)
 	}

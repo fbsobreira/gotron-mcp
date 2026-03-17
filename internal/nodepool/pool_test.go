@@ -1,6 +1,7 @@
 package nodepool
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/fbsobreira/gotron-sdk/pkg/client"
@@ -156,5 +157,45 @@ func TestClientAndNode_AfterFailover(t *testing.T) {
 	}
 	if addr != "fallback:50051" {
 		t.Errorf("ClientAndNode() addr = %q, want %q", addr, "fallback:50051")
+	}
+}
+
+func TestConcurrentFailoverRecover(t *testing.T) {
+	p := newTestPool("primary:50051", "fallback:50051")
+	const goroutines = 10
+	const iterations = 100
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines * 2)
+
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			for range iterations {
+				p.Failover()
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for range iterations {
+				p.Recover()
+			}
+		}()
+	}
+	wg.Wait()
+
+	// After concurrent operations, pool must be in a valid state
+	c, addr := p.ClientAndNode()
+	if addr != "primary:50051" && addr != "fallback:50051" {
+		t.Errorf("ActiveNode() = %q, want primary or fallback", addr)
+	}
+	if c == nil {
+		t.Error("Client() should not be nil")
+	}
+	if addr == "primary:50051" && c != p.primary.client {
+		t.Error("client/node mismatch: addr is primary but client is not")
+	}
+	if addr == "fallback:50051" && c != p.fallback.client {
+		t.Error("client/node mismatch: addr is fallback but client is not")
 	}
 }

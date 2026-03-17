@@ -29,16 +29,17 @@ func TestEnvOrDefault(t *testing.T) {
 		name     string
 		key      string
 		envVal   string
+		setEnv   bool
 		fallback string
 		want     string
 	}{
-		{"env set", "TEST_CONFIG_VAR", "from-env", "default", "from-env"},
-		{"env empty uses fallback", "TEST_CONFIG_EMPTY", "", "default", "default"},
-		{"env unset uses fallback", "TEST_CONFIG_UNSET_XYZ", "", "fallback-val", "fallback-val"},
+		{"env set", "TEST_CONFIG_VAR", "from-env", true, "default", "from-env"},
+		{"env empty uses fallback", "TEST_CONFIG_EMPTY", "", true, "default", "default"},
+		{"env unset uses fallback", "TEST_CONFIG_UNSET_XYZ", "", false, "fallback-val", "fallback-val"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.envVal != "" {
+			if tt.setEnv {
 				t.Setenv(tt.key, tt.envVal)
 			}
 			got := envOrDefault(tt.key, tt.fallback)
