@@ -81,7 +81,7 @@ func RegisterContractWriteTools(s *server.MCPServer, pool *nodepool.Pool) {
 			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
 			mcp.WithString("method", mcp.Required(), mcp.Description("Method signature (e.g., 'transfer(address,uint256)')")),
 			mcp.WithString("params", mcp.Required(), mcp.Description("Method parameters as JSON array, each element is {type: value} e.g., [{\"address\": \"TJD...\"}, {\"uint256\": \"1000\"}]")),
-			mcp.WithNumber("fee_limit", mcp.Description("Fee limit in TRX, range 0-15000 (default: 100)")),
+			mcp.WithNumber("fee_limit", mcp.Description("Fee limit in whole TRX (integer), range 0-15000 (default: 100)")),
 			mcp.WithNumber("call_value", mcp.Description("Amount to send with call in SUN (default: 0)")),
 		),
 		handleTriggerContract(pool),
@@ -146,7 +146,7 @@ func handleDecodeABIOutput(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		dataHex = strings.TrimPrefix(dataHex, "0x")
+		dataHex = strings.TrimPrefix(strings.TrimPrefix(dataHex, "0x"), "0X")
 		if len(dataHex) > 1<<20 {
 			return mcp.NewToolResultError("decode_abi_output: data exceeds maximum length"), nil
 		}
