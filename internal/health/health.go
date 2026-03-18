@@ -1,6 +1,7 @@
 package health
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -75,7 +76,7 @@ func (h *Handler) check() ([]byte, int) {
 	var latestBlock int64
 
 	h.pool.CheckHealth()
-	block, err := h.pool.Client().GetNowBlock()
+	block, err := h.pool.Client().GetNowBlockCtx(context.Background())
 	if err != nil {
 		nodeStatus = fmt.Sprintf("error: %v", err)
 	} else if block.BlockHeader != nil && block.BlockHeader.RawData != nil {

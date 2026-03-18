@@ -94,7 +94,7 @@ func handleListContractMethods(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		contractABI, err := conn.GetContractABIResolved(contract)
+		contractABI, err := conn.GetContractABIResolvedCtx(ctx, contract)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("list_contract_methods: %v", err)), nil
 		}
@@ -170,7 +170,7 @@ func handleDecodeABIOutput(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 		// Decode output using contract ABI
 		conn := pool.Client()
-		contractABI, err := conn.GetContractABIResolved(contract)
+		contractABI, err := conn.GetContractABIResolvedCtx(ctx, contract)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("decode_abi_output: failed to fetch ABI: %v", err)), nil
 		}
@@ -193,7 +193,7 @@ func handleGetContractABI(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		contractABI, err := conn.GetContractABIResolved(contract)
+		contractABI, err := conn.GetContractABIResolvedCtx(ctx, contract)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_contract_abi: %v", err)), nil
 		}
@@ -228,12 +228,12 @@ func handleEstimateEnergy(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		estimate, err := conn.EstimateEnergy(from, contract, method, params, 0, "", 0)
+		estimate, err := conn.EstimateEnergyCtx(ctx, from, contract, method, params, 0, "", 0)
 		if err != nil && isEstimateEnergyUnsupported(err) {
 			// Primary doesn't support EstimateEnergy RPC — try fallback
 			if fallback := pool.FallbackClient(); fallback != nil {
 				log.Printf("estimate_energy: trying fallback node")
-				estimate, err = fallback.EstimateEnergy(from, contract, method, params, 0, "", 0)
+				estimate, err = fallback.EstimateEnergyCtx(ctx, from, contract, method, params, 0, "", 0)
 			}
 		}
 		if err != nil {
@@ -271,7 +271,7 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		tx, err := conn.TriggerConstantContract(from, contract, method, params)
+		tx, err := conn.TriggerConstantContractCtx(ctx, from, contract, method, params)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("trigger_constant_contract: %v", err)), nil
 		}
@@ -286,7 +286,7 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 			result["result_hex"] = hex.EncodeToString(rawResult)
 
 			// Try to decode the result using ABI if available
-			contractABI, abiErr := conn.GetContractABIResolved(contract)
+			contractABI, abiErr := conn.GetContractABIResolvedCtx(ctx, contract)
 			if abiErr == nil && contractABI != nil {
 				decoded, decErr := abi.DecodeOutput(contractABI, method, rawResult)
 				if decErr == nil && decoded != nil {
@@ -330,7 +330,7 @@ func handleTriggerContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 		}
 		feeLimitSun := int64(feeLimit) * 1_000_000
 
-		tx, err := conn.TriggerContract(from, contract, method, params, feeLimitSun, int64(callValue), "", 0)
+		tx, err := conn.TriggerContractCtx(ctx, from, contract, method, params, feeLimitSun, int64(callValue), "", 0)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("trigger_contract: %v", err)), nil
 		}

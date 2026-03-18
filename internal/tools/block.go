@@ -43,14 +43,14 @@ func handleGetBlock(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 		if blockNum < 0 {
 			block, err = retry.Do(func() (*api.BlockExtention, error) {
-				return pool.Client().GetNowBlock()
+				return pool.Client().GetNowBlockCtx(ctx)
 			})
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("get_block: failed to get latest block: %v", err)), nil
 			}
 		} else {
 			block, err = retry.Do(func() (*api.BlockExtention, error) {
-				return pool.Client().GetBlockByNum(int64(blockNum))
+				return pool.Client().GetBlockByNumCtx(ctx, int64(blockNum))
 			})
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("get_block: failed to get block %d: %v", blockNum, err)), nil

@@ -71,7 +71,7 @@ func handleFreezeBalance(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		tx, err := conn.FreezeBalanceV2(from, resource, sun)
+		tx, err := conn.FreezeBalanceV2Ctx(ctx, from, resource, sun)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("freeze_balance: %v", err)), nil
 		}
@@ -119,7 +119,7 @@ func handleUnfreezeBalance(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		tx, err := conn.UnfreezeBalanceV2(from, resource, sun)
+		tx, err := conn.UnfreezeBalanceV2Ctx(ctx, from, resource, sun)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("unfreeze_balance: %v", err)), nil
 		}
