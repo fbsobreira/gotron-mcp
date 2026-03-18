@@ -30,6 +30,15 @@ func handleListProposals(pool *nodepool.Pool) server.ToolHandlerFunc {
 		limit := req.GetInt("limit", 10)
 		offset := req.GetInt("offset", 0)
 		order := req.GetString("order", "desc")
+		if limit < 0 {
+			limit = 10
+		}
+		if offset < 0 {
+			offset = 0
+		}
+		if order != "desc" && order != "asc" {
+			return mcp.NewToolResultError("list_proposals: order must be 'asc' or 'desc'"), nil
+		}
 
 		conn := pool.Client()
 		proposals, err := conn.ProposalsListCtx(ctx)
@@ -37,8 +46,8 @@ func handleListProposals(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("list_proposals: %v", err)), nil
 		}
 
-		// Sort by proposal ID
-		items := proposals.Proposals
+		// Sort by proposal ID (copy to avoid mutating SDK response)
+		items := slices.Clone(proposals.Proposals)
 		if order == "desc" {
 			slices.Reverse(items)
 		}
