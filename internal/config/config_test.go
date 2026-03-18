@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 )
 
@@ -41,6 +42,8 @@ func TestEnvOrDefault(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.setEnv {
 				t.Setenv(tt.key, tt.envVal)
+			} else {
+				_ = os.Unsetenv(tt.key)
 			}
 			got := envOrDefault(tt.key, tt.fallback)
 			if got != tt.want {
