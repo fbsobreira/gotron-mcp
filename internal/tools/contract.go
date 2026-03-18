@@ -37,7 +37,7 @@ func RegisterContractReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("get_contract_abi",
 			mcp.WithDescription("Get the ABI of a smart contract on TRON. Automatically resolves proxy contracts (ERC-1967)."),
-			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address")),
+			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
 		),
 		handleGetContractABI(pool),
 	)
@@ -45,7 +45,7 @@ func RegisterContractReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("list_contract_methods",
 			mcp.WithDescription("Get a human-readable summary of a smart contract's methods with signatures, inputs, outputs, and mutability. Auto-resolves proxy contracts."),
-			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address")),
+			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
 		),
 		handleListContractMethods(pool),
 	)
@@ -53,7 +53,7 @@ func RegisterContractReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("decode_abi_output",
 			mcp.WithDescription("Decode ABI-encoded output hex from a contract call. Handles return values, revert reasons (Error(string)), and panic codes (Panic(uint256))."),
-			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Contract address (needed to fetch ABI for decoding)")),
+			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Contract address (base58, starts with T; needed to fetch ABI for decoding)")),
 			mcp.WithString("method", mcp.Required(), mcp.Description("Method signature (e.g., 'balanceOf(address)')")),
 			mcp.WithString("data", mcp.Required(), mcp.Description("Hex-encoded output bytes to decode (0x prefix optional)")),
 		),
