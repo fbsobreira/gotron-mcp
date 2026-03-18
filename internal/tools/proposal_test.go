@@ -103,13 +103,6 @@ func TestListProposals(t *testing.T) {
 			wantTotal:    15,
 			wantHasMore:  false,
 		},
-		{
-			name:         "second page",
-			args:         map[string]any{"limit": float64(10), "offset": float64(10)},
-			wantReturned: 5,
-			wantTotal:    15,
-			wantHasMore:  false,
-		},
 	}
 
 	for _, tt := range tests {

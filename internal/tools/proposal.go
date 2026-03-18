@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"slices"
+	"sort"
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
@@ -30,7 +31,7 @@ func handleListProposals(pool *nodepool.Pool) server.ToolHandlerFunc {
 		limit := req.GetInt("limit", 10)
 		offset := req.GetInt("offset", 0)
 		order := req.GetString("order", "desc")
-		if limit < 0 {
+		if limit <= 0 {
 			limit = 10
 		}
 		if offset < 0 {
@@ -48,9 +49,12 @@ func handleListProposals(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 		// Sort by proposal ID (copy to avoid mutating SDK response)
 		items := slices.Clone(proposals.Proposals)
-		if order == "desc" {
-			slices.Reverse(items)
-		}
+		sort.SliceStable(items, func(i, j int) bool {
+			if order == "desc" {
+				return items[i].ProposalId > items[j].ProposalId
+			}
+			return items[i].ProposalId < items[j].ProposalId
+		})
 
 		var list []map[string]any
 		for _, p := range items {

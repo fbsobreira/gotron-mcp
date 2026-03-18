@@ -40,7 +40,7 @@ func handleListWitnesses(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		limit := req.GetInt("limit", 10)
 		offset := req.GetInt("offset", 0)
-		if limit < 0 {
+		if limit <= 0 {
 			limit = 10
 		}
 		if offset < 0 {
