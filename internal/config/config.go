@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Config holds all configuration for the GoTRON MCP server.
@@ -51,6 +52,21 @@ func Parse() *Config {
 	flag.StringVar(&cfg.TrustedProxy, "trusted-proxy", envOrDefault("GOTRON_MCP_TRUSTED_PROXY", "none"), "Trusted proxy mode: cloudflare, all, none")
 
 	flag.Parse()
+
+	if cfg.RateLimit < 0 {
+		log.Fatalf("invalid --rate-limit %d: must be >= 0", cfg.RateLimit)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(cfg.TrustedProxy)) {
+	case "", "none":
+		cfg.TrustedProxy = "none"
+	case "all":
+		cfg.TrustedProxy = "all"
+	case "cloudflare":
+		cfg.TrustedProxy = "cloudflare"
+	default:
+		log.Fatalf("invalid --trusted-proxy %q: must be one of none, all, cloudflare", cfg.TrustedProxy)
+	}
 
 	if cfg.Node == "" {
 		cfg.Node = resolveNode(cfg.Network)

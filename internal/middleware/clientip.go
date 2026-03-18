@@ -71,14 +71,14 @@ func parseValidIP(s string) string {
 //
 // TrustCloudflare assumes Cloudflare Tunnel (cloudflared) is in use, where
 // the tunnel connects from loopback. Headers are only trusted when RemoteAddr
-// is loopback (127.0.0.1 or ::1) to prevent spoofing from direct connections.
+// is a loopback address to prevent spoofing from direct connections.
 func shouldTrustHeaders(r *http.Request, mode TrustMode) bool {
 	switch mode {
 	case TrustAll:
 		return true
 	case TrustCloudflare:
-		host := remoteIP(r)
-		return host == "127.0.0.1" || host == "::1"
+		ip := net.ParseIP(remoteIP(r))
+		return ip != nil && ip.IsLoopback()
 	default:
 		return false
 	}
