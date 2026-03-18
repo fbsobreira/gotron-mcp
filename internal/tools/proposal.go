@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"slices"
+	"sort"
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
@@ -15,7 +17,10 @@ import (
 func RegisterProposalTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("list_proposals",
-			mcp.WithDescription("List all governance proposals on the TRON network"),
+			mcp.WithDescription("List governance proposals on the TRON network with pagination support. Returns newest first by default."),
+			mcp.WithNumber("limit", mcp.Description("Max proposals to return (default: 10)")),
+			mcp.WithNumber("offset", mcp.Description("Skip first N proposals (default: 0, for pagination)")),
+			mcp.WithString("order", mcp.Description("Sort order by proposal ID: 'desc' (default, newest first) or 'asc' (oldest first)")),
 		),
 		handleListProposals(pool),
 	)
@@ -23,14 +28,36 @@ func RegisterProposalTools(s *server.MCPServer, pool *nodepool.Pool) {
 
 func handleListProposals(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		limit := req.GetInt("limit", 10)
+		offset := req.GetInt("offset", 0)
+		order := req.GetString("order", "desc")
+		if limit <= 0 {
+			limit = 10
+		}
+		if offset < 0 {
+			offset = 0
+		}
+		if order != "desc" && order != "asc" {
+			return mcp.NewToolResultError("list_proposals: order must be 'asc' or 'desc'"), nil
+		}
+
 		conn := pool.Client()
 		proposals, err := conn.ProposalsListCtx(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("list_proposals: %v", err)), nil
 		}
 
+		// Sort by proposal ID (copy to avoid mutating SDK response)
+		items := slices.Clone(proposals.Proposals)
+		sort.SliceStable(items, func(i, j int) bool {
+			if order == "desc" {
+				return items[i].ProposalId > items[j].ProposalId
+			}
+			return items[i].ProposalId < items[j].ProposalId
+		})
+
 		var list []map[string]any
-		for _, p := range proposals.Proposals {
+		for _, p := range items {
 			proposerAddr := address.HexToAddress(hex.EncodeToString(p.ProposerAddress))
 
 			var approvals []string
@@ -50,9 +77,20 @@ func handleListProposals(pool *nodepool.Pool) server.ToolHandlerFunc {
 			})
 		}
 
+		// Apply pagination
+		total := len(list)
+		offset = min(offset, total)
+		end := min(offset+limit, total)
+		page := list[offset:end]
+
 		result := map[string]any{
-			"proposals": list,
-			"count":     len(list),
+			"proposals": page,
+			"total":     total,
+			"returned":  len(page),
+		}
+		if end < total {
+			result["has_more"] = true
+			result["next_offset"] = end
 		}
 
 		return mcp.NewToolResultJSON(result)
