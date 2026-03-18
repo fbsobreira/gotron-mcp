@@ -47,14 +47,14 @@ defer conn.Stop()
 
 ### Key SDK Methods
 
-**Account:** `GetAccount(addr)`, `GetAccountResource(addr)`
-**TRC20:** `TRC20ContractBalance(addr, contract)`, `TRC20GetName/Symbol/Decimals(contract)`, `TRC20Send(from, to, contract, amount, feeLimit)`
-**Blocks:** `GetNowBlock()`, `GetBlockByNum(num)`
-**Transactions:** `GetTransactionByID(id)`, `GetTransactionInfoByID(id)`, `Transfer(from, to, amount)`, `Broadcast(tx)`
-**Contracts:** `TriggerContract(from, contract, method, params, feeLimit, amount, tokenID, tokenAmount)`, `EstimateEnergy(...)`, `GetContractABI(contract)`
-**Staking:** `FreezeBalanceV2(from, resource, amount)`, `UnfreezeBalanceV2(from, resource, amount)`
-**Governance:** `ListWitnesses()`, `VoteWitnessAccount(from, votes)`, `ProposalsList()`
-**Network:** `GetEnergyPrices()`, `GetBandwidthPrices()`, `GetNodeInfo()`
+**Account:** `GetAccountCtx(ctx, addr)`, `GetAccountResourceCtx(ctx, addr)`
+**TRC20:** `TRC20ContractBalanceCtx(ctx, addr, contract)`, `TRC20GetNameCtx/SymbolCtx/DecimalsCtx(ctx, contract)`, `TRC20SendCtx(ctx, from, to, contract, amount, feeLimit)`
+**Blocks:** `GetNowBlockCtx(ctx)`, `GetBlockByNumCtx(ctx, num)`
+**Transactions:** `GetTransactionByIDCtx(ctx, id)`, `GetTransactionInfoByIDCtx(ctx, id)`, `TransferCtx(ctx, from, to, amount)`, `BroadcastCtx(ctx, tx)`
+**Contracts:** `TriggerContractCtx(ctx, from, contract, method, params, feeLimit, amount, tokenID, tokenAmount)`, `EstimateEnergyCtx(ctx, ...)`, `GetContractABICtx(ctx, contract)`
+**Staking:** `FreezeBalanceV2Ctx(ctx, from, resource, amount)`, `UnfreezeBalanceV2Ctx(ctx, from, resource, amount)`
+**Governance:** `ListWitnessesCtx(ctx)`, `VoteWitnessAccountCtx(ctx, from, votes)`, `ProposalsListCtx(ctx)`
+**Network:** `GetEnergyPriceHistoryCtx(ctx)`, `GetBandwidthPriceHistoryCtx(ctx)`, `GetNodeInfoCtx(ctx)`
 
 ### Address Utilities
 
@@ -93,7 +93,9 @@ All write tools return unsigned transaction hex — never auto-sign:
 
 ```go
 tx, err := conn.TransferCtx(ctx, from, to, sun)
-txBytes, _ := proto.Marshal(tx.Transaction)
+// handle err...
+txBytes, err := proto.Marshal(tx.Transaction)
+// handle err...
 result["transaction_hex"] = hex.EncodeToString(txBytes)
 result["txid"] = hex.EncodeToString(tx.Txid)
 ```

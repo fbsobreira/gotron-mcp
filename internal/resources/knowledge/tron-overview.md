@@ -100,7 +100,7 @@ TRON uses a resource model instead of gas fees:
 
 ## Context Propagation
 
-Every GoTRON SDK method has a `Ctx` variant that accepts `context.Context` for cancellation, deadlines, and tracing:
+All public GrpcClient RPC methods in the GoTRON SDK (v0.25.0+) have a `Ctx` variant that accepts `context.Context` for cancellation, deadlines, and tracing:
 
 ```go
 // Without context (uses internal default)

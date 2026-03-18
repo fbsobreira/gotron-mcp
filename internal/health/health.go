@@ -76,7 +76,9 @@ func (h *Handler) check() ([]byte, int) {
 	var latestBlock int64
 
 	h.pool.CheckHealth()
-	block, err := h.pool.Client().GetNowBlockCtx(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	block, err := h.pool.Client().GetNowBlockCtx(ctx)
 	if err != nil {
 		nodeStatus = fmt.Sprintf("error: %v", err)
 	} else if block.BlockHeader != nil && block.BlockHeader.RawData != nil {
