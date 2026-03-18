@@ -256,6 +256,33 @@ reloaded:
 	}
 }
 
+func TestTokenStore_HotReloadFileDeleted(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTokenFile(t, dir, "keep-me\n")
+
+	store, err := NewTokenStore(path)
+	if err != nil {
+		t.Fatalf("NewTokenStore() error: %v", err)
+	}
+	if err := store.Watch(); err != nil {
+		t.Fatalf("Watch() error: %v", err)
+	}
+	defer store.Stop()
+
+	// Delete the token file
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+
+	// Give fsnotify time to process the Remove event
+	time.Sleep(200 * time.Millisecond)
+
+	// Last-good tokens should still be active (fail-open on delete)
+	if !store.valid("keep-me") {
+		t.Error("token should remain valid after file deletion (keep last-good)")
+	}
+}
+
 func TestTokenStore_StopIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	path := writeTokenFile(t, dir, "token-a\n")
