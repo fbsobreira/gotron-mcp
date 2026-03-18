@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fbsobreira/gotron-mcp/internal/auth"
 	"github.com/fbsobreira/gotron-mcp/internal/config"
 	"github.com/fbsobreira/gotron-mcp/internal/health"
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
@@ -68,9 +69,32 @@ func main() {
 			server.WithEndpointPath("/mcp"),
 		)
 
+		if cfg.AuthToken != "" && cfg.AuthTokenFile != "" {
+			log.Fatalf("--auth-token and --auth-token-file are mutually exclusive")
+		}
+
+		var mcpHandler http.Handler = httpTransport
+		switch {
+		case cfg.AuthTokenFile != "":
+			store, err := auth.NewTokenStore(cfg.AuthTokenFile)
+			if err != nil {
+				log.Fatalf("failed to load auth token file: %v", err)
+			}
+			if err := store.Watch(); err != nil {
+				log.Printf("warning: token file watch failed, hot-reload disabled: %v", err)
+			} else {
+				defer store.Stop()
+			}
+			mcpHandler = store.Middleware(httpTransport)
+			log.Printf("HTTP authentication enabled (token file)")
+		case cfg.AuthToken != "":
+			mcpHandler = auth.BearerAuth(cfg.AuthToken, httpTransport)
+			log.Printf("HTTP authentication enabled (single token)")
+		}
+
 		mux := http.NewServeMux()
 		mux.Handle("/health", health.NewHandler(pool, cfg.Network))
-		mux.Handle("/mcp", httpTransport)
+		mux.Handle("/mcp", mcpHandler)
 
 		addr := fmt.Sprintf("%s:%d", cfg.Bind, cfg.Port)
 		log.Printf("GoTRON MCP server starting on %s", addr)

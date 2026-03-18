@@ -17,6 +17,8 @@ type Config struct {
 	FallbackNodeTLS bool
 	Keystore        string
 	TLS             bool
+	AuthToken       string
+	AuthTokenFile   string
 }
 
 var networkNodes = map[string]string{
@@ -39,6 +41,8 @@ func Parse() *Config {
 	flag.BoolVar(&cfg.FallbackNodeTLS, "fallback-tls", envOrDefault("GOTRON_MCP_FALLBACK_TLS", "") == "true", "Use TLS for fallback node connection")
 	flag.StringVar(&cfg.Keystore, "keystore", "", "Path to tronctl keystore directory")
 	flag.BoolVar(&cfg.TLS, "tls", envOrDefault("GOTRON_MCP_TLS", "") == "true", "Use TLS for gRPC connection (default: plaintext)")
+	flag.StringVar(&cfg.AuthToken, "auth-token", envOrDefault("GOTRON_MCP_AUTH_TOKEN", ""), "Bearer token for HTTP authentication")
+	flag.StringVar(&cfg.AuthTokenFile, "auth-token-file", envOrDefault("GOTRON_MCP_AUTH_TOKEN_FILE", ""), "Path to file with bearer tokens (one per line, hot-reloaded)")
 
 	flag.Parse()
 
