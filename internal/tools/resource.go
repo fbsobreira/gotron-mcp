@@ -52,7 +52,7 @@ func handleFreezeBalance(pool *nodepool.Pool) server.ToolHandlerFunc {
 		from := req.GetString("from", "")
 		amountStr := req.GetString("amount", "")
 		resourceStr := req.GetString("resource", "")
-		grpc := pool.Client()
+		conn := pool.Client()
 
 		if err := validateAddress(from); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid from address: %v", err)), nil
@@ -71,7 +71,7 @@ func handleFreezeBalance(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		tx, err := grpc.FreezeBalanceV2(from, resource, sun)
+		tx, err := conn.FreezeBalanceV2(from, resource, sun)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("freeze_balance: %v", err)), nil
 		}
@@ -100,7 +100,7 @@ func handleUnfreezeBalance(pool *nodepool.Pool) server.ToolHandlerFunc {
 		from := req.GetString("from", "")
 		amountStr := req.GetString("amount", "")
 		resourceStr := req.GetString("resource", "")
-		grpc := pool.Client()
+		conn := pool.Client()
 
 		if err := validateAddress(from); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid from address: %v", err)), nil
@@ -119,7 +119,7 @@ func handleUnfreezeBalance(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		tx, err := grpc.UnfreezeBalanceV2(from, resource, sun)
+		tx, err := conn.UnfreezeBalanceV2(from, resource, sun)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("unfreeze_balance: %v", err)), nil
 		}

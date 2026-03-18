@@ -89,12 +89,12 @@ func RegisterContractWriteTools(s *server.MCPServer, pool *nodepool.Pool) {
 func handleListContractMethods(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		contract := req.GetString("contract_address", "")
-		grpc := pool.Client()
+		conn := pool.Client()
 		if err := validateAddress(contract); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		contractABI, err := grpc.GetContractABIResolved(contract)
+		contractABI, err := conn.GetContractABIResolved(contract)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("list_contract_methods: %v", err)), nil
 		}
@@ -169,8 +169,8 @@ func handleDecodeABIOutput(pool *nodepool.Pool) server.ToolHandlerFunc {
 		}
 
 		// Decode output using contract ABI
-		grpc := pool.Client()
-		contractABI, err := grpc.GetContractABIResolved(contract)
+		conn := pool.Client()
+		contractABI, err := conn.GetContractABIResolved(contract)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("decode_abi_output: failed to fetch ABI: %v", err)), nil
 		}
@@ -188,12 +188,12 @@ func handleDecodeABIOutput(pool *nodepool.Pool) server.ToolHandlerFunc {
 func handleGetContractABI(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		contract := req.GetString("contract_address", "")
-		grpc := pool.Client()
+		conn := pool.Client()
 		if err := validateAddress(contract); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		contractABI, err := grpc.GetContractABIResolved(contract)
+		contractABI, err := conn.GetContractABIResolved(contract)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_contract_abi: %v", err)), nil
 		}
@@ -219,7 +219,7 @@ func handleEstimateEnergy(pool *nodepool.Pool) server.ToolHandlerFunc {
 		contract := req.GetString("contract_address", "")
 		method := req.GetString("method", "")
 		params := req.GetString("params", "")
-		grpc := pool.Client()
+		conn := pool.Client()
 
 		if err := validateAddress(from); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid from address: %v", err)), nil
@@ -228,7 +228,7 @@ func handleEstimateEnergy(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		estimate, err := grpc.EstimateEnergy(from, contract, method, params, 0, "", 0)
+		estimate, err := conn.EstimateEnergy(from, contract, method, params, 0, "", 0)
 		if err != nil && isEstimateEnergyUnsupported(err) {
 			// Primary doesn't support EstimateEnergy RPC — try fallback
 			if fallback := pool.FallbackClient(); fallback != nil {
@@ -260,7 +260,7 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 		contract := req.GetString("contract_address", "")
 		method := req.GetString("method", "")
 		params := req.GetString("params", "[]")
-		grpc := pool.Client()
+		conn := pool.Client()
 
 		if from != "" {
 			if err := validateAddress(from); err != nil {
@@ -271,7 +271,7 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		tx, err := grpc.TriggerConstantContract(from, contract, method, params)
+		tx, err := conn.TriggerConstantContract(from, contract, method, params)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("trigger_constant_contract: %v", err)), nil
 		}
@@ -286,7 +286,7 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 			result["result_hex"] = hex.EncodeToString(rawResult)
 
 			// Try to decode the result using ABI if available
-			contractABI, abiErr := grpc.GetContractABIResolved(contract)
+			contractABI, abiErr := conn.GetContractABIResolved(contract)
 			if abiErr == nil && contractABI != nil {
 				decoded, decErr := abi.DecodeOutput(contractABI, method, rawResult)
 				if decErr == nil && decoded != nil {
@@ -316,7 +316,7 @@ func handleTriggerContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 		params := req.GetString("params", "")
 		feeLimit := req.GetInt("fee_limit", 100)
 		callValue := req.GetInt("call_value", 0)
-		grpc := pool.Client()
+		conn := pool.Client()
 
 		if err := validateAddress(from); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid from address: %v", err)), nil
@@ -330,7 +330,7 @@ func handleTriggerContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 		}
 		feeLimitSun := int64(feeLimit) * 1_000_000
 
-		tx, err := grpc.TriggerContract(from, contract, method, params, feeLimitSun, int64(callValue), "", 0)
+		tx, err := conn.TriggerContract(from, contract, method, params, feeLimitSun, int64(callValue), "", 0)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("trigger_contract: %v", err)), nil
 		}
