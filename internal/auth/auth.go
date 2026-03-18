@@ -49,6 +49,13 @@ func NewTokenStore(path string) (*TokenStore, error) {
 // automatically. Watching the directory ensures that atomic rename-based
 // updates (used by editors and deployment tools) are detected.
 func (ts *TokenStore) Watch() error {
+	ts.mu.Lock()
+	if ts.watcher != nil {
+		ts.mu.Unlock()
+		return nil
+	}
+	ts.mu.Unlock()
+
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err

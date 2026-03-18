@@ -80,10 +80,9 @@ func main() {
 			if err != nil {
 				log.Fatalf("failed to load auth token file: %v", err)
 			}
+			defer store.Stop()
 			if err := store.Watch(); err != nil {
 				log.Printf("warning: token file watch failed, hot-reload disabled: %v", err)
-			} else {
-				defer store.Stop()
 			}
 			mcpHandler = store.Middleware(httpTransport)
 			log.Printf("HTTP authentication enabled (token file)")
