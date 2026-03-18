@@ -31,6 +31,8 @@ type mockWalletServer struct {
 	GetNodeInfoFunc            func(context.Context, *api.EmptyMessage) (*core.NodeInfo, error)
 	GetEnergyPricesFunc        func(context.Context, *api.EmptyMessage) (*api.PricesResponseMessage, error)
 	GetBandwidthPricesFunc     func(context.Context, *api.EmptyMessage) (*api.PricesResponseMessage, error)
+	ListWitnessesFunc          func(context.Context, *api.EmptyMessage) (*api.WitnessList, error)
+	ListProposalsFunc          func(context.Context, *api.EmptyMessage) (*api.ProposalList, error)
 }
 
 func (m *mockWalletServer) GetAccount(ctx context.Context, in *core.Account) (*core.Account, error) {
@@ -94,6 +96,20 @@ func (m *mockWalletServer) GetBandwidthPrices(ctx context.Context, in *api.Empty
 		return m.GetBandwidthPricesFunc(ctx, in)
 	}
 	return m.UnimplementedWalletServer.GetBandwidthPrices(ctx, in)
+}
+
+func (m *mockWalletServer) ListWitnesses(ctx context.Context, in *api.EmptyMessage) (*api.WitnessList, error) {
+	if m.ListWitnessesFunc != nil {
+		return m.ListWitnessesFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.ListWitnesses(ctx, in)
+}
+
+func (m *mockWalletServer) ListProposals(ctx context.Context, in *api.EmptyMessage) (*api.ProposalList, error) {
+	if m.ListProposalsFunc != nil {
+		return m.ListProposalsFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.ListProposals(ctx, in)
 }
 
 // newMockClient creates a GrpcClient connected to an in-memory gRPC server.
