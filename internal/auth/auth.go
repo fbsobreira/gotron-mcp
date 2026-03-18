@@ -54,6 +54,12 @@ func (ts *TokenStore) Watch() error {
 		ts.mu.Unlock()
 		return nil
 	}
+	select {
+	case <-ts.done:
+		ts.mu.Unlock()
+		return nil
+	default:
+	}
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -81,7 +87,8 @@ func (ts *TokenStore) Watch() error {
 				if filepath.Base(event.Name) != base {
 					continue
 				}
-				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
+				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) ||
+				event.Has(fsnotify.Rename) || event.Has(fsnotify.Remove) {
 					if err := ts.load(); err != nil {
 						log.Printf("auth: failed to reload token file: %v", err)
 					} else {
@@ -109,8 +116,12 @@ func (ts *TokenStore) Watch() error {
 func (ts *TokenStore) Stop() {
 	ts.stopOnce.Do(func() {
 		close(ts.done)
-		if ts.watcher != nil {
-			_ = ts.watcher.Close()
+		ts.mu.Lock()
+		w := ts.watcher
+		ts.watcher = nil
+		ts.mu.Unlock()
+		if w != nil {
+			_ = w.Close()
 		}
 	})
 }
