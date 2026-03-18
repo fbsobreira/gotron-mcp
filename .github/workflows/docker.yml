@@ -3,6 +3,7 @@ name: Docker
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   packages: write
@@ -35,5 +36,5 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ github.event.release.tag_name }}
+            VERSION=${{ github.event.release.tag_name || github.ref_name }}
             COMMIT=${{ github.sha }}
