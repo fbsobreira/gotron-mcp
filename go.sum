@@ -20,8 +20,8 @@ github.com/ethereum/go-ethereum v1.17.0 h1:2D+1Fe23CwZ5tQoAS5DfwKFNI1HGcTwi65/kR
 github.com/ethereum/go-ethereum v1.17.0/go.mod h1:2W3msvdosS/MCWytpqTcqgFiRYbTH59FxDJzqah120o=
 github.com/fbsobreira/go-bip39 v1.2.0 h1:zp3VDGrQeGu8/iPB5wsHVSaOwQhBSLR71CE3nJVz4mY=
 github.com/fbsobreira/go-bip39 v1.2.0/go.mod h1:PRuO9kYh4Kn+tRALmXYtbizPeD8G2qm8FTVgxDaiXTM=
-github.com/fbsobreira/gotron-sdk v0.24.3-0.20260317183823-f23f4edec495 h1:20NHmLzA0fYT65hkch9Jx4L5cDCWp9nmjGymo5DsxsM=
-github.com/fbsobreira/gotron-sdk v0.24.3-0.20260317183823-f23f4edec495/go.mod h1:3YuSi4qc3lJ48uooeTaEawXJvuZQ/wZ/rQQo+X/PPxA=
+github.com/fbsobreira/gotron-sdk v0.25.0 h1:6qa4DJAI8MINlGGUXPWOOrxWmg3HxJxURi0Nb2rVeKI=
+github.com/fbsobreira/gotron-sdk v0.25.0/go.mod h1:3YuSi4qc3lJ48uooeTaEawXJvuZQ/wZ/rQQo+X/PPxA=
 github.com/frankban/quicktest v1.14.6 h1:7Xjx+VpznH+oBnejlPUj8oUpdxnVs4f8XU8WnHkI4W8=
 github.com/frankban/quicktest v1.14.6/go.mod h1:4ptaffx2x8+WTWXmUCuVU6aPUX1/Mz7zb5vbUoiM6w0=
 github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=

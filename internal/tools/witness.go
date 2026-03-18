@@ -37,7 +37,7 @@ func RegisterWitnessWriteTools(s *server.MCPServer, pool *nodepool.Pool) {
 func handleListWitnesses(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		conn := pool.Client()
-		witnesses, err := conn.ListWitnesses()
+		witnesses, err := conn.ListWitnessesCtx(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("list_witnesses: %v", err)), nil
 		}
@@ -105,7 +105,7 @@ func handleVoteWitness(pool *nodepool.Pool) server.ToolHandlerFunc {
 			}
 		}
 
-		tx, err := conn.VoteWitnessAccount(from, witnessVotes)
+		tx, err := conn.VoteWitnessAccountCtx(ctx, from, witnessVotes)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("vote_witness: %v", err)), nil
 		}

@@ -60,7 +60,7 @@ func handleTransferTRX(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError("amount must be greater than zero"), nil
 		}
 
-		tx, err := conn.Transfer(from, to, sun)
+		tx, err := conn.TransferCtx(ctx, from, to, sun)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("transfer_trx: %v", err)), nil
 		}
@@ -103,7 +103,7 @@ func handleTransferTRC20(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		decimals, err := conn.TRC20GetDecimals(contract)
+		decimals, err := conn.TRC20GetDecimalsCtx(ctx, contract)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("transfer_trc20: failed to get decimals: %v", err)), nil
 		}
@@ -125,7 +125,7 @@ func handleTransferTRC20(pool *nodepool.Pool) server.ToolHandlerFunc {
 		}
 		feeLimitSun := int64(feeLimit) * 1_000_000
 
-		tx, err := conn.TRC20Send(from, to, contract, amount, feeLimitSun)
+		tx, err := conn.TRC20SendCtx(ctx, from, to, contract, amount, feeLimitSun)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("transfer_trc20: %v", err)), nil
 		}

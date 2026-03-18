@@ -41,7 +41,7 @@ func handleGetAccount(pool *nodepool.Pool) server.ToolHandlerFunc {
 		}
 
 		acc, err := retry.Do(func() (*core.Account, error) {
-			return conn.GetAccount(addr)
+			return conn.GetAccountCtx(ctx, addr)
 		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_account: failed to fetch account %s: %v", addr, err)), nil
@@ -85,7 +85,7 @@ func handleGetAccountResources(pool *nodepool.Pool) server.ToolHandlerFunc {
 		}
 
 		res, err := retry.Do(func() (*api.AccountResourceMessage, error) {
-			return conn.GetAccountResource(addr)
+			return conn.GetAccountResourceCtx(ctx, addr)
 		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_account_resources: failed to fetch resources for %s: %v", addr, err)), nil

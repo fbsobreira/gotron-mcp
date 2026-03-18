@@ -3,7 +3,7 @@ module github.com/fbsobreira/gotron-mcp
 go 1.25.1
 
 require (
-	github.com/fbsobreira/gotron-sdk v0.24.3-0.20260317183823-f23f4edec495
+	github.com/fbsobreira/gotron-sdk v0.25.0
 	github.com/mark3labs/mcp-go v0.45.0
 	google.golang.org/grpc v1.77.0
 	google.golang.org/protobuf v1.36.11

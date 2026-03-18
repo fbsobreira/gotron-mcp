@@ -121,7 +121,7 @@ func handleBroadcastTransaction(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to parse transaction: %v", err)), nil
 		}
 
-		ret, err := conn.Broadcast(&tx)
+		ret, err := conn.BroadcastCtx(ctx, &tx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("broadcast_transaction: %v", err)), nil
 		}

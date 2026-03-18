@@ -46,27 +46,27 @@ func handleGetTRC20Balance(pool *nodepool.Pool) server.ToolHandlerFunc {
 		}
 
 		balance, err := retry.Do(func() (*big.Int, error) {
-			return conn.TRC20ContractBalance(addr, contract)
+			return conn.TRC20ContractBalanceCtx(ctx, addr, contract)
 		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_balance: %v", err)), nil
 		}
 
 		decimals, err := retry.Do(func() (*big.Int, error) {
-			return conn.TRC20GetDecimals(contract)
+			return conn.TRC20GetDecimalsCtx(ctx, contract)
 		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_balance: failed to get decimals: %v", err)), nil
 		}
 
 		name, err := retry.Do(func() (string, error) {
-			return conn.TRC20GetName(contract)
+			return conn.TRC20GetNameCtx(ctx, contract)
 		})
 		if err != nil {
 			name = ""
 		}
 		symbol, err := retry.Do(func() (string, error) {
-			return conn.TRC20GetSymbol(contract)
+			return conn.TRC20GetSymbolCtx(ctx, contract)
 		})
 		if err != nil {
 			symbol = ""
@@ -99,17 +99,17 @@ func handleGetTRC20TokenInfo(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		name, err := conn.TRC20GetName(contract)
+		name, err := conn.TRC20GetNameCtx(ctx, contract)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_token_info: failed to get name: %v", err)), nil
 		}
 
-		symbol, err := conn.TRC20GetSymbol(contract)
+		symbol, err := conn.TRC20GetSymbolCtx(ctx, contract)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_token_info: failed to get symbol: %v", err)), nil
 		}
 
-		decimals, err := conn.TRC20GetDecimals(contract)
+		decimals, err := conn.TRC20GetDecimalsCtx(ctx, contract)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_token_info: failed to get decimals: %v", err)), nil
 		}

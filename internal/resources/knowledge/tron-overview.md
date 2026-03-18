@@ -98,6 +98,30 @@ TRON uses a resource model instead of gas fees:
 - Transactions can require multiple signatures based on permission thresholds
 - Useful for exchanges, DAOs, and shared wallets
 
+## Context Propagation
+
+All public GrpcClient RPC methods in the GoTRON SDK (v0.25.0+) have a `Ctx` variant that accepts `context.Context` for cancellation, deadlines, and tracing:
+
+```go
+// Without context (uses internal default)
+account, err := conn.GetAccount(addr)
+
+// With context (propagates cancellation/deadline)
+account, err := conn.GetAccountCtx(ctx, addr)
+```
+
+Common `Ctx` methods:
+- `GetAccountCtx`, `GetAccountResourceCtx`
+- `GetNowBlockCtx`, `GetBlockByNumCtx`
+- `TransferCtx`, `TRC20SendCtx`
+- `TriggerConstantContractCtx`, `TriggerContractCtx`
+- `EstimateEnergyCtx`, `GetContractABIResolvedCtx`
+- `FreezeBalanceV2Ctx`, `UnfreezeBalanceV2Ctx`
+- `ListWitnessesCtx`, `VoteWitnessAccountCtx`
+- `BroadcastCtx`
+
+Always prefer `*Ctx` variants when a request context is available to enable proper cancellation and timeout handling.
+
 ## Key Concepts
 
 - **Block time**: ~3 seconds

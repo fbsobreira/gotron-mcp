@@ -24,7 +24,7 @@ func RegisterProposalTools(s *server.MCPServer, pool *nodepool.Pool) {
 func handleListProposals(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		conn := pool.Client()
-		proposals, err := conn.ProposalsList()
+		proposals, err := conn.ProposalsListCtx(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("list_proposals: %v", err)), nil
 		}
