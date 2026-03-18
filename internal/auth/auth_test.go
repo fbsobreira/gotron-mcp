@@ -286,6 +286,133 @@ func TestTokenStore_StopWithoutWatch(t *testing.T) {
 	store.Stop()
 }
 
+func TestTokenStore_EmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTokenFile(t, dir, "# only comments\n\n# no real tokens\n")
+
+	store, err := NewTokenStore(path)
+	if err != nil {
+		t.Fatalf("NewTokenStore() error: %v", err)
+	}
+
+	// All requests should be rejected
+	handler := store.Middleware(okHandler)
+	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
+	req.Header.Set("Authorization", "Bearer anything")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestTokenStore_WatchAlreadyWatching(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTokenFile(t, dir, "token-a\n")
+
+	store, err := NewTokenStore(path)
+	if err != nil {
+		t.Fatalf("NewTokenStore() error: %v", err)
+	}
+	if err := store.Watch(); err != nil {
+		t.Fatalf("Watch() error: %v", err)
+	}
+	defer store.Stop()
+
+	// Second Watch should return nil (already watching)
+	if err := store.Watch(); err != nil {
+		t.Errorf("second Watch() = %v, want nil", err)
+	}
+}
+
+func TestTokenStore_WatchAfterStop(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTokenFile(t, dir, "token-a\n")
+
+	store, err := NewTokenStore(path)
+	if err != nil {
+		t.Fatalf("NewTokenStore() error: %v", err)
+	}
+
+	store.Stop()
+
+	// Watch after Stop should return nil (done channel closed)
+	if err := store.Watch(); err != nil {
+		t.Errorf("Watch() after Stop() = %v, want nil", err)
+	}
+}
+
+func TestTokenStore_HotReloadIgnoresOtherFiles(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTokenFile(t, dir, "token-a\n")
+
+	store, err := NewTokenStore(path)
+	if err != nil {
+		t.Fatalf("NewTokenStore() error: %v", err)
+	}
+	if err := store.Watch(); err != nil {
+		t.Fatalf("Watch() error: %v", err)
+	}
+	defer store.Stop()
+
+	// Write a different file in the same directory — should not affect tokens
+	otherPath := filepath.Join(dir, "other.txt")
+	if err := os.WriteFile(otherPath, []byte("unrelated"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Give fsnotify time to process the event
+	time.Sleep(100 * time.Millisecond)
+
+	// Original token should still work
+	if !store.valid("token-a") {
+		t.Error("token-a should still be valid after unrelated file change")
+	}
+}
+
+func TestTokenStore_HotReloadAtomicRename(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTokenFile(t, dir, "original-token\n")
+
+	store, err := NewTokenStore(path)
+	if err != nil {
+		t.Fatalf("NewTokenStore() error: %v", err)
+	}
+	if err := store.Watch(); err != nil {
+		t.Fatalf("Watch() error: %v", err)
+	}
+	defer store.Stop()
+
+	// Simulate atomic rename: write to temp file, rename over original
+	tmpPath := filepath.Join(dir, "tokens.tmp")
+	if err := os.WriteFile(tmpPath, []byte("renamed-token\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		t.Fatal(err)
+	}
+
+	// Poll until reload
+	deadline := time.After(2 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("hot-reload via rename did not complete within 2s")
+		case <-ticker.C:
+			if store.valid("renamed-token") {
+				goto done
+			}
+		}
+	}
+done:
+
+	if store.valid("original-token") {
+		t.Error("original-token should be rejected after rename reload")
+	}
+}
+
 func TestTokenStore_Middleware_MissingHeader(t *testing.T) {
 	dir := t.TempDir()
 	path := writeTokenFile(t, dir, "token-a\n")

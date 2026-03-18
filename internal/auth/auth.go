@@ -88,14 +88,22 @@ func (ts *TokenStore) Watch() error {
 					continue
 				}
 				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) ||
-				event.Has(fsnotify.Rename) || event.Has(fsnotify.Remove) {
+					event.Has(fsnotify.Rename) || event.Has(fsnotify.Remove) {
 					if err := ts.load(); err != nil {
-						log.Printf("auth: failed to reload token file: %v", err)
+						if os.IsNotExist(err) {
+							log.Printf("auth: CRITICAL: token file deleted, keeping last-good tokens until restart")
+						} else {
+							log.Printf("auth: failed to reload token file (keeping last-good tokens): %v", err)
+						}
 					} else {
 						ts.mu.RLock()
 						count := len(ts.hashes)
 						ts.mu.RUnlock()
-						log.Printf("auth: reloaded token file, %d tokens loaded", count)
+						if count == 0 {
+							log.Printf("auth: token file is now empty, all requests will be rejected")
+						} else {
+							log.Printf("auth: reloaded token file, %d tokens loaded", count)
+						}
 					}
 				}
 			case err, ok := <-watcher.Errors:
