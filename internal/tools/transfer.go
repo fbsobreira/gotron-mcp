@@ -18,8 +18,8 @@ func RegisterTransferTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("transfer_trx",
 			mcp.WithDescription("Create an unsigned TRX transfer transaction. Returns transaction hex for signing."),
-			mcp.WithString("from", mcp.Required(), mcp.Description("Sender address")),
-			mcp.WithString("to", mcp.Required(), mcp.Description("Recipient address")),
+			mcp.WithString("from", mcp.Required(), mcp.Description("Sender address (base58, starts with T)")),
+			mcp.WithString("to", mcp.Required(), mcp.Description("Recipient address (base58, starts with T)")),
 			mcp.WithString("amount", mcp.Required(), mcp.Description("Amount in TRX (e.g., '100.5')")),
 		),
 		handleTransferTRX(pool),
@@ -28,11 +28,11 @@ func RegisterTransferTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("transfer_trc20",
 			mcp.WithDescription("Create an unsigned TRC20 token transfer transaction. Returns transaction hex for signing."),
-			mcp.WithString("from", mcp.Required(), mcp.Description("Sender address")),
-			mcp.WithString("to", mcp.Required(), mcp.Description("Recipient address")),
-			mcp.WithString("contract_address", mcp.Required(), mcp.Description("TRC20 contract address")),
+			mcp.WithString("from", mcp.Required(), mcp.Description("Sender address (base58, starts with T)")),
+			mcp.WithString("to", mcp.Required(), mcp.Description("Recipient address (base58, starts with T)")),
+			mcp.WithString("contract_address", mcp.Required(), mcp.Description("TRC20 contract address (base58, starts with T)")),
 			mcp.WithString("amount", mcp.Required(), mcp.Description("Amount in token units (human-readable, e.g., '100.5')")),
-			mcp.WithNumber("fee_limit", mcp.Description("Fee limit in TRX (default: 100)")),
+			mcp.WithNumber("fee_limit", mcp.Description("Fee limit in TRX, range 0-15000 (default: 100)")),
 		),
 		handleTransferTRC20(pool),
 	)

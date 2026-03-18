@@ -25,7 +25,7 @@ func RegisterNetworkTools(s *server.MCPServer, pool *nodepool.Pool, network, nod
 	s.AddTool(
 		mcp.NewTool("get_transaction",
 			mcp.WithDescription("Get transaction details by transaction ID"),
-			mcp.WithString("transaction_id", mcp.Required(), mcp.Description("Transaction ID (hex string)")),
+			mcp.WithString("transaction_id", mcp.Required(), mcp.Description("Transaction hash / txid (64-char hex string)")),
 		),
 		handleGetTransaction(pool),
 	)

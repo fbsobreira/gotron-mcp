@@ -17,9 +17,9 @@ import (
 func RegisterResourceTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("freeze_balance",
-			mcp.WithDescription("Stake TRX for energy or bandwidth (Stake 2.0). Returns unsigned transaction hex."),
-			mcp.WithString("from", mcp.Required(), mcp.Description("Account address")),
-			mcp.WithString("amount", mcp.Required(), mcp.Description("Amount in TRX to stake")),
+			mcp.WithDescription("Stake TRX for energy or bandwidth (Stake 2.0). Returns unsigned transaction hex for signing."),
+			mcp.WithString("from", mcp.Required(), mcp.Description("Account address (base58, starts with T)")),
+			mcp.WithString("amount", mcp.Required(), mcp.Description("Amount in TRX to stake (e.g., '100.5')")),
 			mcp.WithString("resource", mcp.Required(), mcp.Description("Resource type"), mcp.Enum("ENERGY", "BANDWIDTH")),
 		),
 		handleFreezeBalance(pool),
@@ -27,9 +27,9 @@ func RegisterResourceTools(s *server.MCPServer, pool *nodepool.Pool) {
 
 	s.AddTool(
 		mcp.NewTool("unfreeze_balance",
-			mcp.WithDescription("Unstake TRX (Stake 2.0). Returns unsigned transaction hex."),
-			mcp.WithString("from", mcp.Required(), mcp.Description("Account address")),
-			mcp.WithString("amount", mcp.Required(), mcp.Description("Amount in TRX to unstake")),
+			mcp.WithDescription("Unstake TRX (Stake 2.0). Returns unsigned transaction hex for signing. Note: unstaked TRX has a 14-day withdrawal period."),
+			mcp.WithString("from", mcp.Required(), mcp.Description("Account address (base58, starts with T)")),
+			mcp.WithString("amount", mcp.Required(), mcp.Description("Amount in TRX to unstake (e.g., '100.5')")),
 			mcp.WithString("resource", mcp.Required(), mcp.Description("Resource type"), mcp.Enum("ENERGY", "BANDWIDTH")),
 		),
 		handleUnfreezeBalance(pool),

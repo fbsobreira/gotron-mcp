@@ -26,10 +26,10 @@ func RegisterContractReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("trigger_constant_contract",
 			mcp.WithDescription("Call a read-only (view/pure) smart contract method. No transaction created, no fees. Returns decoded result."),
-			mcp.WithString("from", mcp.Description("Caller address (optional, defaults to zero address)")),
-			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Contract address")),
+			mcp.WithString("from", mcp.Description("Caller address (base58, starts with T; optional — defaults to zero address)")),
+			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
 			mcp.WithString("method", mcp.Required(), mcp.Description("Method signature (e.g., 'totalSupply()', 'balanceOf(address)')")),
-			mcp.WithString("params", mcp.Description("Method parameters as JSON string (optional)")),
+			mcp.WithString("params", mcp.Description("Method parameters as JSON array of {type: value} objects, e.g., [{\"address\": \"TJD...\"}, {\"uint256\": \"1000\"}]")),
 		),
 		handleTriggerConstantContract(pool),
 	)
@@ -37,7 +37,7 @@ func RegisterContractReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("get_contract_abi",
 			mcp.WithDescription("Get the ABI of a smart contract on TRON. Automatically resolves proxy contracts (ERC-1967)."),
-			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address")),
+			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
 		),
 		handleGetContractABI(pool),
 	)
@@ -45,7 +45,7 @@ func RegisterContractReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("list_contract_methods",
 			mcp.WithDescription("Get a human-readable summary of a smart contract's methods with signatures, inputs, outputs, and mutability. Auto-resolves proxy contracts."),
-			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address")),
+			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
 		),
 		handleListContractMethods(pool),
 	)
@@ -53,20 +53,20 @@ func RegisterContractReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("decode_abi_output",
 			mcp.WithDescription("Decode ABI-encoded output hex from a contract call. Handles return values, revert reasons (Error(string)), and panic codes (Panic(uint256))."),
-			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Contract address (needed to fetch ABI for decoding)")),
+			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Contract address (base58, starts with T; needed to fetch ABI for decoding)")),
 			mcp.WithString("method", mcp.Required(), mcp.Description("Method signature (e.g., 'balanceOf(address)')")),
-			mcp.WithString("data", mcp.Required(), mcp.Description("Hex-encoded output bytes to decode")),
+			mcp.WithString("data", mcp.Required(), mcp.Description("Hex-encoded output bytes to decode (0x prefix optional)")),
 		),
 		handleDecodeABIOutput(pool),
 	)
 
 	s.AddTool(
 		mcp.NewTool("estimate_energy",
-			mcp.WithDescription("Estimate energy cost for a smart contract call"),
-			mcp.WithString("from", mcp.Required(), mcp.Description("Caller address")),
-			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Contract address")),
+			mcp.WithDescription("Estimate energy cost for a smart contract call. Requires a full node with vm.supportConstant=true and vm.estimateEnergy=true; falls back to secondary node if primary does not support it."),
+			mcp.WithString("from", mcp.Required(), mcp.Description("Caller address (base58, starts with T)")),
+			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
 			mcp.WithString("method", mcp.Required(), mcp.Description("Contract method signature (e.g., 'transfer(address,uint256)')")),
-			mcp.WithString("params", mcp.Required(), mcp.Description("Method parameters as JSON string")),
+			mcp.WithString("params", mcp.Required(), mcp.Description("Method parameters as JSON array of {type: value} objects, e.g., [{\"address\": \"TJD...\"}, {\"uint256\": \"1000\"}]")),
 		),
 		handleEstimateEnergy(pool),
 	)
@@ -76,12 +76,12 @@ func RegisterContractReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 func RegisterContractWriteTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("trigger_contract",
-			mcp.WithDescription("Call a smart contract method. Returns unsigned transaction hex."),
-			mcp.WithString("from", mcp.Required(), mcp.Description("Caller address")),
-			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Contract address")),
+			mcp.WithDescription("Call a smart contract method. Returns unsigned transaction hex for signing."),
+			mcp.WithString("from", mcp.Required(), mcp.Description("Caller address (base58, starts with T)")),
+			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
 			mcp.WithString("method", mcp.Required(), mcp.Description("Method signature (e.g., 'transfer(address,uint256)')")),
-			mcp.WithString("params", mcp.Required(), mcp.Description("Method parameters as JSON string")),
-			mcp.WithNumber("fee_limit", mcp.Description("Fee limit in TRX (default: 100)")),
+			mcp.WithString("params", mcp.Required(), mcp.Description("Method parameters as JSON array of {type: value} objects, e.g., [{\"address\": \"TJD...\"}, {\"uint256\": \"1000\"}]")),
+			mcp.WithNumber("fee_limit", mcp.Description("Fee limit in whole TRX (integer), range 0-15000 (default: 100)")),
 			mcp.WithNumber("call_value", mcp.Description("Amount to send with call in SUN (default: 0)")),
 		),
 		handleTriggerContract(pool),
@@ -146,7 +146,7 @@ func handleDecodeABIOutput(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		dataHex = strings.TrimPrefix(dataHex, "0x")
+		dataHex = strings.TrimPrefix(strings.TrimPrefix(dataHex, "0x"), "0X")
 		if len(dataHex) > 1<<20 {
 			return mcp.NewToolResultError("decode_abi_output: data exceeds maximum length"), nil
 		}

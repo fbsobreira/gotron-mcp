@@ -26,9 +26,9 @@ func RegisterWitnessReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 func RegisterWitnessWriteTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("vote_witness",
-			mcp.WithDescription("Vote for super representatives. Returns unsigned transaction hex."),
-			mcp.WithString("from", mcp.Required(), mcp.Description("Voter address")),
-			mcp.WithObject("votes", mcp.Required(), mcp.Description("Map of witness address to vote count")),
+			mcp.WithDescription("Vote for super representatives. Returns unsigned transaction hex for signing. Requires staked TRX (1 TRX staked = 1 vote)."),
+			mcp.WithString("from", mcp.Required(), mcp.Description("Voter address (base58, starts with T)")),
+			mcp.WithObject("votes", mcp.Required(), mcp.Description("Map of witness address to vote count, e.g., {\"TKSXDA...\": 100, \"TLyqz...\": 50}")),
 		),
 		handleVoteWitness(pool),
 	)
