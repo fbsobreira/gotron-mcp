@@ -43,14 +43,19 @@ func Parse() *Config {
 	flag.Parse()
 
 	if cfg.Node == "" {
-		node, ok := networkNodes[cfg.Network]
-		if !ok {
-			node = networkNodes["mainnet"]
-		}
-		cfg.Node = node
+		cfg.Node = resolveNode(cfg.Network)
 	}
 
 	return cfg
+}
+
+// resolveNode returns the gRPC endpoint for the given network name,
+// falling back to mainnet if the network is unknown.
+func resolveNode(network string) string {
+	if node, ok := networkNodes[network]; ok {
+		return node
+	}
+	return networkNodes["mainnet"]
 }
 
 // IsHostedMode returns true when running in HTTP (hosted) mode.

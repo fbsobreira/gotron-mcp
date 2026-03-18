@@ -76,14 +76,24 @@ func TestNetworkNodes(t *testing.T) {
 	}
 }
 
-func TestNetworkNodes_UnknownFallsToMainnet(t *testing.T) {
-	_, ok := networkNodes["unknown"]
-	if ok {
-		t.Error("unknown network should not be in networkNodes")
+func TestResolveNode(t *testing.T) {
+	tests := []struct {
+		name    string
+		network string
+		want    string
+	}{
+		{"mainnet", "mainnet", "grpc.trongrid.io:50051"},
+		{"nile", "nile", "grpc.nile.trongrid.io:50051"},
+		{"shasta", "shasta", "grpc.shasta.trongrid.io:50051"},
+		{"unknown falls back to mainnet", "unknown", "grpc.trongrid.io:50051"},
+		{"empty falls back to mainnet", "", "grpc.trongrid.io:50051"},
 	}
-	// Parse logic falls back to mainnet for unknown networks
-	mainnet := networkNodes["mainnet"]
-	if mainnet != "grpc.trongrid.io:50051" {
-		t.Errorf("mainnet fallback = %q, want grpc.trongrid.io:50051", mainnet)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveNode(tt.network)
+			if got != tt.want {
+				t.Errorf("resolveNode(%q) = %q, want %q", tt.network, got, tt.want)
+			}
+		})
 	}
 }
