@@ -37,7 +37,7 @@ brews:
   - repository:
       owner: fbsobreira
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: "https://gotron.sh"
     description: "MCP server for TRON blockchain"
     license: "LGPL-3.0"
