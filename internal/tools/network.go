@@ -59,14 +59,14 @@ func handleGetTransaction(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError("transaction_id is required"), nil
 		}
 
-		tx, err := retry.Do(func() (*core.Transaction, error) {
+		tx, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (*core.Transaction, error) {
 			return pool.Client().GetTransactionByIDCtx(ctx, txID)
 		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_transaction: %v", err)), nil
 		}
 
-		info, err := retry.Do(func() (*core.TransactionInfo, error) {
+		info, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (*core.TransactionInfo, error) {
 			return pool.Client().GetTransactionInfoByIDCtx(ctx, txID)
 		})
 		if err != nil {

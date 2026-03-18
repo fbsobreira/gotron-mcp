@@ -11,9 +11,11 @@ import (
 	"math/big"
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
+	"github.com/fbsobreira/gotron-mcp/internal/retry"
 	"github.com/fbsobreira/gotron-sdk/pkg/abi"
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
 	"github.com/fbsobreira/gotron-sdk/pkg/client"
+	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"google.golang.org/protobuf/proto"
@@ -219,7 +221,6 @@ func handleEstimateEnergy(pool *nodepool.Pool) server.ToolHandlerFunc {
 		contract := req.GetString("contract_address", "")
 		method := req.GetString("method", "")
 		params := req.GetString("params", "")
-		conn := pool.Client()
 
 		if err := validateAddress(from); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid from address: %v", err)), nil
@@ -228,9 +229,11 @@ func handleEstimateEnergy(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		estimate, err := conn.EstimateEnergyCtx(ctx, from, contract, method, params, 0, "", 0)
+		estimate, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (*api.EstimateEnergyMessage, error) {
+			return pool.Client().EstimateEnergyCtx(ctx, from, contract, method, params, 0, "", 0)
+		})
 		if err != nil && isEstimateEnergyUnsupported(err) {
-			// Primary doesn't support EstimateEnergy RPC — try fallback
+			// Active node doesn't support EstimateEnergy RPC — try fallback
 			if fallback := pool.FallbackClient(); fallback != nil {
 				log.Printf("estimate_energy: trying fallback node")
 				estimate, err = fallback.EstimateEnergyCtx(ctx, from, contract, method, params, 0, "", 0)

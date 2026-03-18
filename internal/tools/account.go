@@ -40,7 +40,7 @@ func handleGetAccount(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		acc, err := retry.Do(func() (*core.Account, error) {
+		acc, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (*core.Account, error) {
 			return conn.GetAccountCtx(ctx, addr)
 		})
 		if err != nil {
@@ -84,7 +84,7 @@ func handleGetAccountResources(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		res, err := retry.Do(func() (*api.AccountResourceMessage, error) {
+		res, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (*api.AccountResourceMessage, error) {
 			return conn.GetAccountResourceCtx(ctx, addr)
 		})
 		if err != nil {
