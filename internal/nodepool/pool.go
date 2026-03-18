@@ -22,6 +22,14 @@ type node struct {
 	address string
 }
 
+// NewFromClient creates a pool from an existing client. Used for testing.
+func NewFromClient(c *client.GrpcClient, addr string) *Pool {
+	p := &Pool{}
+	p.primary = &node{client: c, address: addr}
+	p.active.Store(p.primary)
+	return p
+}
+
 // New creates a pool with a primary node. Use WithFallback to add a fallback.
 func New(primaryAddr string, opts []grpc.DialOption) (*Pool, error) {
 	p := &Pool{}
