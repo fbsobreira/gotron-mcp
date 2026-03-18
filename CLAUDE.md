@@ -39,7 +39,9 @@ Full SDK docs: https://github.com/fbsobreira/gotron-sdk/tree/master/docs
 import "github.com/fbsobreira/gotron-sdk/pkg/client"
 
 conn := client.NewGrpcClient("grpc.trongrid.io:50051")
-conn.Start()                    // with TLS (default for trongrid)
+// Use ONE of the following Start options:
+conn.Start()                    // with TLS
+// OR
 conn.Start(grpc.WithTransportCredentials(insecure.NewCredentials())) // without TLS
 conn.SetAPIKey("your-key")     // for trongrid rate limits
 defer conn.Stop()
@@ -79,7 +81,7 @@ addr.IsValid()  // check validity
 
 - Always use `*Ctx` SDK method variants (e.g., `GetAccountCtx(ctx, addr)` not `GetAccount(addr)`)
 - Pass the MCP request `ctx` from the handler through to all gRPC calls
-- For non-request contexts (health checks), use `context.Background()`
+- For non-request contexts (health checks), use `context.WithTimeout(context.Background(), 5*time.Second)`
 
 ### Error Handling
 
