@@ -13,6 +13,7 @@ import (
 	"github.com/fbsobreira/gotron-mcp/internal/auth"
 	"github.com/fbsobreira/gotron-mcp/internal/config"
 	"github.com/fbsobreira/gotron-mcp/internal/health"
+	"github.com/fbsobreira/gotron-mcp/internal/middleware"
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	mcpserver "github.com/fbsobreira/gotron-mcp/internal/server"
 	"github.com/mark3labs/mcp-go/server"
@@ -89,6 +90,17 @@ func main() {
 		case cfg.AuthToken != "":
 			mcpHandler = auth.BearerAuth(cfg.AuthToken, httpTransport)
 			log.Printf("HTTP authentication enabled (single token)")
+		}
+
+		// Rate limiter wraps auth: applied before authentication to reject
+		// excess traffic early. Trade-off: unauthenticated requests consume
+		// rate limit tokens for the source IP.
+		if cfg.RateLimit > 0 {
+			trustMode := middleware.ParseTrustMode(cfg.TrustedProxy)
+			rl := middleware.NewRateLimiter(cfg.RateLimit, trustMode)
+			defer rl.Stop()
+			mcpHandler = rl.Wrap(mcpHandler)
+			log.Printf("Rate limiting enabled: %d req/min per IP (trusted-proxy: %s)", cfg.RateLimit, cfg.TrustedProxy)
 		}
 
 		mux := http.NewServeMux()

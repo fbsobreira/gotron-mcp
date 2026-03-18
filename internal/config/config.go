@@ -2,7 +2,10 @@ package config
 
 import (
 	"flag"
+	"log"
 	"os"
+	"strconv"
+	"strings"
 )
 
 // Config holds all configuration for the GoTRON MCP server.
@@ -19,6 +22,8 @@ type Config struct {
 	TLS             bool
 	AuthToken       string
 	AuthTokenFile   string
+	RateLimit       int
+	TrustedProxy    string
 }
 
 var networkNodes = map[string]string{
@@ -43,8 +48,25 @@ func Parse() *Config {
 	flag.BoolVar(&cfg.TLS, "tls", envOrDefault("GOTRON_MCP_TLS", "") == "true", "Use TLS for gRPC connection (default: plaintext)")
 	flag.StringVar(&cfg.AuthToken, "auth-token", envOrDefault("GOTRON_MCP_AUTH_TOKEN", ""), "Bearer token for HTTP authentication")
 	flag.StringVar(&cfg.AuthTokenFile, "auth-token-file", envOrDefault("GOTRON_MCP_AUTH_TOKEN_FILE", ""), "Path to file with bearer tokens (one per line, hot-reloaded)")
+	flag.IntVar(&cfg.RateLimit, "rate-limit", envOrDefaultInt("GOTRON_MCP_RATE_LIMIT", 0), "Max requests per minute per IP (0 = unlimited)")
+	flag.StringVar(&cfg.TrustedProxy, "trusted-proxy", envOrDefault("GOTRON_MCP_TRUSTED_PROXY", "none"), "Trusted proxy mode: cloudflare, all, none")
 
 	flag.Parse()
+
+	if cfg.RateLimit < 0 {
+		log.Fatalf("invalid --rate-limit %d: must be >= 0", cfg.RateLimit)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(cfg.TrustedProxy)) {
+	case "", "none":
+		cfg.TrustedProxy = "none"
+	case "all":
+		cfg.TrustedProxy = "all"
+	case "cloudflare":
+		cfg.TrustedProxy = "cloudflare"
+	default:
+		log.Fatalf("invalid --trusted-proxy %q: must be one of none, all, cloudflare", cfg.TrustedProxy)
+	}
 
 	if cfg.Node == "" {
 		cfg.Node = resolveNode(cfg.Network)
@@ -72,4 +94,21 @@ func envOrDefault(key, fallback string) string {
 		return val
 	}
 	return fallback
+}
+
+func envOrDefaultInt(key string, fallback int) int {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(val)
+	if err != nil {
+		log.Printf("warning: invalid value %q for %s, using default %d", val, key, fallback)
+		return fallback
+	}
+	if n < 0 {
+		log.Printf("warning: negative value %d for %s, using default %d", n, key, fallback)
+		return fallback
+	}
+	return n
 }
