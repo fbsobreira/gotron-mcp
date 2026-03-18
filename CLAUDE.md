@@ -63,11 +63,11 @@ defer conn.Stop()
 ```go
 import "github.com/fbsobreira/gotron-sdk/pkg/address"
 
-addr, err := address.Base58ToAddress("TXyz...")  // validates + converts
-addr := address.HexToAddress("41...")             // no validation
-addr.String()   // base58
-addr.Hex()      // hex with 41 prefix
-addr.IsValid()  // check validity
+addrB58, err := address.Base58ToAddress("TXyz...")  // validates + converts
+addrHex := address.HexToAddress("41...")             // no validation
+addrB58.String()   // base58
+addrHex.Hex()      // hex with 41 prefix
+addrB58.IsValid()  // check validity
 ```
 
 ### Amount Conventions
