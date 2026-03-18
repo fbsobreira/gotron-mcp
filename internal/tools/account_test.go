@@ -7,7 +7,6 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
-	"github.com/mark3labs/mcp-go/server"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -25,8 +24,6 @@ func TestGetAccount_Success(t *testing.T) {
 		},
 	}
 	pool := newMockPool(t, mock)
-	s := server.NewMCPServer("test", "1.0")
-	RegisterAccountTools(s, pool)
 
 	result := callTool(t, handleGetAccount(pool), map[string]any{
 		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",

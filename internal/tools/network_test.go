@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/hex"
 	"testing"
 
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
@@ -10,7 +11,10 @@ import (
 
 func TestGetTransaction_Success(t *testing.T) {
 	txID := "0000000000000000000000000000000000000000000000000000000000000001"
-	txIDBytes := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}
+	txIDBytes, err := hex.DecodeString(txID)
+	if err != nil {
+		t.Fatalf("failed to decode txID: %v", err)
+	}
 
 	mock := &mockWalletServer{
 		GetTransactionByIdFunc: func(_ context.Context, _ *api.BytesMessage) (*core.Transaction, error) {
