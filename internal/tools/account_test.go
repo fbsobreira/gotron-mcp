@@ -12,7 +12,10 @@ import (
 )
 
 func TestGetAccount_Success(t *testing.T) {
-	addr, _ := address.Base58ToAddress("TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF")
+	addr, err := address.Base58ToAddress("TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF")
+	if err != nil {
+		t.Fatalf("failed to decode address: %v", err)
+	}
 	mock := &mockWalletServer{
 		GetAccountFunc: func(_ context.Context, _ *core.Account) (*core.Account, error) {
 			return &core.Account{
