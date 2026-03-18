@@ -30,7 +30,7 @@ func RegisterTransferTools(s *server.MCPServer, pool *nodepool.Pool) {
 			mcp.WithDescription("Create an unsigned TRC20 token transfer transaction. Returns transaction hex for signing."),
 			mcp.WithString("from", mcp.Required(), mcp.Description("Sender address (base58, starts with T)")),
 			mcp.WithString("to", mcp.Required(), mcp.Description("Recipient address (base58, starts with T)")),
-			mcp.WithString("contract_address", mcp.Required(), mcp.Description("TRC20 contract address (base58)")),
+			mcp.WithString("contract_address", mcp.Required(), mcp.Description("TRC20 contract address (base58, starts with T)")),
 			mcp.WithString("amount", mcp.Required(), mcp.Description("Amount in token units (human-readable, e.g., '100.5')")),
 			mcp.WithNumber("fee_limit", mcp.Description("Fee limit in TRX, range 0-15000 (default: 100)")),
 		),
