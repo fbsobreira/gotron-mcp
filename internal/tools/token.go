@@ -36,7 +36,6 @@ func handleGetTRC20Balance(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		addr := req.GetString("address", "")
 		contract := req.GetString("contract_address", "")
-		conn := pool.Client()
 
 		if err := validateAddress(addr); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
@@ -45,28 +44,28 @@ func handleGetTRC20Balance(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		balance, err := retry.Do(func() (*big.Int, error) {
-			return conn.TRC20ContractBalanceCtx(ctx, addr, contract)
+		balance, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (*big.Int, error) {
+			return pool.Client().TRC20ContractBalanceCtx(ctx, addr, contract)
 		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_balance: %v", err)), nil
 		}
 
-		decimals, err := retry.Do(func() (*big.Int, error) {
-			return conn.TRC20GetDecimalsCtx(ctx, contract)
+		decimals, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (*big.Int, error) {
+			return pool.Client().TRC20GetDecimalsCtx(ctx, contract)
 		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_balance: failed to get decimals: %v", err)), nil
 		}
 
-		name, err := retry.Do(func() (string, error) {
-			return conn.TRC20GetNameCtx(ctx, contract)
+		name, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (string, error) {
+			return pool.Client().TRC20GetNameCtx(ctx, contract)
 		})
 		if err != nil {
 			name = ""
 		}
-		symbol, err := retry.Do(func() (string, error) {
-			return conn.TRC20GetSymbolCtx(ctx, contract)
+		symbol, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (string, error) {
+			return pool.Client().TRC20GetSymbolCtx(ctx, contract)
 		})
 		if err != nil {
 			symbol = ""

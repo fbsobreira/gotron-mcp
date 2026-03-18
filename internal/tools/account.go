@@ -35,13 +35,12 @@ func RegisterAccountTools(s *server.MCPServer, pool *nodepool.Pool) {
 func handleGetAccount(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		addr := req.GetString("address", "")
-		conn := pool.Client()
 		if err := validateAddress(addr); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		acc, err := retry.Do(func() (*core.Account, error) {
-			return conn.GetAccountCtx(ctx, addr)
+		acc, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (*core.Account, error) {
+			return pool.Client().GetAccountCtx(ctx, addr)
 		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_account: failed to fetch account %s: %v", addr, err)), nil
@@ -79,13 +78,12 @@ func handleGetAccount(pool *nodepool.Pool) server.ToolHandlerFunc {
 func handleGetAccountResources(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		addr := req.GetString("address", "")
-		conn := pool.Client()
 		if err := validateAddress(addr); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		res, err := retry.Do(func() (*api.AccountResourceMessage, error) {
-			return conn.GetAccountResourceCtx(ctx, addr)
+		res, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (*api.AccountResourceMessage, error) {
+			return pool.Client().GetAccountResourceCtx(ctx, addr)
 		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_account_resources: failed to fetch resources for %s: %v", addr, err)), nil
