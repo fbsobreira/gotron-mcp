@@ -54,18 +54,20 @@ func (ts *TokenStore) Watch() error {
 		ts.mu.Unlock()
 		return nil
 	}
-	ts.mu.Unlock()
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
+		ts.mu.Unlock()
 		return err
 	}
 	dir := filepath.Dir(ts.path)
 	if err := watcher.Add(dir); err != nil {
 		_ = watcher.Close()
+		ts.mu.Unlock()
 		return err
 	}
 	ts.watcher = watcher
+	ts.mu.Unlock()
 
 	base := filepath.Base(ts.path)
 
