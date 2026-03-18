@@ -36,8 +36,8 @@ func RegisterWitnessWriteTools(s *server.MCPServer, pool *nodepool.Pool) {
 
 func handleListWitnesses(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		grpc := pool.Client()
-		witnesses, err := grpc.ListWitnesses()
+		conn := pool.Client()
+		witnesses, err := conn.ListWitnesses()
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("list_witnesses: %v", err)), nil
 		}
@@ -68,7 +68,7 @@ func handleListWitnesses(pool *nodepool.Pool) server.ToolHandlerFunc {
 func handleVoteWitness(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		from := req.GetString("from", "")
-		grpc := pool.Client()
+		conn := pool.Client()
 		if err := validateAddress(from); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid from address: %v", err)), nil
 		}
@@ -105,7 +105,7 @@ func handleVoteWitness(pool *nodepool.Pool) server.ToolHandlerFunc {
 			}
 		}
 
-		tx, err := grpc.VoteWitnessAccount(from, witnessVotes)
+		tx, err := conn.VoteWitnessAccount(from, witnessVotes)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("vote_witness: %v", err)), nil
 		}

@@ -106,8 +106,8 @@ func handleGetTransaction(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 func handleGetChainParameters(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		grpc := pool.Client()
-		nodeInfo, err := grpc.GetNodeInfo()
+		conn := pool.Client()
+		nodeInfo, err := conn.GetNodeInfo()
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_chain_parameters: %v", err)), nil
 		}
@@ -120,12 +120,12 @@ func handleGetChainParameters(pool *nodepool.Pool) server.ToolHandlerFunc {
 			},
 		}
 
-		energyPrices, err := grpc.GetEnergyPriceHistory()
+		energyPrices, err := conn.GetEnergyPriceHistory()
 		if err == nil {
 			result["energy_prices"] = energyPrices
 		}
 
-		bwPrices, err := grpc.GetBandwidthPriceHistory()
+		bwPrices, err := conn.GetBandwidthPriceHistory()
 		if err == nil {
 			result["bandwidth_prices"] = bwPrices
 		}
@@ -136,8 +136,8 @@ func handleGetChainParameters(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 func handleGetEnergyPrices(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		grpc := pool.Client()
-		prices, err := grpc.GetEnergyPriceHistory()
+		conn := pool.Client()
+		prices, err := conn.GetEnergyPriceHistory()
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_energy_prices: %v", err)), nil
 		}
@@ -170,8 +170,8 @@ func handleGetNetwork(pool *nodepool.Pool, network, _ string) server.ToolHandler
 
 func handleGetBandwidthPrices(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		grpc := pool.Client()
-		prices, err := grpc.GetBandwidthPriceHistory()
+		conn := pool.Client()
+		prices, err := conn.GetBandwidthPriceHistory()
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_bandwidth_prices: %v", err)), nil
 		}

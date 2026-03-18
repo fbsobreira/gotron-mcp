@@ -103,7 +103,7 @@ func handleSignTransaction(keystorePath string) server.ToolHandlerFunc {
 func handleBroadcastTransaction(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		txHex := req.GetString("signed_transaction_hex", "")
-		grpc := pool.Client()
+		conn := pool.Client()
 		if txHex == "" {
 			return mcp.NewToolResultError("signed_transaction_hex is required"), nil
 		}
@@ -121,7 +121,7 @@ func handleBroadcastTransaction(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to parse transaction: %v", err)), nil
 		}
 
-		ret, err := grpc.Broadcast(&tx)
+		ret, err := conn.Broadcast(&tx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("broadcast_transaction: %v", err)), nil
 		}
