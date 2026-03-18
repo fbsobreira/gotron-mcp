@@ -26,7 +26,7 @@ func RegisterContractReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("trigger_constant_contract",
 			mcp.WithDescription("Call a read-only (view/pure) smart contract method. No transaction created, no fees. Returns decoded result."),
-			mcp.WithString("from", mcp.Description("Caller address (base58, optional — defaults to zero address)")),
+			mcp.WithString("from", mcp.Description("Caller address (base58, starts with T; optional — defaults to zero address)")),
 			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
 			mcp.WithString("method", mcp.Required(), mcp.Description("Method signature (e.g., 'totalSupply()', 'balanceOf(address)')")),
 			mcp.WithString("params", mcp.Description("Method parameters as JSON array, each element is {type: value} e.g., [{\"address\": \"TJD...\"}, {\"uint256\": \"1000\"}]")),
@@ -62,7 +62,7 @@ func RegisterContractReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 
 	s.AddTool(
 		mcp.NewTool("estimate_energy",
-			mcp.WithDescription("Estimate energy cost for a smart contract call. Requires a full node with vm.estimateEnergy=true; falls back to secondary node if primary does not support it."),
+			mcp.WithDescription("Estimate energy cost for a smart contract call. Requires a full node with vm.supportConstant=true and vm.estimateEnergy=true; falls back to secondary node if primary does not support it."),
 			mcp.WithString("from", mcp.Required(), mcp.Description("Caller address (base58, starts with T)")),
 			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
 			mcp.WithString("method", mcp.Required(), mcp.Description("Contract method signature (e.g., 'transfer(address,uint256)')")),
