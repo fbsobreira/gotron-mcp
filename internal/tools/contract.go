@@ -29,7 +29,7 @@ func RegisterContractReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 			mcp.WithString("from", mcp.Description("Caller address (base58, starts with T; optional — defaults to zero address)")),
 			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
 			mcp.WithString("method", mcp.Required(), mcp.Description("Method signature (e.g., 'totalSupply()', 'balanceOf(address)')")),
-			mcp.WithString("params", mcp.Description("Method parameters as JSON array of {type: value} objects, e.g., [{\"address\": \"TJD...\"}, {\"uint256\": \"1000\"}]")),
+			mcp.WithString("params", mcp.Description("Method parameters as JSON array. Plain values: [\"TJD...\", \"1000\"] (types inferred from method signature). Typed objects also accepted: [{\"address\": \"TJD...\"}, {\"uint256\": \"1000\"}]")),
 		),
 		handleTriggerConstantContract(pool),
 	)
@@ -66,7 +66,7 @@ func RegisterContractReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 			mcp.WithString("from", mcp.Required(), mcp.Description("Caller address (base58, starts with T)")),
 			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
 			mcp.WithString("method", mcp.Required(), mcp.Description("Contract method signature (e.g., 'transfer(address,uint256)')")),
-			mcp.WithString("params", mcp.Required(), mcp.Description("Method parameters as JSON array of {type: value} objects, e.g., [{\"address\": \"TJD...\"}, {\"uint256\": \"1000\"}]")),
+			mcp.WithString("params", mcp.Required(), mcp.Description("Method parameters as JSON array. Plain values: [\"TJD...\", \"1000\"] (types inferred from method signature). Typed objects also accepted: [{\"address\": \"TJD...\"}, {\"uint256\": \"1000\"}]")),
 		),
 		handleEstimateEnergy(pool),
 	)
@@ -80,7 +80,7 @@ func RegisterContractWriteTools(s *server.MCPServer, pool *nodepool.Pool) {
 			mcp.WithString("from", mcp.Required(), mcp.Description("Caller address (base58, starts with T)")),
 			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
 			mcp.WithString("method", mcp.Required(), mcp.Description("Method signature (e.g., 'transfer(address,uint256)')")),
-			mcp.WithString("params", mcp.Required(), mcp.Description("Method parameters as JSON array of {type: value} objects, e.g., [{\"address\": \"TJD...\"}, {\"uint256\": \"1000\"}]")),
+			mcp.WithString("params", mcp.Required(), mcp.Description("Method parameters as JSON array. Plain values: [\"TJD...\", \"1000\"] (types inferred from method signature). Typed objects also accepted: [{\"address\": \"TJD...\"}, {\"uint256\": \"1000\"}]")),
 			mcp.WithNumber("fee_limit", mcp.Description("Fee limit in whole TRX (integer), range 0-15000 (default: 100)")),
 			mcp.WithNumber("call_value", mcp.Description("Amount to send with call in SUN (default: 0)")),
 		),

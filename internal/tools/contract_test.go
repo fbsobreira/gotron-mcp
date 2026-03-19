@@ -577,3 +577,106 @@ func TestTriggerContract_Error(t *testing.T) {
 		t.Error("expected error when TriggerContract fails")
 	}
 }
+
+// Plain-value parameter format tests — types inferred from method signature.
+// These verify that the SDK's abi.LoadFromJSONWithMethod() works end-to-end
+// through the MCP tool handlers after the gotron-sdk upgrade.
+
+func TestTriggerConstantContract_PlainParams(t *testing.T) {
+	mock := mockContractServer()
+	mock.TriggerConstantContractFunc = func(_ context.Context, _ *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+		return &api.TransactionExtention{
+			ConstantResult: [][]byte{abiEncodeUint256(big.NewInt(1000000))},
+			Result:         &api.Return{Result: true},
+		}, nil
+	}
+	pool := newMockPool(t, mock)
+
+	tests := []struct {
+		name   string
+		params string
+	}{
+		{"plain-value format", `["TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF"]`},
+		{"typed-object format", `[{"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF"}]`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := callTool(t, handleTriggerConstantContract(pool), map[string]any{
+				"contract_address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+				"method":           "balanceOf(address)",
+				"params":           tt.params,
+			})
+			if result.IsError {
+				t.Fatalf("expected success, got error: %v", result.Content)
+			}
+		})
+	}
+}
+
+func TestEstimateEnergy_PlainParams(t *testing.T) {
+	mock := &mockWalletServer{
+		EstimateEnergyFunc: func(_ context.Context, _ *core.TriggerSmartContract) (*api.EstimateEnergyMessage, error) {
+			return &api.EstimateEnergyMessage{
+				Result:         &api.Return{Result: true},
+				EnergyRequired: 31895,
+			}, nil
+		},
+	}
+	pool := newMockPool(t, mock)
+
+	tests := []struct {
+		name   string
+		params string
+	}{
+		{"plain-value format", `["TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", "1000000"]`},
+		{"typed-object format", `[{"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF"}, {"uint256": "1000000"}]`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := callTool(t, handleEstimateEnergy(pool), map[string]any{
+				"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+				"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+				"method":           "transfer(address,uint256)",
+				"params":           tt.params,
+			})
+			if result.IsError {
+				t.Fatalf("expected success, got error: %v", result.Content)
+			}
+		})
+	}
+}
+
+func TestTriggerContract_PlainParams(t *testing.T) {
+	mock := &mockWalletServer{
+		TriggerContractFunc: func(_ context.Context, _ *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+			return &api.TransactionExtention{
+				Result:      &api.Return{Result: true},
+				Txid:        make([]byte, 32),
+				Transaction: &core.Transaction{RawData: &core.TransactionRaw{}},
+			}, nil
+		},
+	}
+	pool := newMockPool(t, mock)
+
+	tests := []struct {
+		name   string
+		params string
+	}{
+		{"plain-value format", `["TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", "1000000"]`},
+		{"typed-object format", `[{"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF"}, {"uint256": "1000000"}]`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := callTool(t, handleTriggerContract(pool), map[string]any{
+				"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+				"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+				"method":           "transfer(address,uint256)",
+				"params":           tt.params,
+				"fee_limit":        float64(100),
+			})
+			if result.IsError {
+				t.Fatalf("expected success, got error: %v", result.Content)
+			}
+		})
+	}
+}
