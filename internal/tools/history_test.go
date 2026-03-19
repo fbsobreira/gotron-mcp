@@ -363,6 +363,22 @@ func TestParseQueryOptsDefaultLimit(t *testing.T) {
 	}
 }
 
+func TestParseQueryOptsOnlyFrom(t *testing.T) {
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"only_from": true}
+
+	opts, err := parseQueryOpts(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !opts.OnlyFrom {
+		t.Error("OnlyFrom should be true")
+	}
+	if opts.OnlyTo {
+		t.Error("OnlyTo should be false")
+	}
+}
+
 func TestParseQueryOptsMutuallyExclusive(t *testing.T) {
 	req := mcp.CallToolRequest{}
 	req.Params.Arguments = map[string]any{
