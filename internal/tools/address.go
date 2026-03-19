@@ -29,7 +29,7 @@ func validateAddress(addr string) error {
 func RegisterAddressTools(s *server.MCPServer) {
 	s.AddTool(
 		mcp.NewTool("validate_address",
-			mcp.WithDescription("Validate and convert a TRON address. Accepts base58 (T...), hex (41...), or Ethereum/EVM format (0x...). Converts between all formats."),
+			mcp.WithDescription("Validate a TRON address and convert supported inputs to TRON base58/hex. Accepts base58 (T...), TRON hex (41...), or Ethereum/EVM format (0x...)."),
 			mcp.WithString("address", mcp.Required(), mcp.Description("TRON address (base58 T..., hex 41..., or Ethereum 0x...)")),
 		),
 		handleValidateAddress(),
@@ -96,11 +96,29 @@ func handleValidateAddress() server.ToolHandlerFunc {
 				})
 			}
 		case strings.HasPrefix(addr, "41"):
-			a = address.HexToAddress(addr)
+			rawBytes, err := hex.DecodeString(addr)
+			if err != nil {
+				return mcp.NewToolResultJSON(map[string]any{
+					"input":    addr,
+					"is_valid": false,
+					"error":    fmt.Sprintf("invalid hex: %v", err),
+				})
+			}
+			if len(rawBytes) != 21 {
+				return mcp.NewToolResultJSON(map[string]any{
+					"input":    addr,
+					"is_valid": false,
+					"error":    "invalid TRON hex address length: expected 21 bytes",
+				})
+			}
+			a = address.BytesToAddress(rawBytes)
 			format = "hex"
 		default:
-			a = address.HexToAddress(addr)
-			format = "hex"
+			return mcp.NewToolResultJSON(map[string]any{
+				"input":    addr,
+				"is_valid": false,
+				"error":    "unsupported address format: expected T..., 41..., or 0x...",
+			})
 		}
 
 		result := map[string]any{
