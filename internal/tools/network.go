@@ -51,6 +51,29 @@ func RegisterNetworkTools(s *server.MCPServer, pool *nodepool.Pool, network, nod
 		),
 		handleGetBandwidthPrices(pool),
 	)
+
+	s.AddTool(
+		mcp.NewTool("get_pending_transactions",
+			mcp.WithDescription("List pending transaction IDs and pool size from the mempool"),
+		),
+		handleGetPendingTransactions(pool),
+	)
+
+	s.AddTool(
+		mcp.NewTool("is_transaction_pending",
+			mcp.WithDescription("Check if a specific transaction is still in the pending pool (mempool)"),
+			mcp.WithString("transaction_id", mcp.Required(), mcp.Description("Transaction hash / txid (64-char hex string)")),
+		),
+		handleIsTransactionPending(pool),
+	)
+
+	s.AddTool(
+		mcp.NewTool("get_pending_by_address",
+			mcp.WithDescription("Get pending transactions for a specific address from the mempool"),
+			mcp.WithString("address", mcp.Required(), mcp.Description("TRON address (base58, starts with T)")),
+		),
+		handleGetPendingByAddress(pool),
+	)
 }
 
 func handleGetTransaction(pool *nodepool.Pool) server.ToolHandlerFunc {
@@ -183,6 +206,86 @@ func handleGetBandwidthPrices(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 		result := map[string]any{
 			"prices": prices,
+		}
+
+		return mcp.NewToolResultJSON(result)
+	}
+}
+
+func handleGetPendingTransactions(pool *nodepool.Pool) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		conn := pool.Client()
+
+		size, err := conn.GetPendingSizeCtx(ctx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("get_pending_transactions: failed to get pool size: %v", err)), nil
+		}
+
+		list, err := conn.GetTransactionListFromPendingCtx(ctx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("get_pending_transactions: failed to list pending: %v", err)), nil
+		}
+
+		result := map[string]any{
+			"pool_size":       size.GetNum(),
+			"transaction_ids": list.GetTxId(),
+		}
+
+		return mcp.NewToolResultJSON(result)
+	}
+}
+
+func handleIsTransactionPending(pool *nodepool.Pool) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		txID := req.GetString("transaction_id", "")
+		if txID == "" {
+			return mcp.NewToolResultError("transaction_id is required"), nil
+		}
+
+		conn := pool.Client()
+		pending, err := conn.IsTransactionPendingCtx(ctx, txID)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("is_transaction_pending: %v", err)), nil
+		}
+
+		result := map[string]any{
+			"transaction_id": txID,
+			"pending":        pending,
+		}
+
+		return mcp.NewToolResultJSON(result)
+	}
+}
+
+func handleGetPendingByAddress(pool *nodepool.Pool) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		addr := req.GetString("address", "")
+		if err := validateAddress(addr); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid address: %v", err)), nil
+		}
+
+		conn := pool.Client()
+		txs, err := conn.GetPendingTransactionsByAddressCtx(ctx, addr)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("get_pending_by_address: %v", err)), nil
+		}
+
+		decoded := make([]map[string]any, 0, len(txs))
+		for _, tx := range txs {
+			entry := map[string]any{}
+			if tx.RawData != nil && len(tx.RawData.Contract) > 0 {
+				entry["contract_type"] = tx.RawData.Contract[0].Type.String()
+			}
+			if cd, err := transaction.DecodeContractData(tx); err == nil {
+				entry["contract_data"] = cd.Fields
+			}
+			decoded = append(decoded, entry)
+		}
+
+		result := map[string]any{
+			"address":      addr,
+			"count":        len(txs),
+			"transactions": decoded,
 		}
 
 		return mcp.NewToolResultJSON(result)

@@ -40,7 +40,10 @@ type mockWalletServer struct {
 	CreateTransaction2Func      func(context.Context, *core.TransferContract) (*api.TransactionExtention, error)
 	TriggerContractFunc         func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error)
 	VoteWitnessAccount2Func     func(context.Context, *core.VoteWitnessContract) (*api.TransactionExtention, error)
-	EstimateEnergyFunc          func(context.Context, *core.TriggerSmartContract) (*api.EstimateEnergyMessage, error)
+	EstimateEnergyFunc              func(context.Context, *core.TriggerSmartContract) (*api.EstimateEnergyMessage, error)
+	GetTransactionFromPendingFunc   func(context.Context, *api.BytesMessage) (*core.Transaction, error)
+	GetTransactionListFromPendFunc  func(context.Context, *api.EmptyMessage) (*api.TransactionIdList, error)
+	GetPendingSizeFunc              func(context.Context, *api.EmptyMessage) (*api.NumberMessage, error)
 	GetContractFunc             func(context.Context, *api.BytesMessage) (*core.SmartContract, error)
 }
 
@@ -175,6 +178,27 @@ func (m *mockWalletServer) EstimateEnergy(ctx context.Context, in *core.TriggerS
 		return m.EstimateEnergyFunc(ctx, in)
 	}
 	return m.UnimplementedWalletServer.EstimateEnergy(ctx, in)
+}
+
+func (m *mockWalletServer) GetTransactionFromPending(ctx context.Context, in *api.BytesMessage) (*core.Transaction, error) {
+	if m.GetTransactionFromPendingFunc != nil {
+		return m.GetTransactionFromPendingFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.GetTransactionFromPending(ctx, in)
+}
+
+func (m *mockWalletServer) GetTransactionListFromPending(ctx context.Context, in *api.EmptyMessage) (*api.TransactionIdList, error) {
+	if m.GetTransactionListFromPendFunc != nil {
+		return m.GetTransactionListFromPendFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.GetTransactionListFromPending(ctx, in)
+}
+
+func (m *mockWalletServer) GetPendingSize(ctx context.Context, in *api.EmptyMessage) (*api.NumberMessage, error) {
+	if m.GetPendingSizeFunc != nil {
+		return m.GetPendingSizeFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.GetPendingSize(ctx, in)
 }
 
 func (m *mockWalletServer) GetContract(ctx context.Context, in *api.BytesMessage) (*core.SmartContract, error) {

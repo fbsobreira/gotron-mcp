@@ -213,3 +213,6 @@ txs, err := conn.GetPendingTransactionsByAddressCtx(ctx, "TAddr...")
 - `sign_transaction` — Sign using local keystore (opt-in)
 - `broadcast_transaction` — Broadcast signed transaction
 - `get_network` — Check current network connection
+- `get_pending_transactions` — List pending transaction IDs and pool size
+- `is_transaction_pending` — Check if a transaction is still in the mempool
+- `get_pending_by_address` — Get pending transactions for a specific address
