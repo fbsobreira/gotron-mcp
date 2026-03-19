@@ -284,6 +284,34 @@ func TestGetPendingTransactions_Success(t *testing.T) {
 	}
 }
 
+func TestGetPendingTransactions_EmptyPool(t *testing.T) {
+	mock := &mockWalletServer{
+		GetPendingSizeFunc: func(_ context.Context, _ *api.EmptyMessage) (*api.NumberMessage, error) {
+			return &api.NumberMessage{Num: 0}, nil
+		},
+		GetTransactionListFromPendFunc: func(_ context.Context, _ *api.EmptyMessage) (*api.TransactionIdList, error) {
+			return &api.TransactionIdList{}, nil
+		},
+	}
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleGetPendingTransactions(pool), map[string]any{})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", result.Content)
+	}
+	data := parseJSONResult(t, result)
+	if data["pool_size"] != float64(0) {
+		t.Errorf("pool_size = %v, want 0", data["pool_size"])
+	}
+	// Verify transaction_ids is [] not null
+	ids, ok := data["transaction_ids"].([]any)
+	if !ok {
+		t.Fatal("expected transaction_ids to be an array, not null")
+	}
+	if len(ids) != 0 {
+		t.Errorf("transaction_ids length = %d, want 0", len(ids))
+	}
+}
+
 func TestGetPendingTransactions_SizeError(t *testing.T) {
 	mock := &mockWalletServer{
 		GetPendingSizeFunc: func(_ context.Context, _ *api.EmptyMessage) (*api.NumberMessage, error) {
@@ -428,6 +456,22 @@ func TestGetPendingByAddress_WithTransactions(t *testing.T) {
 	tx0 := txs[0].(map[string]any)
 	if tx0["contract_type"] != "TransferContract" {
 		t.Errorf("contract_type = %v, want TransferContract", tx0["contract_type"])
+	}
+	if tx0["transaction_id"] == nil || tx0["transaction_id"] == "" {
+		t.Error("expected transaction_id in entry")
+	}
+	cd, ok := tx0["contract_data"].(map[string]any)
+	if !ok {
+		t.Fatal("expected contract_data map in entry")
+	}
+	if got := cd["owner_address"]; got != "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF" {
+		t.Errorf("owner_address = %v, want TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", got)
+	}
+	if got := cd["to_address"]; got != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
+		t.Errorf("to_address = %v, want TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", got)
+	}
+	if got := cd["amount"]; got != "1.000000" {
+		t.Errorf("amount = %v, want 1.000000", got)
 	}
 }
 

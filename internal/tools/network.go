@@ -2,9 +2,12 @@ package tools
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"strings"
+
+	"google.golang.org/protobuf/proto"
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/retry"
@@ -226,9 +229,14 @@ func handleGetPendingTransactions(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("get_pending_transactions: failed to list pending: %v", err)), nil
 		}
 
+		txIDs := list.GetTxId()
+		if txIDs == nil {
+			txIDs = []string{}
+		}
+
 		result := map[string]any{
 			"pool_size":       size.GetNum(),
-			"transaction_ids": list.GetTxId(),
+			"transaction_ids": txIDs,
 		}
 
 		return mcp.NewToolResultJSON(result)
@@ -273,8 +281,14 @@ func handleGetPendingByAddress(pool *nodepool.Pool) server.ToolHandlerFunc {
 		decoded := make([]map[string]any, 0, len(txs))
 		for _, tx := range txs {
 			entry := map[string]any{}
-			if tx.RawData != nil && len(tx.RawData.Contract) > 0 {
-				entry["contract_type"] = tx.RawData.Contract[0].Type.String()
+			if tx.RawData != nil {
+				if rawBytes, err := proto.Marshal(tx.RawData); err == nil {
+					h := sha256.Sum256(rawBytes)
+					entry["transaction_id"] = hex.EncodeToString(h[:])
+				}
+				if len(tx.RawData.Contract) > 0 {
+					entry["contract_type"] = tx.RawData.Contract[0].Type.String()
+				}
 			}
 			if cd, err := transaction.DecodeContractData(tx); err == nil {
 				entry["contract_data"] = cd.Fields
