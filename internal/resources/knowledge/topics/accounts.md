@@ -21,6 +21,17 @@ if err != nil || !addr.IsValid() {
 // Convert hex to address (no validation)
 addr := address.HexToAddress("41abc...")
 
+// Convert raw bytes to TRON address (prepends 0x41 for 20-byte input)
+addr := address.BytesToAddress(rawBytes)
+
+// Convert 20-byte Ethereum address to TRON address
+addr, err := address.EthAddressToAddress(ethAddrBytes)
+
+// Other conversions
+addr, err := address.Base64ToAddress(base64String)
+addr := address.BigToAddress(bigInt)
+addr := address.PubkeyToAddress(ecdsaPubKey)
+
 // Format
 addr.String()  // base58: "TXyz..."
 addr.Hex()     // hex: "41abc..."
@@ -79,6 +90,73 @@ accounts := ks.Accounts()
 // Sign transaction with passphrase
 signedTx, err := ks.SignTxWithPassphrase(account, "passphrase", unsignedTx)
 ```
+
+## SDK: Signer Interface (v0.25.2+)
+
+The `pkg/signer` package provides a unified signing interface used by the fluent builder API:
+
+```go
+import "github.com/fbsobreira/gotron-sdk/pkg/signer"
+
+type Signer interface {
+    Sign(tx *core.Transaction) (*core.Transaction, error)
+    Address() address.Address
+}
+
+// From ECDSA private key
+s, err := signer.NewPrivateKeySigner(ecdsaKey)
+
+// From btcec private key
+s, err := signer.NewPrivateKeySignerFromBTCEC(btcecKey)
+
+// From pre-unlocked keystore
+s := signer.NewKeystoreSigner(ks, account)
+
+// From keystore with passphrase (unlocks per-sign)
+s := signer.NewKeystorePassphraseSigner(ks, account, "passphrase")
+
+// From Ledger hardware wallet
+s, err := signer.NewLedgerSigner()
+```
+
+Use with fluent builders:
+```go
+receipt, err := builder.Transfer(from, to, amount).Send(ctx, s)
+```
+
+## SDK: Mnemonic Generation
+
+```go
+import "github.com/fbsobreira/gotron-sdk/pkg/mnemonic"
+
+// Generate a new 24-word BIP39 mnemonic — returns error on entropy failure
+phrase, err := mnemonic.Generate()
+```
+
+## SDK: HD Wallet / BIP44
+
+```go
+import (
+    "github.com/btcsuite/btcd/btcec/v2"
+    "github.com/fbsobreira/gotron-sdk/pkg/keys"
+    "github.com/fbsobreira/gotron-sdk/pkg/keys/hd"
+)
+
+// Quick: derive from mnemonic (uses default BIP44 path m/44'/195'/0'/0/{index})
+privKey, pubKey := keys.FromMnemonicSeedAndPassphrase(mnemonic, passphrase, 0)
+
+// Manual: parse BIP44 path (both formats accepted — with or without m/ prefix)
+params, err := hd.NewParamsFromPath("m/44'/195'/0'/0/0")
+
+// Compute master key from seed
+secret, chainCode := hd.ComputeMastersFromSeed(seed, []byte("Bitcoin seed"))
+
+// Derive private key for path (must use secp256k1 curve for TRON)
+// Signature: DerivePrivateKeyForPath(curve, privKeyBytes [32]byte, chainCode [32]byte, path string) ([32]byte, error)
+derivedKey, err := hd.DerivePrivateKeyForPath(btcec.S256(), secret, chainCode, "m/44'/195'/0'/0/0")
+```
+
+**Note:** HD key derivation functions now return errors for invalid paths (v0.25.2+). Always check the returned error.
 
 ## MCP Tools
 

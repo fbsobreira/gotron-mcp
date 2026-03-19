@@ -33,7 +33,7 @@ func TestEmbeddedContent_NotEmpty(t *testing.T) {
 }
 
 func TestTopics_AllExpected(t *testing.T) {
-	expected := []string{"accounts", "tokens", "transfers", "staking", "contracts", "governance", "blocks"}
+	expected := []string{"accounts", "tokens", "transfers", "staking", "contracts", "governance", "blocks", "sdk"}
 	for _, slug := range expected {
 		if _, ok := topics[slug]; !ok {
 			t.Errorf("expected topic %q not found", slug)
@@ -157,8 +157,8 @@ func TestTopicTemplateLookup_InvalidSlug(t *testing.T) {
 	for k := range topics {
 		available = append(available, k)
 	}
-	if len(available) != 7 {
-		t.Errorf("expected 7 available topics, got %d", len(available))
+	if len(available) != 8 {
+		t.Errorf("expected 8 available topics, got %d", len(available))
 	}
 }
 

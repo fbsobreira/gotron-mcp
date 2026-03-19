@@ -19,11 +19,7 @@ tx, err := conn.Transfer("TFromAddr...", "TToAddr...", 1_000_000)  // 1 TRX
 ## SDK: Transaction Serialization
 
 ```go
-import (
-    "encoding/hex"
-    "github.com/fbsobreira/gotron-sdk/pkg/client/transaction"
-    "google.golang.org/protobuf/proto"
-)
+import "github.com/fbsobreira/gotron-sdk/pkg/client/transaction"
 
 // All write methods return *api.TransactionExtention
 
@@ -34,14 +30,10 @@ txHex, err := transaction.ToRawDataHex(tx.Transaction)
 txJSON, err := transaction.ToJSON(tx.Transaction)
 
 // Reconstruct from hex (received from external system)
-tx, err := transaction.FromRawDataHex(hexString)
+restored, err := transaction.FromRawDataHex(hexString)
 
 // Reconstruct from JSON (TRON HTTP API format)
-tx, err := transaction.FromJSON(jsonBytes)
-
-// Legacy approach (still works)
-txBytes, _ := proto.Marshal(tx.Transaction)
-txHex := hex.EncodeToString(txBytes)
+restored, err := transaction.FromJSON(jsonBytes)
 ```
 
 ## SDK: Multi-Signature Transactions
@@ -145,11 +137,79 @@ tx.UpdateHash()
 signedTx, err := transaction.SignTransaction(tx.Transaction, privKey)
 ```
 
+## SDK: Fluent Transfer Builder (v0.25.2+)
+
+```go
+import (
+    "github.com/fbsobreira/gotron-sdk/pkg/txbuilder"
+    "github.com/fbsobreira/gotron-sdk/pkg/signer"
+)
+
+builder := txbuilder.New(conn)
+s, err := signer.NewPrivateKeySigner(privKey)
+// handle err
+
+// Build unsigned transaction (for external signing)
+tx, err := builder.Transfer(from, to, amountSUN).Build(ctx)
+
+// Sign and broadcast in one step
+receipt, err := builder.Transfer(from, to, amountSUN).Send(ctx, s)
+
+// Sign, broadcast, and wait for confirmation
+receipt, err := builder.Transfer(from, to, amountSUN).SendAndConfirm(ctx, s)
+// receipt.TxID, receipt.BlockNumber, receipt.Confirmed, receipt.Fee
+
+// With options
+receipt, err := builder.Transfer(from, to, amountSUN,
+    txbuilder.WithMemo("payment"),
+    txbuilder.WithPermissionID(2), // multi-sig active permission
+).Send(ctx, s)
+```
+
+## SDK: Receipt Type
+
+All builder `Send` and `SendAndConfirm` operations return a `txresult.Receipt`:
+
+```go
+type Receipt struct {
+    TxID          string   // transaction hash
+    BlockNumber   int64    // block number
+    Confirmed     bool     // true after confirmation polling
+    EnergyUsed    int64    // energy consumed
+    BandwidthUsed int64    // bandwidth consumed
+    Fee           int64    // fee in SUN
+    Result        []byte   // contract return data
+    Error         string   // TRON error message if failed
+}
+```
+
+## SDK: Pending Pool / Mempool
+
+Query the pending transaction pool before confirmation:
+
+```go
+// Check if a transaction is still pending
+pending, err := conn.IsTransactionPendingCtx(ctx, txID)
+
+// Get a specific pending transaction
+tx, err := conn.GetTransactionFromPendingCtx(ctx, txID)
+// Returns client.ErrPendingTxNotFound if not in pool
+
+// List all pending transaction IDs
+list, err := conn.GetTransactionListFromPendingCtx(ctx)
+
+// Get pending pool size
+size, err := conn.GetPendingSizeCtx(ctx)
+
+// Get pending transactions for a specific address
+txs, err := conn.GetPendingTransactionsByAddressCtx(ctx, "TAddr...")
+```
+
 ## MCP Tools
 
 - `transfer_trx` — Create unsigned TRX transfer
 - `transfer_trc20` — Create unsigned TRC20 transfer
-- `get_transaction` — Look up transaction details by ID
+- `get_transaction` — Look up transaction details by ID (includes decoded contract_data)
 - `sign_transaction` — Sign using local keystore (opt-in)
 - `broadcast_transaction` — Broadcast signed transaction
 - `get_network` — Check current network connection

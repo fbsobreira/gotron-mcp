@@ -34,6 +34,9 @@ var topicGovernance string
 //go:embed knowledge/topics/blocks.md
 var topicBlocks string
 
+//go:embed knowledge/topics/sdk.md
+var topicSDK string
+
 var topics = map[string]struct {
 	name    string
 	desc    string
@@ -46,6 +49,7 @@ var topics = map[string]struct {
 	"contracts":  {"Smart Contracts", "Contract calls, ABI, energy estimation, parameter encoding", topicContracts},
 	"governance": {"Governance & Voting", "Super representatives, voting, proposals", topicGovernance},
 	"blocks":     {"Blocks & Network", "Block queries, chain parameters, energy/bandwidth prices", topicBlocks},
+	"sdk":        {"GoTRON High-Level SDK", "Fluent transaction builder, contract call builder, signer interface, TRC20 typed wrapper, receipt type", topicSDK},
 }
 
 // RegisterResources registers knowledge base resources on the MCP server.
@@ -97,7 +101,7 @@ func RegisterResources(s *server.MCPServer) {
 		mcp.NewResourceTemplate(
 			"gotron://knowledge/topics/{topic}",
 			"TRON Knowledge Base Topic",
-			mcp.WithTemplateDescription("Look up a specific TRON topic. Available topics: accounts, tokens, transfers, staking, contracts, governance, blocks"),
+			mcp.WithTemplateDescription("Look up a specific TRON topic. Available topics: accounts, tokens, transfers, staking, contracts, governance, blocks, sdk"),
 			mcp.WithTemplateMIMEType("text/markdown"),
 		),
 		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {

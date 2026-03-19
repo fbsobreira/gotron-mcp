@@ -49,6 +49,31 @@ for _, p := range proposals.Proposals {
 }
 ```
 
+## SDK: Fluent Vote Builder (v0.25.2+)
+
+```go
+import "github.com/fbsobreira/gotron-sdk/pkg/txbuilder"
+
+builder := txbuilder.New(conn)
+
+// Fluent vote chaining
+receipt, err := builder.VoteWitness(from).
+    Vote("TSR1addr...", 1000).
+    Vote("TSR2addr...", 500).
+    Send(ctx, signer)
+
+// Or from a map
+votes := map[string]int64{"TSR1addr...": 1000, "TSR2addr...": 500}
+receipt, err := builder.VoteWitness(from).
+    Votes(votes).
+    Send(ctx, signer)
+
+// Build unsigned (for external signing)
+tx, err := builder.VoteWitness(from).
+    Vote("TSR1addr...", 1000).
+    Build(ctx)
+```
+
 ## MCP Tools
 
 - `list_witnesses` — List all super representatives
