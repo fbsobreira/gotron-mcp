@@ -84,10 +84,16 @@ func handleValidateAddress() server.ToolHandlerFunc {
 				}
 				a = converted
 				format = "ethereum"
-			} else {
-				// Treat as TRON hex (21 bytes with 41 prefix, or invalid)
-				a = address.HexToAddress(hexStr)
+			} else if len(rawBytes) == 21 {
+				// 21-byte TRON hex address (41-prefixed)
+				a = address.BytesToAddress(rawBytes)
 				format = "hex"
+			} else {
+				return mcp.NewToolResultJSON(map[string]any{
+					"input":    addr,
+					"is_valid": false,
+					"error":    "invalid 0x address length: expected 20 (Ethereum) or 21 (TRON) bytes",
+				})
 			}
 		case strings.HasPrefix(addr, "41"):
 			a = address.HexToAddress(addr)

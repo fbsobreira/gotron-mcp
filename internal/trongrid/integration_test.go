@@ -149,6 +149,9 @@ func TestIntegrationPagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("page 1: %v", err)
 	}
+	if !resp1.Success {
+		t.Fatal("expected success=true on page 1")
+	}
 	if resp1.Meta.Fingerprint == "" {
 		t.Skip("address has <= 2 transactions, cannot test pagination")
 	}
@@ -163,6 +166,9 @@ func TestIntegrationPagination(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("page 2: %v", err)
+	}
+	if !resp2.Success {
+		t.Fatal("expected success=true on page 2")
 	}
 	if len(resp2.Data) == 0 {
 		t.Fatal("expected data on page 2")

@@ -864,6 +864,19 @@ func TestTriggerConstantContract_NegativeCallValue(t *testing.T) {
 	}
 }
 
+func TestTriggerConstantContract_NegativeTokenValue(t *testing.T) {
+	pool := newMockPool(t, mockContractServer())
+	result := callTool(t, handleTriggerConstantContract(pool), map[string]any{
+		"contract_address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"method":           "deposit()",
+		"token_id":         "1000001",
+		"token_value":      float64(-1),
+	})
+	if !result.IsError {
+		t.Error("expected error for negative token_value")
+	}
+}
+
 func TestTriggerConstantContract_DataAndMethodIgnoresMethod(t *testing.T) {
 	mock := mockContractServer()
 	mock.TriggerConstantContractFunc = func(_ context.Context, ct *core.TriggerSmartContract) (*api.TransactionExtention, error) {
