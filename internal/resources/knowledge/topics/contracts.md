@@ -10,30 +10,64 @@
 ## SDK: Read-Only Calls
 
 ```go
-// No transaction created, no fees
-result, err := conn.TriggerConstantContract(
+// No transaction created, no fees — plain-value params (types inferred from signature)
+result, err := conn.TriggerConstantContractCtx(ctx,
     "TCallerAddr...",
     "TContractAddr...",
     "balanceOf(address)",
-    `[{"address": "TOwnerAddr..."}]`,
+    `["TOwnerAddr..."]`,
 )
 // result.ConstantResult contains the return data
+
+// Simulate payable functions with WithCallValue (msg.value in SUN)
+result, err := conn.TriggerConstantContractCtx(ctx,
+    "TCallerAddr...", "TContractAddr...",
+    "deposit()", `[]`,
+    client.WithCallValue(1_000_000), // 1 TRX
+)
+
+// With TRC10 token value
+opt, err := client.WithTokenValue("1000001", 500)
+result, err := conn.TriggerConstantContractCtx(ctx,
+    "TCallerAddr...", "TContractAddr...",
+    "onTokenReceived()", `[]`,
+    opt,
+)
 ```
 
 ## SDK: Write Calls
 
 ```go
-tx, err := conn.TriggerContract(
+// Plain-value params (types inferred from method signature)
+tx, err := conn.TriggerContractCtx(ctx,
     "TCallerAddr...",                         // from
     "TContractAddr...",                       // contract
     "transfer(address,uint256)",              // method signature
-    `[{"address":"TToAddr..."},{"uint256":"1000000"}]`,  // params as JSON
+    `["TToAddr...", "1000000"]`,              // params (plain-value format)
     100_000_000,                              // fee limit (100 TRX in SUN)
     0,                                        // call value (TRX to send, in SUN)
     "",                                       // token ID (empty for TRX)
     0,                                        // token amount
 )
 // Returns unsigned transaction
+```
+
+## SDK: Pre-Packed ABI Data Calls
+
+For callers that already have ABI-packed data (e.g., from go-ethereum's `abi.Pack()`):
+
+```go
+// Read-only call with pre-packed data
+result, err := conn.TriggerConstantContractWithDataCtx(ctx,
+    "TCallerAddr...", "TContractAddr...", packedData,
+)
+
+// Write call with pre-packed data
+tx, err := conn.TriggerContractWithDataCtx(ctx,
+    "TCallerAddr...", "TContractAddr...", packedData,
+    100_000_000, // fee limit
+    0, "", 0,    // callValue, tokenID, tokenAmount
+)
 ```
 
 ## SDK: Get Contract ABI
@@ -71,7 +105,24 @@ The SDK supports overloaded contract methods (same name, different parameters):
 
 ## Parameter Encoding
 
-Parameters are passed as a JSON array of typed values:
+Two parameter formats are supported. The SDK auto-detects which format is used.
+
+### Plain-Value Format (recommended)
+
+Pass values directly — types are inferred from the method signature:
+
+```json
+["TXyz...", "1000000"]
+```
+
+Examples:
+- `balanceOf(address)` → `["TJDENsfBJs4RFETt1X1W8wMDc8M5XnS5f4"]`
+- `transfer(address,uint256)` → `["TJDENsfBJs4RFETt1X1W8wMDc8M5XnS5f4", "1000000"]`
+- `approve(address,uint256)` → `["TJDENsfBJs4RFETt1X1W8wMDc8M5XnS5f4", "100"]`
+
+### Typed-Object Format (also supported)
+
+Explicitly specify the type for each parameter:
 
 ```json
 [
@@ -90,6 +141,18 @@ Supported array types:
     {"address[]": ["TAddr1...", "TAddr2..."]},
     {"bytes[]": ["0xab", "0xcd"]}
 ]
+```
+
+### SDK: Parameter Parsing
+
+```go
+import "github.com/fbsobreira/gotron-sdk/pkg/abi"
+
+// Auto-detect format and infer types from method signature
+params, err := abi.LoadFromJSONWithMethod("transfer(address,uint256)", `["TJD...", "1000"]`)
+
+// Or use typed-object format directly
+params, err := abi.LoadFromJSON(`[{"address": "TJD..."}, {"uint256": "1000"}]`)
 ```
 
 ## Fee Limits
