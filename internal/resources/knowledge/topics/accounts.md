@@ -120,6 +120,7 @@ s, err = signer.NewLedgerSigner()
 ```
 
 Use with fluent builders:
+
 ```go
 receipt, err := builder.Transfer(from, to, amount).Send(ctx, s)
 ```
