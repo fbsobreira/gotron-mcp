@@ -88,6 +88,34 @@ if errors.Is(err, client.ErrEstimateEnergyNotSupported) {
 energyNeeded := estimate.EnergyRequired
 ```
 
+## SDK: Fluent Staking Builder (v0.25.2+)
+
+```go
+import (
+    "github.com/fbsobreira/gotron-sdk/pkg/txbuilder"
+    "github.com/fbsobreira/gotron-sdk/pkg/proto/core"
+)
+
+builder := txbuilder.New(conn)
+
+// Stake TRX for energy
+receipt, err := builder.FreezeV2(from, 10_000_000, core.ResourceCode_ENERGY).
+    Send(ctx, signer)
+
+// Unstake
+receipt, err := builder.UnfreezeV2(from, 10_000_000, core.ResourceCode_ENERGY).
+    Send(ctx, signer)
+
+// Delegate with lock period
+receipt, err := builder.DelegateResource(from, to, core.ResourceCode_ENERGY, 10_000_000).
+    Lock(86400). // lock for 86400 blocks (~3 days)
+    Send(ctx, signer)
+
+// Undelegate
+receipt, err := builder.UnDelegateResource(from, to, core.ResourceCode_ENERGY, 10_000_000).
+    Send(ctx, signer)
+```
+
 ## MCP Tools
 
 - `get_account_resources` — Get energy/bandwidth usage and limits

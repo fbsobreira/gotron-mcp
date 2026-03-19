@@ -85,9 +85,36 @@ TRON uses a resource model instead of gas fees:
 ## Transaction Flow
 
 1. **Build** — Create an unsigned transaction using the SDK
-2. **Sign** — Sign with private key (local keystore, hardware wallet, etc.)
+2. **Sign** — Sign with a `signer.Signer` (private key, keystore, or Ledger)
 3. **Broadcast** — Submit signed transaction to the network
 4. **Confirm** — Transaction is included in a block (~3 second block time)
+
+The fluent builder API combines these steps:
+
+```go
+builder := txbuilder.New(conn)
+
+// Send = Build + Sign + Broadcast
+receipt, err := builder.Transfer(from, to, amount).Send(ctx, signer)
+
+// SendAndConfirm = Build + Sign + Broadcast + poll until confirmed
+receipt, err = builder.Transfer(from, to, amount).SendAndConfirm(ctx, signer)
+```
+
+## Builder Packages (v0.25.2+)
+
+The SDK provides high-level fluent builders on top of the low-level gRPC client:
+
+| Package | Purpose |
+|---------|---------|
+| `pkg/tron` | SDK entry point — `tron.New(conn)` gives access to all builders |
+| `pkg/signer` | Signing interface with PrivateKey, Keystore, and Ledger implementations |
+| `pkg/txbuilder` | Native transaction builder — Transfer, FreezeV2, VoteWitness, DelegateResource |
+| `pkg/contract` | Smart contract call builder — Call, EstimateEnergy, Build, Send |
+| `pkg/standards/trc20` | Typed TRC20 wrapper — Info, BalanceOf, Transfer, Approve |
+| `pkg/txresult` | Shared `Receipt` type for all builder terminal operations |
+
+See the `sdk` topic (`gotron://knowledge/topics/sdk`) for the full API reference.
 
 ## Multi-Signature Accounts
 
@@ -119,6 +146,7 @@ Common `Ctx` methods:
 - `FreezeBalanceV2Ctx`, `UnfreezeBalanceV2Ctx`
 - `ListWitnessesCtx`, `VoteWitnessAccountCtx`
 - `BroadcastCtx`
+- `GetTransactionFromPendingCtx`, `GetTransactionListFromPendingCtx`, `GetPendingSizeCtx`, `IsTransactionPendingCtx`, `GetPendingTransactionsByAddressCtx`
 
 Always prefer `*Ctx` variants when a request context is available to enable proper cancellation and timeout handling.
 

@@ -20,7 +20,7 @@ result, err := conn.TriggerConstantContractCtx(ctx,
 // result.ConstantResult contains the return data
 
 // Simulate payable functions with WithCallValue (msg.value in SUN)
-result, err := conn.TriggerConstantContractCtx(ctx,
+result, err = conn.TriggerConstantContractCtx(ctx,
     "TCallerAddr...", "TContractAddr...",
     "deposit()", `[]`,
     client.WithCallValue(1_000_000), // 1 TRX
@@ -28,7 +28,7 @@ result, err := conn.TriggerConstantContractCtx(ctx,
 
 // With TRC10 token value
 opt, err := client.WithTokenValue("1000001", 500)
-result, err := conn.TriggerConstantContractCtx(ctx,
+result, err = conn.TriggerConstantContractCtx(ctx,
     "TCallerAddr...", "TContractAddr...",
     "onTokenReceived()", `[]`,
     opt,
@@ -86,21 +86,23 @@ abi, err := conn.GetContractABIResolved("TContractAddr...")
 ```go
 import "github.com/fbsobreira/gotron-sdk/pkg/abi"
 
-// Parse contract event topics into structured map
-eventMap, err := abi.ParseTopicsIntoMap(contractABI, eventLog)
+// Get indexed and non-indexed argument parsers for an event
+indexed, _, err := abi.GetEventParser(contractABI, "Transfer")
 
-// Get parser for specific events
-parser, err := abi.GetEventParser(contractABI, "Transfer")
+// Parse event topics into a map
+out := make(map[string]interface{})
+err = abi.ParseTopicsIntoMap(out, indexed, topics)
+// out now contains decoded indexed event fields
 ```
 
 ## SDK: Overloaded Methods
 
-The SDK supports overloaded contract methods (same name, different parameters):
+The SDK supports overloaded contract methods. Use the full signature to disambiguate:
 
 ```go
-// The SDK will match the correct method by parameter types
-// Both "transfer(address,uint256)" and "transfer(address,uint256,bytes)"
-// are handled correctly by GetParser() and GetInputsParser()
+// Use full signature to select the correct overload
+// "transfer(address,uint256)" vs "transfer(address,uint256,bytes)"
+// GetParser and GetInputsParser match by full signature when provided
 ```
 
 ## Parameter Encoding
@@ -139,7 +141,7 @@ Supported array types:
 [
     {"uint256[]": ["100", "200", "300"]},
     {"address[]": ["TAddr1...", "TAddr2..."]},
-    {"bytes[]": ["0xab", "0xcd"]}
+    {"bytes[]": ["ab", "cd"]}
 ]
 ```
 
@@ -176,9 +178,77 @@ reason, err := abi.DecodeRevertReason(resultBytes)
 // Supports Panic(uint256) selector 0x4e487b71
 ```
 
+## SDK: Fluent Contract Builder (v0.25.2+)
+
+```go
+import "github.com/fbsobreira/gotron-sdk/pkg/contract"
+
+call := contract.New(conn, "TContractAddr...").
+    From("TCallerAddr...").
+    Method("transfer(address,uint256)").
+    Params(`["TToAddr...", "1000000"]`).
+    Apply(contract.WithFeeLimit(100_000_000))
+
+// Read-only call (no transaction, no fees)
+result, err := call.Call(ctx)
+// result.RawResults [][]byte, result.EnergyUsed int64
+
+// Estimate energy
+energy, err := call.EstimateEnergy(ctx)
+
+// Build unsigned transaction
+tx, err := call.Build(ctx)
+
+// Decode for human-readable display
+decoded, err := call.Decode(ctx)
+
+// Sign and broadcast
+receipt, err := call.Send(ctx, signer)
+
+// Sign, broadcast, and wait for confirmation
+receipt, err = call.SendAndConfirm(ctx, signer)
+```
+
+### Contract Builder Options
+
+```go
+contract.WithFeeLimit(100_000_000)         // max TRX to burn (in SUN)
+contract.WithCallValue(1_000_000)          // TRX to send with call (in SUN)
+contract.WithTokenValue("1000001", 500)    // TRC10 token ID and amount
+contract.WithPermissionID(2)               // multi-sig permission
+```
+
+### Pre-Packed Data via Builder
+
+```go
+call := contract.New(conn, "TContractAddr...").
+    From("TCallerAddr...").
+    WithData(packedBytes). // pre-packed ABI data instead of Method+Params
+    Apply(contract.WithFeeLimit(100_000_000))
+
+result, err := call.Call(ctx)
+```
+
+### Deferred Error Pattern
+
+Errors can be stored via `SetError()` and surfaced at any terminal call. Used internally by wrappers like `trc20.Token.Transfer()`:
+
+```go
+call := contract.New(conn, "TAddr...").
+    SetError(fmt.Errorf("custom validation failed")).
+    Method("transfer(address,uint256)")
+
+result, err := call.Call(ctx)     // returns the deferred error
+
+// Check explicitly
+if call.Err() != nil { ... }
+```
+
 ## MCP Tools
 
 - `get_contract_abi` — Get smart contract ABI (auto-resolves proxy contracts)
+- `list_contract_methods` — Human-readable summary of contract methods with signatures and mutability
 - `trigger_constant_contract` — Call read-only (view/pure) methods with decoded results
 - `estimate_energy` — Estimate energy cost before calling
 - `trigger_contract` — Call a smart contract method (returns unsigned tx)
+- `decode_abi_output` — Decode ABI-encoded output hex (return values, revert reasons, panic codes)
