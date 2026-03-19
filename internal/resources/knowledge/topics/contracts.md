@@ -206,7 +206,7 @@ decoded, err := call.Decode(ctx)
 receipt, err := call.Send(ctx, signer)
 
 // Sign, broadcast, and wait for confirmation
-receipt, err := call.SendAndConfirm(ctx, signer)
+receipt, err = call.SendAndConfirm(ctx, signer)
 ```
 
 ### Contract Builder Options

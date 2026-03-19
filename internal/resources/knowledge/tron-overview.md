@@ -98,7 +98,7 @@ builder := txbuilder.New(conn)
 receipt, err := builder.Transfer(from, to, amount).Send(ctx, signer)
 
 // SendAndConfirm = Build + Sign + Broadcast + poll until confirmed
-receipt, err := builder.Transfer(from, to, amount).SendAndConfirm(ctx, signer)
+receipt, err = builder.Transfer(from, to, amount).SendAndConfirm(ctx, signer)
 ```
 
 ## Builder Packages (v0.25.2+)

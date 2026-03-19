@@ -22,15 +22,15 @@ if err != nil || !addr.IsValid() {
 addr := address.HexToAddress("41abc...")
 
 // Convert raw bytes to TRON address (prepends 0x41 for 20-byte input)
-addr := address.BytesToAddress(rawBytes)
+addr = address.BytesToAddress(rawBytes)
 
 // Convert 20-byte Ethereum address to TRON address
-addr, err := address.EthAddressToAddress(ethAddrBytes)
+addr, err = address.EthAddressToAddress(ethAddrBytes)
 
 // Other conversions
-addr, err := address.Base64ToAddress(base64String)
-addr := address.BigToAddress(bigInt)
-addr := address.PubkeyToAddress(ecdsaPubKey)
+addr, err = address.Base64ToAddress(base64String)
+addr = address.BigToAddress(bigInt)
+addr = address.PubkeyToAddress(ecdsaPubKey)
 
 // Format
 addr.String()  // base58: "TXyz..."
@@ -107,16 +107,16 @@ type Signer interface {
 s, err := signer.NewPrivateKeySigner(ecdsaKey)
 
 // From btcec private key
-s, err := signer.NewPrivateKeySignerFromBTCEC(btcecKey)
+s, err = signer.NewPrivateKeySignerFromBTCEC(btcecKey)
 
 // From pre-unlocked keystore
-s := signer.NewKeystoreSigner(ks, account)
+s = signer.NewKeystoreSigner(ks, account)
 
 // From keystore with passphrase (unlocks per-sign)
-s := signer.NewKeystorePassphraseSigner(ks, account, "passphrase")
+s = signer.NewKeystorePassphraseSigner(ks, account, "passphrase")
 
 // From Ledger hardware wallet
-s, err := signer.NewLedgerSigner()
+s, err = signer.NewLedgerSigner()
 ```
 
 Use with fluent builders:

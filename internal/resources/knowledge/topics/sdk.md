@@ -76,7 +76,7 @@ receipt, err := builder.FreezeV2(from, amountSUN, core.ResourceCode_ENERGY).
     Send(ctx, signer)
 
 // Unstake
-receipt, err := builder.UnfreezeV2(from, amountSUN, core.ResourceCode_ENERGY).
+receipt, err = builder.UnfreezeV2(from, amountSUN, core.ResourceCode_ENERGY).
     Send(ctx, signer)
 ```
 
@@ -89,7 +89,7 @@ receipt, err := builder.DelegateResource(from, to, core.ResourceCode_ENERGY, amo
     Send(ctx, signer)
 
 // Undelegate
-receipt, err := builder.UnDelegateResource(from, to, core.ResourceCode_ENERGY, amountSUN).
+receipt, err = builder.UnDelegateResource(from, to, core.ResourceCode_ENERGY, amountSUN).
     Send(ctx, signer)
 ```
 
@@ -104,7 +104,7 @@ receipt, err := builder.VoteWitness(from).
 
 // Or from a map
 votes := map[string]int64{"TSR1addr...": 1000, "TSR2addr...": 500}
-receipt, err := builder.VoteWitness(from).
+receipt, err = builder.VoteWitness(from).
     Votes(votes).
     Send(ctx, signer)
 ```
@@ -125,7 +125,7 @@ decoded, err := builder.Transfer(from, to, amount).Decode(ctx)
 receipt, err := builder.Transfer(from, to, amount).Send(ctx, signer)
 
 // Sign, broadcast, and poll until confirmed
-receipt, err := builder.Transfer(from, to, amount).SendAndConfirm(ctx, signer)
+receipt, err = builder.Transfer(from, to, amount).SendAndConfirm(ctx, signer)
 ```
 
 ### Options
@@ -184,7 +184,7 @@ decoded, err := call.Decode(ctx)
 receipt, err := call.Send(ctx, signer)
 
 // Sign, broadcast, and poll until confirmed
-receipt, err := call.SendAndConfirm(ctx, signer)
+receipt, err = call.SendAndConfirm(ctx, signer)
 ```
 
 ### Options
@@ -255,13 +255,13 @@ Write methods return `*contract.ContractCall` for fluent terminal operations:
 receipt, err := token.Transfer(from, to, amount).Send(ctx, signer)
 
 // Approve spender
-receipt, err := token.Approve(from, spender, amount).Send(ctx, signer)
+receipt, err = token.Approve(from, spender, amount).Send(ctx, signer)
 
 // Transfer on behalf (requires prior approval)
-receipt, err := token.TransferFrom(caller, from, to, amount).Send(ctx, signer)
+receipt, err = token.TransferFrom(caller, from, to, amount).Send(ctx, signer)
 
 // With options
-receipt, err := token.Transfer(from, to, amount,
+receipt, err = token.Transfer(from, to, amount,
     contract.WithFeeLimit(150_000_000),
     contract.WithPermissionID(2),
 ).Send(ctx, signer)
