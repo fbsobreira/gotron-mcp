@@ -8,6 +8,7 @@ import (
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/retry"
+	"github.com/fbsobreira/gotron-sdk/pkg/client/transaction"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -94,6 +95,10 @@ func handleGetTransaction(pool *nodepool.Pool) server.ToolHandlerFunc {
 		if tx.RawData != nil && len(tx.RawData.Contract) > 0 {
 			contract := tx.RawData.Contract[0]
 			result["contract_type"] = contract.Type.String()
+
+			if decoded, err := transaction.DecodeContractData(tx); err == nil {
+				result["contract_data"] = decoded.Fields
+			}
 		}
 
 		if len(info.ContractResult) > 0 {

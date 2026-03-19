@@ -3,7 +3,7 @@ module github.com/fbsobreira/gotron-mcp
 go 1.25.1
 
 require (
-	github.com/fbsobreira/gotron-sdk v0.25.2-0.20260319012410-79c585fec786
+	github.com/fbsobreira/gotron-sdk v0.25.2
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/mark3labs/mcp-go v0.45.0
 	golang.org/x/time v0.15.0
@@ -32,6 +32,7 @@ require (
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	github.com/zondax/hid v0.9.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
