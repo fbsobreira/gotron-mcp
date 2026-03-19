@@ -331,3 +331,129 @@ func TestParseQueryOptsMutuallyExclusive(t *testing.T) {
 		t.Fatal("expected error for only_to + only_from")
 	}
 }
+
+func TestParseQueryOptsTimestampOrder(t *testing.T) {
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{
+		"min_timestamp": float64(2000),
+		"max_timestamp": float64(1000),
+	}
+
+	_, err := parseQueryOpts(req)
+	if err == nil {
+		t.Fatal("expected error for min_timestamp > max_timestamp")
+	}
+}
+
+func TestHandleGetTransactionHistoryNilResponse(t *testing.T) {
+	client := &mockHistoryClient{txResp: nil, err: nil}
+	handler := handleGetTransactionHistory(client)
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8"}
+
+	result, err := handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected Go error: %v", err)
+	}
+	if !result.IsError {
+		t.Error("expected tool error for nil response")
+	}
+}
+
+func TestHandleGetTRC20TransfersNilResponse(t *testing.T) {
+	client := &mockHistoryClient{trc20Resp: nil, err: nil}
+	handler := handleGetTRC20Transfers(client)
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8"}
+
+	result, err := handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected Go error: %v", err)
+	}
+	if !result.IsError {
+		t.Error("expected tool error for nil response")
+	}
+}
+
+func TestHandleGetContractEventsNilResponse(t *testing.T) {
+	client := &mockHistoryClient{eventResp: nil, err: nil}
+	handler := handleGetContractEvents(client)
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"contract_address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8"}
+
+	result, err := handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected Go error: %v", err)
+	}
+	if !result.IsError {
+		t.Error("expected tool error for nil response")
+	}
+}
+
+func TestHandleGetTRC20TransfersErrors(t *testing.T) {
+	tests := []struct {
+		name   string
+		params map[string]any
+		client *mockHistoryClient
+	}{
+		{
+			name:   "missing address",
+			params: map[string]any{},
+			client: &mockHistoryClient{},
+		},
+		{
+			name:   "api error",
+			params: map[string]any{"address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8"},
+			client: &mockHistoryClient{err: fmt.Errorf("timeout")},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := handleGetTRC20Transfers(tt.client)
+			req := mcp.CallToolRequest{}
+			req.Params.Arguments = tt.params
+
+			result, err := handler(context.Background(), req)
+			if err != nil {
+				t.Fatalf("unexpected Go error: %v", err)
+			}
+			if !result.IsError {
+				t.Error("expected tool error")
+			}
+		})
+	}
+}
+
+func TestHandleGetContractEventsErrors(t *testing.T) {
+	tests := []struct {
+		name   string
+		params map[string]any
+		client *mockHistoryClient
+	}{
+		{
+			name:   "missing address",
+			params: map[string]any{},
+			client: &mockHistoryClient{},
+		},
+		{
+			name:   "api error",
+			params: map[string]any{"contract_address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8"},
+			client: &mockHistoryClient{err: fmt.Errorf("timeout")},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := handleGetContractEvents(tt.client)
+			req := mcp.CallToolRequest{}
+			req.Params.Arguments = tt.params
+
+			result, err := handler(context.Background(), req)
+			if err != nil {
+				t.Fatalf("unexpected Go error: %v", err)
+			}
+			if !result.IsError {
+				t.Error("expected tool error")
+			}
+		})
+	}
+}

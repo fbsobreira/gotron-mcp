@@ -269,6 +269,47 @@ func TestSuccessFalse(t *testing.T) {
 	}
 }
 
+func TestTruncateBody(t *testing.T) {
+	short := []byte("short error")
+	if got := truncateBody(short); got != "short error" {
+		t.Errorf("truncateBody(short) = %q, want %q", got, "short error")
+	}
+
+	long := make([]byte, 1024)
+	for i := range long {
+		long[i] = 'x'
+	}
+	got := truncateBody(long)
+	if len(got) != 512+len("...(truncated)") {
+		t.Errorf("truncateBody(1024 bytes) length = %d, want %d", len(got), 512+len("...(truncated)"))
+	}
+	if got[len(got)-len("...(truncated)"):] != "...(truncated)" {
+		t.Error("truncateBody should end with ...(truncated)")
+	}
+}
+
+func TestBuildParamsOnlyFrom(t *testing.T) {
+	opts := QueryOpts{OnlyFrom: true}
+	params := buildParams(opts)
+	if params.Get("only_from") != "true" {
+		t.Errorf("only_from = %q, want true", params.Get("only_from"))
+	}
+}
+
+func TestHTTPError4xx(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("bad request"))
+	}))
+	defer srv.Close()
+
+	c := &Client{baseURL: srv.URL, httpClient: srv.Client()}
+	_, err := c.GetTransactionsByAddress(context.Background(), "TAddr", QueryOpts{})
+	if err == nil {
+		t.Fatal("expected error for 400")
+	}
+}
+
 func TestNewClientNetworks(t *testing.T) {
 	tests := []struct {
 		network string
