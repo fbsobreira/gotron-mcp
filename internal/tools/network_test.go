@@ -112,14 +112,14 @@ func TestGetTransaction_ContractData(t *testing.T) {
 	if !ok {
 		t.Fatal("expected contract_data map in response")
 	}
-	if contractData["owner_address"] == nil || contractData["owner_address"] == "" {
-		t.Error("expected owner_address in contract_data")
+	if got := contractData["owner_address"]; got != "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF" {
+		t.Errorf("owner_address = %v, want TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", got)
 	}
-	if contractData["to_address"] == nil || contractData["to_address"] == "" {
-		t.Error("expected to_address in contract_data")
+	if got := contractData["to_address"]; got != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
+		t.Errorf("to_address = %v, want TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", got)
 	}
-	if contractData["amount"] == nil {
-		t.Error("expected amount in contract_data")
+	if got := contractData["amount"]; got != "5.000000" {
+		t.Errorf("amount = %v, want 5.000000", got)
 	}
 }
 
