@@ -107,6 +107,9 @@ func TestHandleGetTransactionHistoryShapedOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
 	if len(result.Content) == 0 {
 		t.Fatal("expected non-empty result content")
 	}
@@ -221,6 +224,35 @@ func TestHandleGetContractEvents(t *testing.T) {
 	}
 	if result.IsError {
 		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+
+	if len(result.Content) == 0 {
+		t.Fatal("expected non-empty result content")
+	}
+	tc, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", result.Content[0])
+	}
+	var data map[string]any
+	if err := json.Unmarshal([]byte(tc.Text), &data); err != nil {
+		t.Fatalf("failed to unmarshal result: %v", err)
+	}
+	if data["count"] != float64(1) {
+		t.Errorf("count = %v, want 1", data["count"])
+	}
+	events, ok := data["events"].([]any)
+	if !ok || len(events) == 0 {
+		t.Fatal("expected non-empty events array")
+	}
+	ev, ok := events[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected map for event, got %T", events[0])
+	}
+	if ev["txid"] != "tx1" {
+		t.Errorf("txid = %v, want tx1", ev["txid"])
+	}
+	if ev["event_name"] != "Transfer" {
+		t.Errorf("event_name = %v, want Transfer", ev["event_name"])
 	}
 }
 
