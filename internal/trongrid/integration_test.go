@@ -126,6 +126,9 @@ func TestIntegrationGetContractEventsByName(t *testing.T) {
 	if !resp.Success {
 		t.Fatal("expected success=true")
 	}
+	if len(resp.Data) == 0 {
+		t.Fatal("expected at least 1 Transfer event")
+	}
 	for _, ev := range resp.Data {
 		if ev.EventName != "Transfer" {
 			t.Errorf("expected event_name=Transfer, got %s", ev.EventName)
@@ -148,6 +151,9 @@ func TestIntegrationPagination(t *testing.T) {
 	}
 	if resp1.Meta.Fingerprint == "" {
 		t.Skip("address has <= 2 transactions, cannot test pagination")
+	}
+	if len(resp1.Data) == 0 {
+		t.Fatal("expected data on page 1")
 	}
 
 	// Page 2

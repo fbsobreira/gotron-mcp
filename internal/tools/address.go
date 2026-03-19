@@ -63,7 +63,7 @@ func handleValidateAddress() server.ToolHandlerFunc {
 			// 0x-prefixed: disambiguate by decoded length
 			// 20 bytes (40 hex chars) = Ethereum address
 			// 21 bytes (42 hex chars) = TRON hex address (41-prefixed)
-			hexStr := strings.TrimPrefix(strings.TrimPrefix(addr, "0x"), "0X")
+			hexStr := stripHexPrefix(addr)
 			rawBytes, err := hex.DecodeString(hexStr)
 			if err != nil {
 				return mcp.NewToolResultJSON(map[string]any{

@@ -889,8 +889,8 @@ func TestTriggerConstantContract_DataAndMethodIgnoresMethod(t *testing.T) {
 
 func TestTriggerConstantContract_OversizedData(t *testing.T) {
 	pool := newMockPool(t, mockContractServer())
-	// Generate data hex > 1MB
-	bigData := strings.Repeat("ab", (1<<20)/2+1)
+	// Generate data hex > 1 MiB decoded (each "ab" = 1 byte)
+	bigData := strings.Repeat("ab", (1<<20)+1)
 	result := callTool(t, handleTriggerConstantContract(pool), map[string]any{
 		"contract_address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"data":             bigData,
@@ -916,7 +916,7 @@ func TestTriggerContract_NegativeCallValue(t *testing.T) {
 
 func TestTriggerContract_OversizedData(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	bigData := strings.Repeat("ab", (1<<20)/2+1)
+	bigData := strings.Repeat("ab", (1<<20)+1)
 	result := callTool(t, handleTriggerContract(pool), map[string]any{
 		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"contract_address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8",

@@ -272,6 +272,8 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 		callValue := int64(req.GetInt("call_value", 0))
 		tokenID := req.GetString("token_id", "")
 		tokenValue := int64(req.GetInt("token_value", 0))
+		args := req.GetArguments()
+		_, hasTokenValue := args["token_value"]
 		conn := pool.Client()
 
 		if from != "" {
@@ -290,7 +292,7 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 		if tokenValue < 0 {
 			return mcp.NewToolResultError("trigger_constant_contract: token_value must be non-negative"), nil
 		}
-		if (tokenID != "") != (tokenValue > 0) {
+		if (tokenID != "") != hasTokenValue {
 			return mcp.NewToolResultError("trigger_constant_contract: token_id and token_value must both be provided together"), nil
 		}
 
@@ -299,7 +301,7 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 		if callValue > 0 {
 			opts = append(opts, client.WithCallValue(callValue))
 		}
-		if tokenID != "" && tokenValue > 0 {
+		if tokenID != "" && hasTokenValue {
 			opt, err := client.WithTokenValue(tokenID, tokenValue)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("trigger_constant_contract: invalid token_id: %v", err)), nil
@@ -311,7 +313,8 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 		var err error
 
 		if dataHex != "" {
-			// Pre-packed calldata mode
+			// Pre-packed calldata mode — ignore method entirely
+			method = ""
 			dataHex = stripHexPrefix(dataHex)
 			if len(dataHex) > maxCalldataHexLen {
 				return mcp.NewToolResultError("trigger_constant_contract: data exceeds maximum length"), nil
@@ -397,7 +400,8 @@ func handleTriggerContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 		var err error
 
 		if dataHex != "" {
-			// Pre-packed calldata mode
+			// Pre-packed calldata mode — ignore method entirely
+			method = ""
 			dataHex = stripHexPrefix(dataHex)
 			if len(dataHex) > maxCalldataHexLen {
 				return mcp.NewToolResultError("trigger_contract: data exceeds maximum length"), nil
@@ -479,8 +483,8 @@ func stripHexPrefix(s string) string {
 	return strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
 }
 
-// maxCalldataHexLen is the maximum hex-encoded calldata length accepted (1 MB).
-const maxCalldataHexLen = 1 << 20
+// maxCalldataHexLen is the maximum hex-encoded calldata length accepted (1 MiB decoded).
+const maxCalldataHexLen = 2 * (1 << 20)
 
 func isEstimateEnergyUnsupported(err error) bool {
 	if errors.Is(err, client.ErrEstimateEnergyNotSupported) {
