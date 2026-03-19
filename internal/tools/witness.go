@@ -7,6 +7,7 @@ import (
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
+	"github.com/fbsobreira/gotron-sdk/pkg/txbuilder"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"google.golang.org/protobuf/proto"
@@ -31,6 +32,8 @@ func RegisterWitnessWriteTools(s *server.MCPServer, pool *nodepool.Pool) {
 			mcp.WithDescription("Vote for super representatives. Returns unsigned transaction hex for signing. Requires staked TRX (1 TRX staked = 1 vote)."),
 			mcp.WithString("from", mcp.Required(), mcp.Description("Voter address (base58, starts with T)")),
 			mcp.WithObject("votes", mcp.Required(), mcp.Description("Map of witness address to vote count, e.g., {\"TKSXDA...\": 100, \"TLyqz...\": 50}")),
+			mcp.WithString("memo", mcp.Description("Optional memo to attach to the transaction")),
+			mcp.WithNumber("permission_id", mcp.Description("Permission ID for multi-sig transactions")),
 		),
 		handleVoteWitness(pool),
 	)
@@ -127,7 +130,8 @@ func handleVoteWitness(pool *nodepool.Pool) server.ToolHandlerFunc {
 			}
 		}
 
-		tx, err := conn.VoteWitnessAccountCtx(ctx, from, witnessVotes)
+		opts := builderOptions(req)
+		tx, err := txbuilder.New(conn).VoteWitness(from, opts...).Votes(witnessVotes).Build(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("vote_witness: %v", err)), nil
 		}

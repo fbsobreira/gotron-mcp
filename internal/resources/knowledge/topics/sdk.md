@@ -78,6 +78,9 @@ receipt, err := builder.FreezeV2(from, amountSUN, core.ResourceCode_ENERGY).
 // Unstake
 receipt, err = builder.UnfreezeV2(from, amountSUN, core.ResourceCode_ENERGY).
     Send(ctx, signer)
+
+// Withdraw expired unfrozen TRX (after 14-day waiting period)
+receipt, err = builder.WithdrawExpireUnfreeze(from, 0).Send(ctx, signer)
 ```
 
 ### Resource Delegation
@@ -130,12 +133,22 @@ receipt, err = builder.Transfer(from, to, amount).SendAndConfirm(ctx, signer)
 
 ### Options
 
-```go
-// Add memo to any transaction
-builder.Transfer(from, to, amount, txbuilder.WithMemo("payment for services"))
+All builder methods accept **optional** configuration. Both options below are entirely optional — most transactions don't need them.
 
-// Set permission ID for multi-sig
+- **`WithMemo(string)`** — Attaches an arbitrary text memo to the transaction, stored on-chain in `RawData.Data`. Useful for labeling payments, adding references, or including notes visible to both sender and recipient in explorers.
+- **`WithPermissionID(int32)`** — Sets the permission ID for multi-signature accounts. TRON accounts can have multiple permission levels (owner=0, active=2+). Required when signing with a non-owner key on a multi-sig account. Not needed for standard single-key accounts.
+
+Options can be passed as variadic arguments to builder methods, or chained fluently on the returned `*Tx`:
+
+```go
+// As variadic options (applied at build time)
+builder.Transfer(from, to, amount, txbuilder.WithMemo("payment for services"))
 builder.Transfer(from, to, amount, txbuilder.WithPermissionID(2))
+
+// As fluent chaining (on *Tx, *DelegateTx, *VoteTx)
+builder.Transfer(from, to, amount).WithMemo("payment").WithPermissionID(2).Build(ctx)
+builder.DelegateResource(from, to, res, amt).Lock(86400).WithMemo("delegation").Build(ctx)
+builder.VoteWitness(from).Votes(votes).WithMemo("my votes").Build(ctx)
 ```
 
 ## Contract Call Builder (`pkg/contract`)
@@ -160,7 +173,13 @@ call.From("TCallerAddr...")                // caller address
 call.Params(`["TAddr...", "1000"]`)        // JSON params (plain or typed)
 call.WithData(packedBytes)                 // pre-packed ABI data (alternative to Method+Params)
 call.WithABI(abiJSON)                      // parsed ABI for future use
-call.Apply(opts...)                        // apply options
+call.Apply(opts...)                        // apply multiple options at once
+
+// Chainable option setters (alternative to Apply)
+call.WithFeeLimit(100_000_000)             // max TRX to burn (in SUN)
+call.WithCallValue(1_000_000)              // TRX to send with call (in SUN)
+call.WithTokenValue("1000001", 500)        // TRC10 token ID and amount
+call.WithPermissionID(2)                   // multi-sig permission
 ```
 
 ### Terminal Operations
@@ -189,12 +208,30 @@ receipt, err = call.SendAndConfirm(ctx, signer)
 
 ### Options
 
+All options are **optional**. They can be passed via `Apply()` or chained fluently:
+
 ```go
-contract.WithFeeLimit(100_000_000)         // max TRX to burn (in SUN)
-contract.WithCallValue(1_000_000)          // TRX to send with call (in SUN)
-contract.WithTokenValue("1000001", 500)    // TRC10 token ID and amount
-contract.WithPermissionID(2)               // multi-sig permission
+// Via Apply (useful for passing multiple options at once)
+call.Apply(
+    contract.WithFeeLimit(100_000_000),
+    contract.WithPermissionID(2),
+)
+
+// Via fluent chaining (equivalent)
+contract.New(conn, "TAddr...").
+    From("TCaller...").
+    Method("transfer(address,uint256)").
+    Params(`["TTo...", "1000"]`).
+    WithFeeLimit(100_000_000).
+    WithPermissionID(2).
+    Send(ctx, signer)
 ```
+
+Available options:
+- **`WithFeeLimit(int64)`** — Max TRX to burn in SUN. Required for state-changing calls (Build/Send)
+- **`WithCallValue(int64)`** — TRX amount in SUN sent with the call (for payable methods)
+- **`WithTokenValue(tokenID, amount)`** — TRC10 token ID and amount sent with the call
+- **`WithPermissionID(int32)`** — Permission ID for multi-sig accounts (see txbuilder Options section)
 
 ### Deferred Error Pattern
 

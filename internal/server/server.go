@@ -34,7 +34,8 @@ Available capabilities:
 - Transaction history, TRC20 transfers, contract events via TronGrid REST API (get_transaction_history, get_trc20_transfers, get_contract_events)
 - Governance: list witnesses, proposals (list_witnesses, list_proposals)
 - Build unsigned transfer transactions (transfer_trx, transfer_trc20)
-- Staking operations (freeze_balance, unfreeze_balance)
+- Staking operations (freeze_balance, unfreeze_balance, withdraw_expire_unfreeze)
+- Resource delegation (delegate_resource, undelegate_resource)
 - Vote for super representatives (vote_witness)
 - Smart contract write calls (trigger_contract)
 - Sign and broadcast transactions via keystore (sign_transaction, broadcast_transaction) [local mode + keystore]
