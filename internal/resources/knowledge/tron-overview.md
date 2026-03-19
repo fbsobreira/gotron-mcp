@@ -90,6 +90,7 @@ TRON uses a resource model instead of gas fees:
 4. **Confirm** — Transaction is included in a block (~3 second block time)
 
 The fluent builder API combines these steps:
+
 ```go
 builder := txbuilder.New(conn)
 

@@ -156,7 +156,7 @@ secret, chainCode := hd.ComputeMastersFromSeed(seed, []byte("Bitcoin seed"))
 derivedKey, err := hd.DerivePrivateKeyForPath(btcec.S256(), secret, chainCode, "m/44'/195'/0'/0/0")
 ```
 
-**Note:** HD key derivation functions now return errors for invalid paths (v0.25.2+). Always check the returned error.
+**Note (v0.25.2+):** `hd.DerivePrivateKeyForPath` and `hd.NewParamsFromPath` now return errors for invalid paths — always check the returned error. `keys.FromMnemonicSeedAndPassphrase` and `hd.ComputeMastersFromSeed` do not return errors; they return nil/zero values on failure.
 
 ## MCP Tools
 

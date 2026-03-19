@@ -57,7 +57,7 @@ import "github.com/fbsobreira/gotron-sdk/pkg/txbuilder"
 
 builder := txbuilder.New(conn)
 // Or with shared defaults:
-builder := txbuilder.New(conn, txbuilder.WithMemo("hello"))
+builder = txbuilder.New(conn, txbuilder.WithMemo("hello"))
 ```
 
 ### Transfer

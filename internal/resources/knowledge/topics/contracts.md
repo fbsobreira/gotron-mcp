@@ -20,7 +20,7 @@ result, err := conn.TriggerConstantContractCtx(ctx,
 // result.ConstantResult contains the return data
 
 // Simulate payable functions with WithCallValue (msg.value in SUN)
-result, err := conn.TriggerConstantContractCtx(ctx,
+result, err = conn.TriggerConstantContractCtx(ctx,
     "TCallerAddr...", "TContractAddr...",
     "deposit()", `[]`,
     client.WithCallValue(1_000_000), // 1 TRX
@@ -28,7 +28,7 @@ result, err := conn.TriggerConstantContractCtx(ctx,
 
 // With TRC10 token value
 opt, err := client.WithTokenValue("1000001", 500)
-result, err := conn.TriggerConstantContractCtx(ctx,
+result, err = conn.TriggerConstantContractCtx(ctx,
     "TCallerAddr...", "TContractAddr...",
     "onTokenReceived()", `[]`,
     opt,
@@ -87,7 +87,7 @@ abi, err := conn.GetContractABIResolved("TContractAddr...")
 import "github.com/fbsobreira/gotron-sdk/pkg/abi"
 
 // Get indexed and non-indexed argument parsers for an event
-indexed, nonIndexed, err := abi.GetEventParser(contractABI, "Transfer")
+indexed, _, err := abi.GetEventParser(contractABI, "Transfer")
 
 // Parse event topics into a map
 out := make(map[string]interface{})
