@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"testing"
 
@@ -257,4 +258,21 @@ func callTool(t *testing.T, handler func(context.Context, mcp.CallToolRequest) (
 		t.Fatalf("handler returned Go error (not tool error): %v", err)
 	}
 	return result
+}
+
+// extractJSON parses a tool result's first TextContent as a JSON map.
+func extractJSON(t *testing.T, result *mcp.CallToolResult) map[string]any {
+	t.Helper()
+	if len(result.Content) == 0 {
+		t.Fatal("expected non-empty result content")
+	}
+	tc, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", result.Content[0])
+	}
+	var data map[string]any
+	if err := json.Unmarshal([]byte(tc.Text), &data); err != nil {
+		t.Fatalf("failed to unmarshal result: %v", err)
+	}
+	return data
 }

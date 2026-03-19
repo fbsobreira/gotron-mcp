@@ -23,12 +23,12 @@ Available capabilities:
 - Query accounts, balances, and resources (get_account, get_account_resources)
 - Query blocks (get_block). Pass include_transactions: true to get transaction IDs and types
 - TRC20 token balances and metadata (get_trc20_balance, get_trc20_token_info)
-- Call read-only smart contract methods with decoded results (trigger_constant_contract)
+- Call read-only smart contract methods with decoded results (trigger_constant_contract). Supports pre-packed calldata, call_value for payable simulations, and TRC10 token_value
 - Get contract ABI with automatic proxy resolution (get_contract_abi)
 - Human-readable contract method listing (list_contract_methods)
 - Decode ABI-encoded output or revert reasons from contract calls (decode_abi_output)
 - Estimate energy costs (estimate_energy). Automatically falls back to secondary node if primary does not support this RPC
-- Validate and convert addresses between base58 and hex formats (validate_address)
+- Validate and convert addresses between base58, hex, and Ethereum 0x formats (validate_address)
 - Network info, chain parameters, energy/bandwidth prices (get_network, get_chain_parameters)
 - Transaction lookup (get_transaction)
 - Transaction history, TRC20 transfers, contract events via TronGrid REST API (get_transaction_history, get_trc20_transfers, get_contract_events)

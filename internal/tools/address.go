@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -28,8 +29,8 @@ func validateAddress(addr string) error {
 func RegisterAddressTools(s *server.MCPServer) {
 	s.AddTool(
 		mcp.NewTool("validate_address",
-			mcp.WithDescription("Validate and convert a TRON address between base58 and hex formats. Accepts both base58 (T...) and hex (41...) input."),
-			mcp.WithString("address", mcp.Required(), mcp.Description("TRON address (base58 starting with T, or hex starting with 41)")),
+			mcp.WithDescription("Validate and convert a TRON address. Accepts base58 (T...), hex (41...), or Ethereum/EVM format (0x...). Converts between all formats."),
+			mcp.WithString("address", mcp.Required(), mcp.Description("TRON address (base58 T..., hex 41..., or Ethereum 0x...)")),
 		),
 		handleValidateAddress(),
 	)
@@ -46,7 +47,8 @@ func handleValidateAddress() server.ToolHandlerFunc {
 		var format string
 
 		// Detect input format
-		if strings.HasPrefix(addr, "T") {
+		switch {
+		case strings.HasPrefix(addr, "T"):
 			parsed, err := address.Base58ToAddress(addr)
 			if err != nil {
 				return mcp.NewToolResultJSON(map[string]any{
@@ -57,11 +59,40 @@ func handleValidateAddress() server.ToolHandlerFunc {
 			}
 			a = parsed
 			format = "base58"
-		} else if strings.HasPrefix(addr, "41") || strings.HasPrefix(addr, "0x41") {
-			clean := strings.TrimPrefix(addr, "0x")
-			a = address.HexToAddress(clean)
+		case strings.HasPrefix(addr, "0x") || strings.HasPrefix(addr, "0X"):
+			// 0x-prefixed: disambiguate by decoded length
+			// 20 bytes (40 hex chars) = Ethereum address
+			// 21 bytes (42 hex chars) = TRON hex address (41-prefixed)
+			hexStr := strings.TrimPrefix(strings.TrimPrefix(addr, "0x"), "0X")
+			rawBytes, err := hex.DecodeString(hexStr)
+			if err != nil {
+				return mcp.NewToolResultJSON(map[string]any{
+					"input":    addr,
+					"is_valid": false,
+					"error":    fmt.Sprintf("invalid hex: %v", err),
+				})
+			}
+			if len(rawBytes) == 20 {
+				// 20-byte Ethereum address
+				converted, err := address.EthAddressToAddress(rawBytes)
+				if err != nil {
+					return mcp.NewToolResultJSON(map[string]any{
+						"input":    addr,
+						"is_valid": false,
+						"error":    fmt.Sprintf("invalid Ethereum address: %v", err),
+					})
+				}
+				a = converted
+				format = "ethereum"
+			} else {
+				// Treat as TRON hex (21 bytes with 41 prefix, or invalid)
+				a = address.HexToAddress(hexStr)
+				format = "hex"
+			}
+		case strings.HasPrefix(addr, "41"):
+			a = address.HexToAddress(addr)
 			format = "hex"
-		} else {
+		default:
 			a = address.HexToAddress(addr)
 			format = "hex"
 		}
