@@ -210,21 +210,25 @@ txs, err := conn.GetPendingTransactionsByAddressCtx(ctx, "TAddr...")
 The MCP server also queries the TronGrid REST API for address-based history that is not available via gRPC.
 
 ### Transaction History
+
 - `GET /v1/accounts/{address}/transactions` — Full transaction history for an address
 - Supports pagination via `fingerprint` cursor, `limit` (max 200), timestamp filtering
 - Filter by direction: `only_to`, `only_from`
 
 ### TRC20 Transfer History
+
 - `GET /v1/accounts/{address}/transactions/trc20` — TRC20 token transfer history
 - Includes token metadata (symbol, name, decimals, contract address)
 - Same pagination and filtering as transaction history
 
 ### Contract Events
+
 - `GET /v1/contracts/{address}/events` — Decoded events emitted by a smart contract
 - Filter by `event_name` (e.g. `Transfer`, `Approval`)
 - Returns decoded event parameters with types
 
 ### Authentication
+
 - Uses the same `GOTRON_NODE_API_KEY` as gRPC connections
 - Sent via `TRON-PRO-API-KEY` header
 - Required for higher rate limits on TronGrid

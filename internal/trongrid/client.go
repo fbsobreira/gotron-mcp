@@ -69,16 +69,25 @@ func (c *Client) doRequest(ctx context.Context, path string, params url.Values) 
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("rate limited by TronGrid (HTTP 429): %s", body)
+		return nil, fmt.Errorf("rate limited by TronGrid (HTTP 429): %s", truncateBody(body))
 	}
 	if resp.StatusCode >= 500 {
-		return nil, fmt.Errorf("TronGrid server error (HTTP %d): %s", resp.StatusCode, body)
+		return nil, fmt.Errorf("TronGrid server error (HTTP %d): %s", resp.StatusCode, truncateBody(body))
 	}
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("TronGrid request failed (HTTP %d): %s", resp.StatusCode, body)
+		return nil, fmt.Errorf("TronGrid request failed (HTTP %d): %s", resp.StatusCode, truncateBody(body))
 	}
 
 	return body, nil
+}
+
+// truncateBody returns the first 512 bytes of a response body for safe embedding in error messages.
+func truncateBody(b []byte) string {
+	const maxLen = 512
+	if len(b) <= maxLen {
+		return string(b)
+	}
+	return string(b[:maxLen]) + "...(truncated)"
 }
 
 // buildParams converts QueryOpts to url.Values.

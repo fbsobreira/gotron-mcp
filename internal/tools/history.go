@@ -91,6 +91,10 @@ func parseQueryOpts(req mcp.CallToolRequest) (trongrid.QueryOpts, error) {
 		opts.MaxTimestamp = int64(v)
 	}
 
+	if opts.MinTimestamp > 0 && opts.MaxTimestamp > 0 && opts.MinTimestamp > opts.MaxTimestamp {
+		return opts, fmt.Errorf("min_timestamp cannot be greater than max_timestamp")
+	}
+
 	return opts, nil
 }
 
@@ -108,6 +112,9 @@ func handleGetTransactionHistory(client HistoryClient) server.ToolHandlerFunc {
 		resp, err := client.GetTransactionsByAddress(ctx, addr, opts)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_transaction_history: %v", err)), nil
+		}
+		if resp == nil {
+			return mcp.NewToolResultError("get_transaction_history: nil response"), nil
 		}
 
 		txs := make([]map[string]any, 0, len(resp.Data))
@@ -167,6 +174,9 @@ func handleGetTRC20Transfers(client HistoryClient) server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_transfers: %v", err)), nil
 		}
+		if resp == nil {
+			return mcp.NewToolResultError("get_trc20_transfers: nil response"), nil
+		}
 
 		transfers := make([]map[string]any, 0, len(resp.Data))
 		for _, tr := range resp.Data {
@@ -217,6 +227,9 @@ func handleGetContractEvents(client HistoryClient) server.ToolHandlerFunc {
 		}
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_contract_events: %v", err)), nil
+		}
+		if resp == nil {
+			return mcp.NewToolResultError("get_contract_events: nil response"), nil
 		}
 
 		events := make([]map[string]any, 0, len(resp.Data))

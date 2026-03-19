@@ -107,9 +107,15 @@ func TestHandleGetTransactionHistoryShapedOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	text := result.Content[0].(mcp.TextContent).Text
+	if len(result.Content) == 0 {
+		t.Fatal("expected non-empty result content")
+	}
+	tc, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", result.Content[0])
+	}
 	var data map[string]any
-	if err := json.Unmarshal([]byte(text), &data); err != nil {
+	if err := json.Unmarshal([]byte(tc.Text), &data); err != nil {
 		t.Fatalf("failed to unmarshal result: %v", err)
 	}
 	if data["count"] != float64(1) {
@@ -157,9 +163,15 @@ func TestHandleGetTRC20Transfers(t *testing.T) {
 		t.Fatalf("unexpected tool error: %v", result.Content)
 	}
 
-	text := result.Content[0].(mcp.TextContent).Text
+	if len(result.Content) == 0 {
+		t.Fatal("expected non-empty result content")
+	}
+	tc, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", result.Content[0])
+	}
 	var data map[string]any
-	if err := json.Unmarshal([]byte(text), &data); err != nil {
+	if err := json.Unmarshal([]byte(tc.Text), &data); err != nil {
 		t.Fatalf("failed to unmarshal result: %v", err)
 	}
 	transfers := data["transfers"].([]any)
