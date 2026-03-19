@@ -78,6 +78,36 @@ info, err := conn.GetTransactionInfoByID("abc123...")
 // info.Fee, info.BlockNumber, info.Receipt.EnergyUsage
 ```
 
+## SDK: Transaction Decoding
+
+```go
+import "github.com/fbsobreira/gotron-sdk/pkg/client/transaction"
+
+// Decode a transaction's contract data into human-readable form
+decoded, err := transaction.DecodeContractData(tx)
+if err != nil {
+    // Handle unsupported contract type or nil transaction
+}
+// decoded.Type = "TransferContract"
+// decoded.Fields = map[string]any{
+//     "owner_address": "TSender...",   // base58
+//     "to_address":    "TReceiver...", // base58
+//     "amount":        "5.000000",     // TRX (converted from SUN)
+// }
+```
+
+Supported contract types:
+- `TransferContract` — owner_address, to_address, amount (TRX)
+- `TransferAssetContract` — owner_address, to_address, asset_name, amount
+- `TriggerSmartContract` — owner_address, contract_address, data (hex), call_value (TRX)
+- `FreezeBalanceV2Contract` — owner_address, frozen_balance (TRX), resource
+- `UnfreezeBalanceV2Contract` — owner_address, unfreeze_balance (TRX), resource
+- `VoteWitnessContract` — owner_address, votes (array of {vote_address, vote_count})
+- `DelegateResourceContract` — owner_address, receiver_address, balance (TRX), resource, lock, lock_period
+- `UnDelegateResourceContract` — owner_address, receiver_address, balance (TRX), resource
+
+Sentinel errors: `ErrNilTransaction`, `ErrNoContracts`, `ErrNilParameter`, `ErrUnsupportedContract`, `ErrUnmarshalContract`
+
 ## SDK: Broadcasting
 
 ```go

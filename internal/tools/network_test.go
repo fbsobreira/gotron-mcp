@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/fbsobreira/gotron-sdk/pkg/address"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func TestGetTransaction_Success(t *testing.T) {
@@ -49,6 +51,85 @@ func TestGetTransaction_Success(t *testing.T) {
 	if result.IsError {
 		t.Fatalf("expected success, got error: %v", result.Content)
 	}
+}
+
+func TestGetTransaction_ContractData(t *testing.T) {
+	txID := "0000000000000000000000000000000000000000000000000000000000000002"
+	txIDBytes, err := hex.DecodeString(txID)
+	if err != nil {
+		t.Fatalf("failed to decode txID: %v", err)
+	}
+
+	// Build a real TransferContract proto parameter
+	transfer := &core.TransferContract{
+		OwnerAddress: mustDecodeAddr("TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF"),
+		ToAddress:    mustDecodeAddr("TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"),
+		Amount:       5_000_000, // 5 TRX
+	}
+	paramAny, err := anypb.New(transfer)
+	if err != nil {
+		t.Fatalf("failed to create Any: %v", err)
+	}
+
+	mock := &mockWalletServer{
+		GetTransactionByIdFunc: func(_ context.Context, _ *api.BytesMessage) (*core.Transaction, error) {
+			return &core.Transaction{
+				RawData: &core.TransactionRaw{
+					Contract: []*core.Transaction_Contract{
+						{
+							Type: core.Transaction_Contract_TransferContract,
+							Parameter: &anypb.Any{
+								TypeUrl: paramAny.TypeUrl,
+								Value:   paramAny.Value,
+							},
+						},
+					},
+				},
+			}, nil
+		},
+		GetTransactionInfoByIdFunc: func(_ context.Context, _ *api.BytesMessage) (*core.TransactionInfo, error) {
+			return &core.TransactionInfo{
+				Id:          txIDBytes,
+				BlockNumber: 99999,
+				Fee:         500,
+				Receipt:     &core.ResourceReceipt{},
+			}, nil
+		},
+	}
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleGetTransaction(pool), map[string]any{
+		"transaction_id": txID,
+	})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", result.Content)
+	}
+
+	data := parseJSONResult(t, result)
+	if data["contract_type"] != "TransferContract" {
+		t.Errorf("contract_type = %v, want TransferContract", data["contract_type"])
+	}
+	contractData, ok := data["contract_data"].(map[string]any)
+	if !ok {
+		t.Fatal("expected contract_data map in response")
+	}
+	if got := contractData["owner_address"]; got != "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF" {
+		t.Errorf("owner_address = %v, want TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", got)
+	}
+	if got := contractData["to_address"]; got != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
+		t.Errorf("to_address = %v, want TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", got)
+	}
+	if got := contractData["amount"]; got != "5.000000" {
+		t.Errorf("amount = %v, want 5.000000", got)
+	}
+}
+
+// mustDecodeAddr decodes a base58 TRON address to bytes for test fixtures.
+func mustDecodeAddr(addr string) []byte {
+	a, err := address.Base58ToAddress(addr)
+	if err != nil {
+		panic(fmt.Sprintf("invalid test address %q: %v", addr, err))
+	}
+	return a.Bytes()
 }
 
 func TestGetTransaction_MissingID(t *testing.T) {
