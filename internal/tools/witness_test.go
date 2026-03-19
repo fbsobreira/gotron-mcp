@@ -34,6 +34,19 @@ func TestListWitnesses_Success(t *testing.T) {
 	}
 }
 
+func TestListWitnesses_Error(t *testing.T) {
+	mock := &mockWalletServer{
+		ListWitnessesFunc: func(_ context.Context, _ *api.EmptyMessage) (*api.WitnessList, error) {
+			return nil, fmt.Errorf("node unavailable")
+		},
+	}
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleListWitnesses(pool), map[string]any{})
+	if !result.IsError {
+		t.Error("expected error when ListWitnesses fails")
+	}
+}
+
 // makeWitnesses creates n Witness protos with distinct addresses.
 func makeWitnesses(n int) []*core.Witness {
 	ws := make([]*core.Witness, n)
@@ -187,6 +200,100 @@ func TestListWitnesses_Empty(t *testing.T) {
 	}
 	if got := int(data["returned"].(float64)); got != 0 {
 		t.Errorf("returned = %d, want 0", got)
+	}
+}
+
+func TestVoteWitness_InvalidFrom(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+	result := callTool(t, handleVoteWitness(pool), map[string]any{
+		"from":  "invalid",
+		"votes": map[string]any{"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF": float64(100)},
+	})
+	if !result.IsError {
+		t.Error("expected error for invalid from address")
+	}
+}
+
+func TestVoteWitness_MissingVotes(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+	result := callTool(t, handleVoteWitness(pool), map[string]any{
+		"from": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+	})
+	if !result.IsError {
+		t.Error("expected error for missing votes")
+	}
+}
+
+func TestVoteWitness_InvalidVotesType(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+	result := callTool(t, handleVoteWitness(pool), map[string]any{
+		"from":  "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"votes": "not-a-map",
+	})
+	if !result.IsError {
+		t.Error("expected error for invalid votes type")
+	}
+}
+
+func TestVoteWitness_InvalidWitnessAddr(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+	result := callTool(t, handleVoteWitness(pool), map[string]any{
+		"from":  "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"votes": map[string]any{"bad-address": float64(100)},
+	})
+	if !result.IsError {
+		t.Error("expected error for invalid witness address")
+	}
+}
+
+func TestVoteWitness_InvalidVoteCount(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+	result := callTool(t, handleVoteWitness(pool), map[string]any{
+		"from":  "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"votes": map[string]any{"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF": float64(-5)},
+	})
+	if !result.IsError {
+		t.Error("expected error for negative vote count")
+	}
+}
+
+func TestVoteWitness_NonNumberVote(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+	result := callTool(t, handleVoteWitness(pool), map[string]any{
+		"from":  "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"votes": map[string]any{"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF": "not-a-number"},
+	})
+	if !result.IsError {
+		t.Error("expected error for non-number vote count")
+	}
+}
+
+func TestVoteWitness_Success(t *testing.T) {
+	mock := &mockWalletServer{
+		VoteWitnessAccount2Func: func(_ context.Context, _ *core.VoteWitnessContract) (*api.TransactionExtention, error) {
+			return &api.TransactionExtention{
+				Txid: []byte{0x07, 0x08, 0x09},
+				Transaction: &core.Transaction{
+					RawData: &core.TransactionRaw{},
+				},
+			}, nil
+		},
+	}
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleVoteWitness(pool), map[string]any{
+		"from":  "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"votes": map[string]any{"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t": float64(100)},
+	})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", result.Content)
+	}
+
+	data := parseJSONResult(t, result)
+	if data["type"] != "VoteWitnessContract" {
+		t.Errorf("type = %v, want VoteWitnessContract", data["type"])
+	}
+	if data["transaction_hex"] == nil || data["transaction_hex"] == "" {
+		t.Error("transaction_hex should not be empty")
 	}
 }
 
