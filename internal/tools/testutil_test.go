@@ -22,26 +22,29 @@ const bufSize = 1024 * 1024
 type mockWalletServer struct {
 	api.UnimplementedWalletServer
 
-	GetAccountFunc              func(context.Context, *core.Account) (*core.Account, error)
-	GetAccountResourceFunc      func(context.Context, *core.Account) (*api.AccountResourceMessage, error)
-	GetNowBlock2Func            func(context.Context, *api.EmptyMessage) (*api.BlockExtention, error)
-	GetBlockByNum2Func          func(context.Context, *api.NumberMessage) (*api.BlockExtention, error)
-	GetTransactionByIdFunc      func(context.Context, *api.BytesMessage) (*core.Transaction, error)
-	GetTransactionInfoByIdFunc  func(context.Context, *api.BytesMessage) (*core.TransactionInfo, error)
-	GetNodeInfoFunc             func(context.Context, *api.EmptyMessage) (*core.NodeInfo, error)
-	GetEnergyPricesFunc         func(context.Context, *api.EmptyMessage) (*api.PricesResponseMessage, error)
-	GetBandwidthPricesFunc      func(context.Context, *api.EmptyMessage) (*api.PricesResponseMessage, error)
-	ListWitnessesFunc           func(context.Context, *api.EmptyMessage) (*api.WitnessList, error)
-	ListProposalsFunc           func(context.Context, *api.EmptyMessage) (*api.ProposalList, error)
-	TriggerConstantContractFunc func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error)
-	BroadcastTransactionFunc    func(context.Context, *core.Transaction) (*api.Return, error)
-	FreezeBalanceV2Func         func(context.Context, *core.FreezeBalanceV2Contract) (*api.TransactionExtention, error)
-	UnfreezeBalanceV2Func       func(context.Context, *core.UnfreezeBalanceV2Contract) (*api.TransactionExtention, error)
-	CreateTransaction2Func      func(context.Context, *core.TransferContract) (*api.TransactionExtention, error)
-	TriggerContractFunc         func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error)
-	VoteWitnessAccount2Func     func(context.Context, *core.VoteWitnessContract) (*api.TransactionExtention, error)
-	EstimateEnergyFunc          func(context.Context, *core.TriggerSmartContract) (*api.EstimateEnergyMessage, error)
-	GetContractFunc             func(context.Context, *api.BytesMessage) (*core.SmartContract, error)
+	GetAccountFunc                 func(context.Context, *core.Account) (*core.Account, error)
+	GetAccountResourceFunc         func(context.Context, *core.Account) (*api.AccountResourceMessage, error)
+	GetNowBlock2Func               func(context.Context, *api.EmptyMessage) (*api.BlockExtention, error)
+	GetBlockByNum2Func             func(context.Context, *api.NumberMessage) (*api.BlockExtention, error)
+	GetTransactionByIdFunc         func(context.Context, *api.BytesMessage) (*core.Transaction, error)
+	GetTransactionInfoByIdFunc     func(context.Context, *api.BytesMessage) (*core.TransactionInfo, error)
+	GetNodeInfoFunc                func(context.Context, *api.EmptyMessage) (*core.NodeInfo, error)
+	GetEnergyPricesFunc            func(context.Context, *api.EmptyMessage) (*api.PricesResponseMessage, error)
+	GetBandwidthPricesFunc         func(context.Context, *api.EmptyMessage) (*api.PricesResponseMessage, error)
+	ListWitnessesFunc              func(context.Context, *api.EmptyMessage) (*api.WitnessList, error)
+	ListProposalsFunc              func(context.Context, *api.EmptyMessage) (*api.ProposalList, error)
+	TriggerConstantContractFunc    func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error)
+	BroadcastTransactionFunc       func(context.Context, *core.Transaction) (*api.Return, error)
+	FreezeBalanceV2Func            func(context.Context, *core.FreezeBalanceV2Contract) (*api.TransactionExtention, error)
+	UnfreezeBalanceV2Func          func(context.Context, *core.UnfreezeBalanceV2Contract) (*api.TransactionExtention, error)
+	CreateTransaction2Func         func(context.Context, *core.TransferContract) (*api.TransactionExtention, error)
+	TriggerContractFunc            func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error)
+	VoteWitnessAccount2Func        func(context.Context, *core.VoteWitnessContract) (*api.TransactionExtention, error)
+	EstimateEnergyFunc             func(context.Context, *core.TriggerSmartContract) (*api.EstimateEnergyMessage, error)
+	GetTransactionFromPendingFunc  func(context.Context, *api.BytesMessage) (*core.Transaction, error)
+	GetTransactionListFromPendFunc func(context.Context, *api.EmptyMessage) (*api.TransactionIdList, error)
+	GetPendingSizeFunc             func(context.Context, *api.EmptyMessage) (*api.NumberMessage, error)
+	GetContractFunc                func(context.Context, *api.BytesMessage) (*core.SmartContract, error)
 }
 
 func (m *mockWalletServer) GetAccount(ctx context.Context, in *core.Account) (*core.Account, error) {
@@ -175,6 +178,27 @@ func (m *mockWalletServer) EstimateEnergy(ctx context.Context, in *core.TriggerS
 		return m.EstimateEnergyFunc(ctx, in)
 	}
 	return m.UnimplementedWalletServer.EstimateEnergy(ctx, in)
+}
+
+func (m *mockWalletServer) GetTransactionFromPending(ctx context.Context, in *api.BytesMessage) (*core.Transaction, error) {
+	if m.GetTransactionFromPendingFunc != nil {
+		return m.GetTransactionFromPendingFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.GetTransactionFromPending(ctx, in)
+}
+
+func (m *mockWalletServer) GetTransactionListFromPending(ctx context.Context, in *api.EmptyMessage) (*api.TransactionIdList, error) {
+	if m.GetTransactionListFromPendFunc != nil {
+		return m.GetTransactionListFromPendFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.GetTransactionListFromPending(ctx, in)
+}
+
+func (m *mockWalletServer) GetPendingSize(ctx context.Context, in *api.EmptyMessage) (*api.NumberMessage, error) {
+	if m.GetPendingSizeFunc != nil {
+		return m.GetPendingSizeFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.GetPendingSize(ctx, in)
 }
 
 func (m *mockWalletServer) GetContract(ctx context.Context, in *api.BytesMessage) (*core.SmartContract, error) {

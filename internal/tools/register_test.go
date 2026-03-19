@@ -27,9 +27,9 @@ func TestRegisterAllTools(t *testing.T) {
 	tools := s.ListTools()
 
 	// Expected: 2 account + 1 address + 1 block + 5 contract read + 1 contract write +
-	// 5 network + 1 proposal + 2 resource + 2 sign + 2 token + 2 transfer +
-	// 1 witness read + 1 witness write = 26
-	const expectedToolCount = 26
+	// 8 network (5 existing + 3 pending pool) + 1 proposal + 2 resource + 2 sign + 2 token + 2 transfer +
+	// 1 witness read + 1 witness write = 29
+	const expectedToolCount = 29
 	if len(tools) != expectedToolCount {
 		t.Errorf("registered tool count = %d, want %d", len(tools), expectedToolCount)
 	}
@@ -51,6 +51,9 @@ func TestRegisterAllTools(t *testing.T) {
 		"transfer_trc20",
 		"list_witnesses",
 		"vote_witness",
+		"get_pending_transactions",
+		"is_transaction_pending",
+		"get_pending_by_address",
 	}
 	for _, name := range representative {
 		if tools[name] == nil {
