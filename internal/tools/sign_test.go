@@ -75,13 +75,25 @@ func TestSignTransaction_InvalidHex(t *testing.T) {
 func TestSignTransaction_InvalidProto(t *testing.T) {
 	handler := handleSignTransaction(t.TempDir())
 	result := callTool(t, handler, map[string]any{
-		"transaction_hex": "deadbeef",
+		"transaction_hex": "0f",
 		"signer":          "TSomeAddr",
 		"passphrase":      "pass",
 	})
-	// Invalid protobuf should either fail to unmarshal or fail to find account
-	// Either way it shouldn't be a Go error
-	_ = result
+	if !result.IsError {
+		t.Fatal("expected error for invalid protobuf payload")
+	}
+	found := false
+	for _, c := range result.Content {
+		if tc, ok := c.(mcp.TextContent); ok {
+			if strings.Contains(tc.Text, "failed to parse transaction") {
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected proto parse error, got: %+v", result.Content)
+	}
 }
 
 func TestSignTransaction_AccountNotFound(t *testing.T) {
@@ -102,12 +114,19 @@ func TestSignTransaction_AccountNotFound(t *testing.T) {
 	if !result.IsError {
 		t.Error("expected error for account not found in keystore")
 	}
+	found := false
 	for _, c := range result.Content {
-		if tc, ok := c.(mcp.TextContent); ok {
-			if !strings.Contains(tc.Text, "not found in keystore") {
-				t.Errorf("expected 'not found in keystore' error, got: %s", tc.Text)
-			}
+		tc, ok := c.(mcp.TextContent)
+		if !ok {
+			continue
 		}
+		if strings.Contains(tc.Text, "not found in keystore") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected error text containing 'not found in keystore', got: %+v", result.Content)
 	}
 }
 
@@ -143,12 +162,25 @@ func TestBroadcastTransaction_InvalidHex(t *testing.T) {
 
 func TestBroadcastTransaction_InvalidProto(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	// Valid hex but not valid protobuf for Transaction
 	result := callTool(t, handleBroadcastTransaction(pool), map[string]any{
-		"signed_transaction_hex": "ff",
+		"signed_transaction_hex": "0f",
 	})
-	// Could parse as empty transaction (protobuf is lenient), so this might not error
-	_ = result
+	if !result.IsError {
+		t.Fatal("expected error for invalid protobuf payload")
+	}
+	// Verify the error is from proto parse or broadcast — either way it's an error
+	found := false
+	for _, c := range result.Content {
+		if tc, ok := c.(mcp.TextContent); ok {
+			if strings.Contains(tc.Text, "failed to parse transaction") || strings.Contains(tc.Text, "broadcast_transaction") {
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected parse or broadcast error, got: %+v", result.Content)
+	}
 }
 
 func TestBroadcastTransaction_Success(t *testing.T) {

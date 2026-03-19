@@ -516,6 +516,13 @@ func TestTriggerContract_InvalidFeeLimit(t *testing.T) {
 	if !result.IsError {
 		t.Error("expected error for fee_limit > 15000")
 	}
+	for _, c := range result.Content {
+		if tc, ok := c.(mcp.TextContent); ok {
+			if !strings.Contains(tc.Text, "fee_limit must be between 0 and 15000") {
+				t.Errorf("expected fee_limit validation error, got: %s", tc.Text)
+			}
+		}
+	}
 }
 
 func TestTriggerContract_Success(t *testing.T) {

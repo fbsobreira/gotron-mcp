@@ -113,6 +113,9 @@ func TestFreezeBalance_Success(t *testing.T) {
 	if data["transaction_hex"] == nil || data["transaction_hex"] == "" {
 		t.Error("transaction_hex should not be empty")
 	}
+	if data["txid"] == nil || data["txid"] == "" {
+		t.Error("txid should not be empty")
+	}
 }
 
 func TestUnfreezeBalance_InvalidAddress(t *testing.T) {
@@ -190,5 +193,11 @@ func TestUnfreezeBalance_Success(t *testing.T) {
 	}
 	if data["resource"] != "BANDWIDTH" {
 		t.Errorf("resource = %v, want BANDWIDTH", data["resource"])
+	}
+	if data["transaction_hex"] == nil || data["transaction_hex"] == "" {
+		t.Error("transaction_hex should not be empty")
+	}
+	if data["txid"] == nil || data["txid"] == "" {
+		t.Error("txid should not be empty")
 	}
 }

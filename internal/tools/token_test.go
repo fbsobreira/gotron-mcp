@@ -1,11 +1,11 @@
 package tools
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"math/big"
 	"testing"
-
-	"fmt"
 
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
@@ -44,30 +44,22 @@ func mockTRC20Server(balance *big.Int, decimals int64, name, symbol string) *moc
 			// Detect which method is being called by data prefix (function selector)
 			data := in.Data
 			if len(data) < 4 {
-				return &api.TransactionExtention{
-					ConstantResult: [][]byte{abiEncodeUint256(big.NewInt(0))},
-					Result:         &api.Return{Result: true},
-				}, nil
+				return nil, fmt.Errorf("unexpected short calldata: %x", data)
 			}
 
-			// Function selectors:
-			// balanceOf(address)     = 0x70a08231
-			// decimals()             = 0x313ce567
-			// name()                 = 0x06fdde03
-			// symbol()               = 0x95d89b41
 			selector := data[:4]
 			var result []byte
 			switch {
-			case selector[0] == 0x70 && selector[1] == 0xa0: // balanceOf
+			case bytes.Equal(selector, []byte{0x70, 0xa0, 0x82, 0x31}): // balanceOf(address)
 				result = abiEncodeUint256(balance)
-			case selector[0] == 0x31 && selector[1] == 0x3c: // decimals
+			case bytes.Equal(selector, []byte{0x31, 0x3c, 0xe5, 0x67}): // decimals()
 				result = abiEncodeUint256(big.NewInt(decimals))
-			case selector[0] == 0x06 && selector[1] == 0xfd: // name
+			case bytes.Equal(selector, []byte{0x06, 0xfd, 0xde, 0x03}): // name()
 				result = abiEncodeString(name)
-			case selector[0] == 0x95 && selector[1] == 0xd8: // symbol
+			case bytes.Equal(selector, []byte{0x95, 0xd8, 0x9b, 0x41}): // symbol()
 				result = abiEncodeString(symbol)
 			default:
-				result = abiEncodeUint256(big.NewInt(0))
+				return nil, fmt.Errorf("unexpected selector: %x", selector)
 			}
 
 			return &api.TransactionExtention{
@@ -119,6 +111,10 @@ func TestGetTRC20Balance_Success(t *testing.T) {
 	}
 	if data["balance_raw"] != "1000000" {
 		t.Errorf("balance_raw = %v, want 1000000", data["balance_raw"])
+	}
+	// 1_000_000 raw with 6 decimals = "1.000000"
+	if data["balance"] != "1.000000" {
+		t.Errorf("balance = %v, want 1.000000", data["balance"])
 	}
 }
 
