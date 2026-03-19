@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
+	"github.com/fbsobreira/gotron-sdk/pkg/txbuilder"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -131,4 +132,19 @@ func handleValidateAddress() server.ToolHandlerFunc {
 
 		return mcp.NewToolResultJSON(result)
 	}
+}
+
+// builderOptions extracts common txbuilder options (memo, permission_id) from
+// the MCP request. Used by all write tools that use the txbuilder API.
+func builderOptions(req mcp.CallToolRequest) []txbuilder.Option {
+	var opts []txbuilder.Option
+	if memo := req.GetString("memo", ""); memo != "" {
+		opts = append(opts, txbuilder.WithMemo(memo))
+	}
+	args := req.GetArguments()
+	if _, has := args["permission_id"]; has {
+		pid := int32(req.GetInt("permission_id", 0))
+		opts = append(opts, txbuilder.WithPermissionID(pid))
+	}
+	return opts
 }

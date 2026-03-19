@@ -72,6 +72,13 @@ receipt, err := builder.VoteWitness(from).
 tx, err := builder.VoteWitness(from).
     Vote("TSR1addr...", 1000).
     Build(ctx)
+
+// With memo and permission_id (fluent chaining)
+tx, err = builder.VoteWitness(from).
+    Votes(votes).
+    WithMemo("my votes").
+    WithPermissionID(2).
+    Build(ctx)
 ```
 
 ## MCP Tools

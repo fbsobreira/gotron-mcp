@@ -106,6 +106,9 @@ receipt, err := builder.FreezeV2(from, 10_000_000, core.ResourceCode_ENERGY).
 receipt, err := builder.UnfreezeV2(from, 10_000_000, core.ResourceCode_ENERGY).
     Send(ctx, signer)
 
+// Withdraw expired unfrozen TRX (after 14-day waiting period)
+receipt, err := builder.WithdrawExpireUnfreeze(from, 0).Send(ctx, signer)
+
 // Delegate with lock period
 receipt, err := builder.DelegateResource(from, to, core.ResourceCode_ENERGY, 10_000_000).
     Lock(86400). // lock for 86400 blocks (~3 days)
@@ -114,6 +117,9 @@ receipt, err := builder.DelegateResource(from, to, core.ResourceCode_ENERGY, 10_
 // Undelegate
 receipt, err := builder.UnDelegateResource(from, to, core.ResourceCode_ENERGY, 10_000_000).
     Send(ctx, signer)
+
+// All staking builders support fluent memo and permission_id
+builder.FreezeV2(from, amt, res).WithMemo("stake").WithPermissionID(2).Build(ctx)
 ```
 
 ## MCP Tools
@@ -121,6 +127,9 @@ receipt, err := builder.UnDelegateResource(from, to, core.ResourceCode_ENERGY, 1
 - `get_account_resources` — Get energy/bandwidth usage and limits
 - `freeze_balance` — Stake TRX for energy or bandwidth
 - `unfreeze_balance` — Unstake TRX
+- `withdraw_expire_unfreeze` — Withdraw TRX after 14-day unstaking period
+- `delegate_resource` — Delegate energy or bandwidth to another address
+- `undelegate_resource` — Reclaim previously delegated resources
 - `estimate_energy` — Estimate energy cost for a contract call
 - `get_energy_prices` — Get current energy prices
 - `get_bandwidth_prices` — Get current bandwidth prices

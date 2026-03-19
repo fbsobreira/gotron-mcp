@@ -33,9 +33,9 @@ func TestRegisterAllTools(t *testing.T) {
 	tools := s.ListTools()
 
 	// Expected: 2 account + 1 address + 1 block + 5 contract read + 1 contract write +
-	// 8 network (5 existing + 3 pending pool) + 1 proposal + 2 resource + 2 sign + 3 token + 2 transfer +
-	// 1 witness read + 1 witness write + 3 history (TronGrid REST) = 33
-	const expectedToolCount = 33
+	// 8 network (5 existing + 3 pending pool) + 1 proposal + 5 resource + 2 sign + 3 token + 2 transfer +
+	// 1 witness read + 1 witness write + 3 history (TronGrid REST) = 36
+	const expectedToolCount = 36
 	if len(tools) != expectedToolCount {
 		t.Errorf("registered tool count = %d, want %d", len(tools), expectedToolCount)
 	}
@@ -64,6 +64,9 @@ func TestRegisterAllTools(t *testing.T) {
 		"get_transaction_history",
 		"get_trc20_transfers",
 		"get_contract_events",
+		"delegate_resource",
+		"undelegate_resource",
+		"withdraw_expire_unfreeze",
 	}
 	for _, name := range representative {
 		if tools[name] == nil {

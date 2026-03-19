@@ -46,6 +46,9 @@ type mockWalletServer struct {
 	GetTransactionListFromPendFunc func(context.Context, *api.EmptyMessage) (*api.TransactionIdList, error)
 	GetPendingSizeFunc             func(context.Context, *api.EmptyMessage) (*api.NumberMessage, error)
 	GetContractFunc                func(context.Context, *api.BytesMessage) (*core.SmartContract, error)
+	DelegateResourceFunc           func(context.Context, *core.DelegateResourceContract) (*api.TransactionExtention, error)
+	UnDelegateResourceFunc         func(context.Context, *core.UnDelegateResourceContract) (*api.TransactionExtention, error)
+	WithdrawExpireUnfreezeFunc     func(context.Context, *core.WithdrawExpireUnfreezeContract) (*api.TransactionExtention, error)
 }
 
 func (m *mockWalletServer) GetAccount(ctx context.Context, in *core.Account) (*core.Account, error) {
@@ -207,6 +210,27 @@ func (m *mockWalletServer) GetContract(ctx context.Context, in *api.BytesMessage
 		return m.GetContractFunc(ctx, in)
 	}
 	return m.UnimplementedWalletServer.GetContract(ctx, in)
+}
+
+func (m *mockWalletServer) DelegateResource(ctx context.Context, in *core.DelegateResourceContract) (*api.TransactionExtention, error) {
+	if m.DelegateResourceFunc != nil {
+		return m.DelegateResourceFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.DelegateResource(ctx, in)
+}
+
+func (m *mockWalletServer) UnDelegateResource(ctx context.Context, in *core.UnDelegateResourceContract) (*api.TransactionExtention, error) {
+	if m.UnDelegateResourceFunc != nil {
+		return m.UnDelegateResourceFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.UnDelegateResource(ctx, in)
+}
+
+func (m *mockWalletServer) WithdrawExpireUnfreeze(ctx context.Context, in *core.WithdrawExpireUnfreezeContract) (*api.TransactionExtention, error) {
+	if m.WithdrawExpireUnfreezeFunc != nil {
+		return m.WithdrawExpireUnfreezeFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.WithdrawExpireUnfreeze(ctx, in)
 }
 
 // newMockClient creates a GrpcClient connected to an in-memory gRPC server.

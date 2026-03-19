@@ -8,6 +8,7 @@ import (
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/util"
+	"github.com/fbsobreira/gotron-sdk/pkg/txbuilder"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"google.golang.org/protobuf/proto"
@@ -21,6 +22,8 @@ func RegisterTransferTools(s *server.MCPServer, pool *nodepool.Pool) {
 			mcp.WithString("from", mcp.Required(), mcp.Description("Sender address (base58, starts with T)")),
 			mcp.WithString("to", mcp.Required(), mcp.Description("Recipient address (base58, starts with T)")),
 			mcp.WithString("amount", mcp.Required(), mcp.Description("Amount in TRX (e.g., '100.5')")),
+			mcp.WithString("memo", mcp.Description("Optional memo to attach to the transaction")),
+			mcp.WithNumber("permission_id", mcp.Description("Permission ID for multi-sig transactions")),
 		),
 		handleTransferTRX(pool),
 	)
@@ -60,7 +63,8 @@ func handleTransferTRX(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError("amount must be greater than zero"), nil
 		}
 
-		tx, err := conn.TransferCtx(ctx, from, to, sun)
+		opts := builderOptions(req)
+		tx, err := txbuilder.New(conn).Transfer(from, to, sun, opts...).Build(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("transfer_trx: %v", err)), nil
 		}

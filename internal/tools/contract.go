@@ -15,6 +15,7 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/abi"
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
 	"github.com/fbsobreira/gotron-sdk/pkg/client"
+	"github.com/fbsobreira/gotron-sdk/pkg/contract"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -88,6 +89,7 @@ func RegisterContractWriteTools(s *server.MCPServer, pool *nodepool.Pool) {
 			mcp.WithString("data", mcp.Description("Pre-packed ABI calldata as hex (0x prefix optional). When provided, method and params are ignored.")),
 			mcp.WithNumber("fee_limit", mcp.Description("Fee limit in whole TRX (integer), range 0-15000 (default: 100)")),
 			mcp.WithNumber("call_value", mcp.Description("Amount to send with call in SUN (default: 0)")),
+			mcp.WithNumber("permission_id", mcp.Description("Permission ID for multi-sig transactions")),
 		),
 		handleTriggerContract(pool),
 	)
@@ -396,8 +398,13 @@ func handleTriggerContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 		}
 		feeLimitSun := int64(feeLimit) * 1_000_000
 
-		var tx *api.TransactionExtention
-		var err error
+		call := contract.New(conn, contractAddr).
+			From(from).
+			WithFeeLimit(feeLimitSun)
+
+		if callValue > 0 {
+			call = call.WithCallValue(callValue)
+		}
 
 		if dataHex != "" {
 			// Pre-packed calldata mode — ignore method entirely
@@ -410,13 +417,22 @@ func handleTriggerContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 			if decErr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("trigger_contract: invalid data hex: %v", decErr)), nil
 			}
-			tx, err = conn.TriggerContractWithDataCtx(ctx, from, contractAddr, data, feeLimitSun, callValue, "", 0)
+			call = call.WithData(data)
 		} else {
 			if method == "" {
 				return mcp.NewToolResultError("trigger_contract: method is required when data is not provided"), nil
 			}
-			tx, err = conn.TriggerContractCtx(ctx, from, contractAddr, method, params, feeLimitSun, callValue, "", 0)
+			call = call.Method(method).Params(params)
 		}
+
+		// Apply optional permission_id for multi-sig
+		args := req.GetArguments()
+		if _, has := args["permission_id"]; has {
+			pid := int32(req.GetInt("permission_id", 0))
+			call = call.WithPermissionID(pid)
+		}
+
+		tx, err := call.Build(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("trigger_contract: %v", err)), nil
 		}

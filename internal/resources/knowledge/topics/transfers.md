@@ -159,11 +159,17 @@ receipt, err := builder.Transfer(from, to, amountSUN).Send(ctx, s)
 receipt, err := builder.Transfer(from, to, amountSUN).SendAndConfirm(ctx, s)
 // receipt.TxID, receipt.BlockNumber, receipt.Confirmed, receipt.Fee
 
-// With options
+// With options (variadic)
 receipt, err := builder.Transfer(from, to, amountSUN,
     txbuilder.WithMemo("payment"),
     txbuilder.WithPermissionID(2), // multi-sig active permission
 ).Send(ctx, s)
+
+// With options (fluent chaining)
+tx, err := builder.Transfer(from, to, amountSUN).
+    WithMemo("payment").
+    WithPermissionID(2).
+    Build(ctx)
 ```
 
 ## SDK: Receipt Type
