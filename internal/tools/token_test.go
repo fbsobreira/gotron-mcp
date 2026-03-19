@@ -70,6 +70,124 @@ func mockTRC20Server(balance *big.Int, decimals int64, name, symbol string) *moc
 	}
 }
 
+// mockTRC20EstimateServer extends mockTRC20Server to also handle
+// transfer(address,uint256) selector for WithEstimate() dry-runs.
+func mockTRC20EstimateServer(decimals int64, energyUsed int64) *mockWalletServer {
+	return &mockWalletServer{
+		TriggerConstantContractFunc: func(_ context.Context, in *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+			data := in.Data
+			if len(data) < 4 {
+				return nil, fmt.Errorf("unexpected short calldata: %x", data)
+			}
+
+			selector := data[:4]
+			var result []byte
+			switch {
+			case bytes.Equal(selector, []byte{0x31, 0x3c, 0xe5, 0x67}): // decimals()
+				result = abiEncodeUint256(big.NewInt(decimals))
+			case bytes.Equal(selector, []byte{0xa9, 0x05, 0x9c, 0xbb}): // transfer(address,uint256)
+				result = abiEncodeUint256(big.NewInt(1)) // success = true
+			default:
+				return nil, fmt.Errorf("unexpected selector: %x", selector)
+			}
+
+			return &api.TransactionExtention{
+				ConstantResult: [][]byte{result},
+				Result:         &api.Return{Result: true},
+				EnergyUsed:     energyUsed,
+			}, nil
+		},
+	}
+}
+
+func TestEstimateTRC20Energy_Success(t *testing.T) {
+	mock := mockTRC20EstimateServer(6, 29000)
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleEstimateTRC20Energy(pool), map[string]any{
+		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		"amount":           "100",
+	})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", result.Content)
+	}
+	data := parseJSONResult(t, result)
+	if data["estimated_energy"] != float64(29000) {
+		t.Errorf("estimated_energy = %v, want 29000", data["estimated_energy"])
+	}
+	if data["from"] != "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF" {
+		t.Errorf("from = %v, want TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", data["from"])
+	}
+}
+
+func TestEstimateTRC20Energy_InvalidTo(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+	result := callTool(t, handleEstimateTRC20Energy(pool), map[string]any{
+		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"to":               "bad",
+		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		"amount":           "100",
+	})
+	if !result.IsError {
+		t.Error("expected error for invalid to address")
+	}
+}
+
+func TestEstimateTRC20Energy_InvalidContract(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+	result := callTool(t, handleEstimateTRC20Energy(pool), map[string]any{
+		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		"contract_address": "bad",
+		"amount":           "100",
+	})
+	if !result.IsError {
+		t.Error("expected error for invalid contract address")
+	}
+}
+
+func TestEstimateTRC20Energy_InvalidFrom(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+	result := callTool(t, handleEstimateTRC20Energy(pool), map[string]any{
+		"from":             "bad",
+		"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		"amount":           "100",
+	})
+	if !result.IsError {
+		t.Error("expected error for invalid from address")
+	}
+}
+
+func TestEstimateTRC20Energy_InvalidAmount(t *testing.T) {
+	mock := mockTRC20EstimateServer(6, 29000)
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleEstimateTRC20Energy(pool), map[string]any{
+		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		"amount":           "not-a-number",
+	})
+	if !result.IsError {
+		t.Error("expected error for invalid amount")
+	}
+}
+
+func TestEstimateTRC20Energy_ZeroAmount(t *testing.T) {
+	mock := mockTRC20EstimateServer(6, 29000)
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleEstimateTRC20Energy(pool), map[string]any{
+		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		"amount":           "0",
+	})
+	if !result.IsError {
+		t.Error("expected error for zero amount")
+	}
+}
+
 func TestGetTRC20Balance_InvalidAddress(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
 	result := callTool(t, handleGetTRC20Balance(pool), map[string]any{
