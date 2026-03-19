@@ -103,3 +103,4 @@ energy, err := token.Transfer(from, to, amount).EstimateEnergy(ctx)
 - `get_trc20_balance` — Get TRC20 token balance for an account
 - `get_trc20_token_info` — Get token name, symbol, and decimals
 - `transfer_trc20` — Create unsigned TRC20 transfer transaction
+- `estimate_trc20_energy` — Estimate energy cost for a TRC20 transfer (dry-run)

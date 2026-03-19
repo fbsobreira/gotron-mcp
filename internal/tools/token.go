@@ -8,6 +8,7 @@ import (
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/retry"
 	"github.com/fbsobreira/gotron-mcp/internal/util"
+	"github.com/fbsobreira/gotron-sdk/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -29,6 +30,17 @@ func RegisterTokenTools(s *server.MCPServer, pool *nodepool.Pool) {
 			mcp.WithString("contract_address", mcp.Required(), mcp.Description("TRC20 contract address")),
 		),
 		handleGetTRC20TokenInfo(pool),
+	)
+
+	s.AddTool(
+		mcp.NewTool("estimate_trc20_energy",
+			mcp.WithDescription("Estimate energy cost for a TRC20 transfer without creating a transaction. Dry-runs the transfer to check energy requirements."),
+			mcp.WithString("from", mcp.Required(), mcp.Description("Sender address (base58, starts with T)")),
+			mcp.WithString("to", mcp.Required(), mcp.Description("Recipient address (base58, starts with T)")),
+			mcp.WithString("contract_address", mcp.Required(), mcp.Description("TRC20 contract address (base58, starts with T)")),
+			mcp.WithString("amount", mcp.Required(), mcp.Description("Amount in human-readable units (e.g., '100.5' for 100.5 USDT)")),
+		),
+		handleEstimateTRC20Energy(pool),
 	)
 }
 
@@ -121,6 +133,58 @@ func handleGetTRC20TokenInfo(pool *nodepool.Pool) server.ToolHandlerFunc {
 			"name":             name,
 			"symbol":           symbol,
 			"decimals":         decimals.Int64(),
+		}
+
+		return mcp.NewToolResultJSON(result)
+	}
+}
+
+func handleEstimateTRC20Energy(pool *nodepool.Pool) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		from := req.GetString("from", "")
+		to := req.GetString("to", "")
+		contract := req.GetString("contract_address", "")
+		amountStr := req.GetString("amount", "")
+		conn := pool.Client()
+
+		if err := validateAddress(from); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid from address: %v", err)), nil
+		}
+		if err := validateAddress(to); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid to address: %v", err)), nil
+		}
+		if err := validateAddress(contract); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
+		}
+
+		decimals, err := conn.TRC20GetDecimalsCtx(ctx, contract)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("estimate_trc20_energy: failed to get decimals: %v", err)), nil
+		}
+		if decimals == nil || decimals.Sign() < 0 || decimals.Cmp(big.NewInt(77)) > 0 {
+			return mcp.NewToolResultError(fmt.Sprintf("estimate_trc20_energy: invalid decimals value: %s", decimals)), nil
+		}
+		dec := int(decimals.Int64())
+
+		amount, err := util.ParseTRC20Amount(amountStr, dec)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid amount: %v", err)), nil
+		}
+		if amount.Sign() <= 0 {
+			return mcp.NewToolResultError("amount must be greater than zero"), nil
+		}
+
+		tx, err := conn.TRC20SendCtx(ctx, from, to, contract, amount, 0, client.WithEstimate())
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("estimate_trc20_energy: %v", err)), nil
+		}
+
+		result := map[string]any{
+			"from":             from,
+			"to":               to,
+			"contract_address": contract,
+			"amount":           amountStr,
+			"estimated_energy": tx.EnergyUsed,
 		}
 
 		return mcp.NewToolResultJSON(result)
