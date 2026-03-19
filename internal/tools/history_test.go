@@ -121,8 +121,14 @@ func TestHandleGetTransactionHistoryShapedOutput(t *testing.T) {
 	if data["count"] != float64(1) {
 		t.Errorf("count = %v, want 1", data["count"])
 	}
-	txs := data["transactions"].([]any)
-	tx := txs[0].(map[string]any)
+	txs, ok := data["transactions"].([]any)
+	if !ok || len(txs) == 0 {
+		t.Fatal("expected non-empty transactions array")
+	}
+	tx, ok := txs[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected map for transaction, got %T", txs[0])
+	}
 	if tx["txid"] != "tx1" {
 		t.Errorf("txid = %v, want tx1", tx["txid"])
 	}
@@ -130,7 +136,10 @@ func TestHandleGetTransactionHistoryShapedOutput(t *testing.T) {
 	if _, ok := tx["raw_data"]; ok {
 		t.Error("shaped output should not contain raw_data")
 	}
-	meta := data["meta"].(map[string]any)
+	meta, ok := data["meta"].(map[string]any)
+	if !ok {
+		t.Fatal("expected meta map in response")
+	}
 	if meta["fingerprint"] != "fp1" {
 		t.Errorf("fingerprint = %v, want fp1", meta["fingerprint"])
 	}
@@ -174,11 +183,14 @@ func TestHandleGetTRC20Transfers(t *testing.T) {
 	if err := json.Unmarshal([]byte(tc.Text), &data); err != nil {
 		t.Fatalf("failed to unmarshal result: %v", err)
 	}
-	transfers := data["transfers"].([]any)
-	if len(transfers) != 1 {
-		t.Errorf("expected 1 transfer, got %d", len(transfers))
+	transfers, ok := data["transfers"].([]any)
+	if !ok || len(transfers) != 1 {
+		t.Fatalf("expected 1 transfer, got %v", data["transfers"])
 	}
-	tr := transfers[0].(map[string]any)
+	tr, ok := transfers[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected map for transfer, got %T", transfers[0])
+	}
 	if tr["token_symbol"] != "USDT" {
 		t.Errorf("token_symbol = %v, want USDT", tr["token_symbol"])
 	}
