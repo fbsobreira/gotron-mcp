@@ -55,7 +55,10 @@ func TestGetTransaction_Success(t *testing.T) {
 
 func TestGetTransaction_ContractData(t *testing.T) {
 	txID := "0000000000000000000000000000000000000000000000000000000000000002"
-	txIDBytes, _ := hex.DecodeString(txID)
+	txIDBytes, err := hex.DecodeString(txID)
+	if err != nil {
+		t.Fatalf("failed to decode txID: %v", err)
+	}
 
 	// Build a real TransferContract proto parameter
 	transfer := &core.TransferContract{
