@@ -166,12 +166,19 @@ func TestGetTRC20TokenInfo_NameError(t *testing.T) {
 	if !result.IsError {
 		t.Error("expected error when name() call fails")
 	}
-	// Verify it's a tool error (not a Go error)
+	// Verify it's a tool error (not a Go error) with non-empty text
+	found := false
 	for _, c := range result.Content {
-		if tc, ok := c.(mcp.TextContent); ok {
-			if tc.Text == "" {
-				t.Error("error message should not be empty")
-			}
+		tc, ok := c.(mcp.TextContent)
+		if !ok {
+			continue
 		}
+		found = true
+		if tc.Text == "" {
+			t.Error("error message should not be empty")
+		}
+	}
+	if !found {
+		t.Fatal("expected at least one mcp.TextContent in error result")
 	}
 }

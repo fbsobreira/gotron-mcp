@@ -555,6 +555,9 @@ func TestTriggerContract_Success(t *testing.T) {
 	if data["transaction_hex"] == nil || data["transaction_hex"] == "" {
 		t.Error("transaction_hex should not be empty")
 	}
+	if data["txid"] == nil || data["txid"] == "" {
+		t.Error("txid should not be empty")
+	}
 }
 
 func TestTriggerContract_Error(t *testing.T) {
