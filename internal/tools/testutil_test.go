@@ -22,17 +22,26 @@ const bufSize = 1024 * 1024
 type mockWalletServer struct {
 	api.UnimplementedWalletServer
 
-	GetAccountFunc             func(context.Context, *core.Account) (*core.Account, error)
-	GetAccountResourceFunc     func(context.Context, *core.Account) (*api.AccountResourceMessage, error)
-	GetNowBlock2Func           func(context.Context, *api.EmptyMessage) (*api.BlockExtention, error)
-	GetBlockByNum2Func         func(context.Context, *api.NumberMessage) (*api.BlockExtention, error)
-	GetTransactionByIdFunc     func(context.Context, *api.BytesMessage) (*core.Transaction, error)
-	GetTransactionInfoByIdFunc func(context.Context, *api.BytesMessage) (*core.TransactionInfo, error)
-	GetNodeInfoFunc            func(context.Context, *api.EmptyMessage) (*core.NodeInfo, error)
-	GetEnergyPricesFunc        func(context.Context, *api.EmptyMessage) (*api.PricesResponseMessage, error)
-	GetBandwidthPricesFunc     func(context.Context, *api.EmptyMessage) (*api.PricesResponseMessage, error)
-	ListWitnessesFunc          func(context.Context, *api.EmptyMessage) (*api.WitnessList, error)
-	ListProposalsFunc          func(context.Context, *api.EmptyMessage) (*api.ProposalList, error)
+	GetAccountFunc              func(context.Context, *core.Account) (*core.Account, error)
+	GetAccountResourceFunc      func(context.Context, *core.Account) (*api.AccountResourceMessage, error)
+	GetNowBlock2Func            func(context.Context, *api.EmptyMessage) (*api.BlockExtention, error)
+	GetBlockByNum2Func          func(context.Context, *api.NumberMessage) (*api.BlockExtention, error)
+	GetTransactionByIdFunc      func(context.Context, *api.BytesMessage) (*core.Transaction, error)
+	GetTransactionInfoByIdFunc  func(context.Context, *api.BytesMessage) (*core.TransactionInfo, error)
+	GetNodeInfoFunc             func(context.Context, *api.EmptyMessage) (*core.NodeInfo, error)
+	GetEnergyPricesFunc         func(context.Context, *api.EmptyMessage) (*api.PricesResponseMessage, error)
+	GetBandwidthPricesFunc      func(context.Context, *api.EmptyMessage) (*api.PricesResponseMessage, error)
+	ListWitnessesFunc           func(context.Context, *api.EmptyMessage) (*api.WitnessList, error)
+	ListProposalsFunc           func(context.Context, *api.EmptyMessage) (*api.ProposalList, error)
+	TriggerConstantContractFunc func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error)
+	BroadcastTransactionFunc    func(context.Context, *core.Transaction) (*api.Return, error)
+	FreezeBalanceV2Func         func(context.Context, *core.FreezeBalanceV2Contract) (*api.TransactionExtention, error)
+	UnfreezeBalanceV2Func       func(context.Context, *core.UnfreezeBalanceV2Contract) (*api.TransactionExtention, error)
+	CreateTransaction2Func      func(context.Context, *core.TransferContract) (*api.TransactionExtention, error)
+	TriggerContractFunc         func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error)
+	VoteWitnessAccount2Func     func(context.Context, *core.VoteWitnessContract) (*api.TransactionExtention, error)
+	EstimateEnergyFunc          func(context.Context, *core.TriggerSmartContract) (*api.EstimateEnergyMessage, error)
+	GetContractFunc             func(context.Context, *api.BytesMessage) (*core.SmartContract, error)
 }
 
 func (m *mockWalletServer) GetAccount(ctx context.Context, in *core.Account) (*core.Account, error) {
@@ -110,6 +119,69 @@ func (m *mockWalletServer) ListProposals(ctx context.Context, in *api.EmptyMessa
 		return m.ListProposalsFunc(ctx, in)
 	}
 	return m.UnimplementedWalletServer.ListProposals(ctx, in)
+}
+
+func (m *mockWalletServer) TriggerConstantContract(ctx context.Context, in *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+	if m.TriggerConstantContractFunc != nil {
+		return m.TriggerConstantContractFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.TriggerConstantContract(ctx, in)
+}
+
+func (m *mockWalletServer) BroadcastTransaction(ctx context.Context, in *core.Transaction) (*api.Return, error) {
+	if m.BroadcastTransactionFunc != nil {
+		return m.BroadcastTransactionFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.BroadcastTransaction(ctx, in)
+}
+
+func (m *mockWalletServer) FreezeBalanceV2(ctx context.Context, in *core.FreezeBalanceV2Contract) (*api.TransactionExtention, error) {
+	if m.FreezeBalanceV2Func != nil {
+		return m.FreezeBalanceV2Func(ctx, in)
+	}
+	return m.UnimplementedWalletServer.FreezeBalanceV2(ctx, in)
+}
+
+func (m *mockWalletServer) UnfreezeBalanceV2(ctx context.Context, in *core.UnfreezeBalanceV2Contract) (*api.TransactionExtention, error) {
+	if m.UnfreezeBalanceV2Func != nil {
+		return m.UnfreezeBalanceV2Func(ctx, in)
+	}
+	return m.UnimplementedWalletServer.UnfreezeBalanceV2(ctx, in)
+}
+
+func (m *mockWalletServer) CreateTransaction2(ctx context.Context, in *core.TransferContract) (*api.TransactionExtention, error) {
+	if m.CreateTransaction2Func != nil {
+		return m.CreateTransaction2Func(ctx, in)
+	}
+	return m.UnimplementedWalletServer.CreateTransaction2(ctx, in)
+}
+
+func (m *mockWalletServer) TriggerContract(ctx context.Context, in *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+	if m.TriggerContractFunc != nil {
+		return m.TriggerContractFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.TriggerContract(ctx, in)
+}
+
+func (m *mockWalletServer) VoteWitnessAccount2(ctx context.Context, in *core.VoteWitnessContract) (*api.TransactionExtention, error) {
+	if m.VoteWitnessAccount2Func != nil {
+		return m.VoteWitnessAccount2Func(ctx, in)
+	}
+	return m.UnimplementedWalletServer.VoteWitnessAccount2(ctx, in)
+}
+
+func (m *mockWalletServer) EstimateEnergy(ctx context.Context, in *core.TriggerSmartContract) (*api.EstimateEnergyMessage, error) {
+	if m.EstimateEnergyFunc != nil {
+		return m.EstimateEnergyFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.EstimateEnergy(ctx, in)
+}
+
+func (m *mockWalletServer) GetContract(ctx context.Context, in *api.BytesMessage) (*core.SmartContract, error) {
+	if m.GetContractFunc != nil {
+		return m.GetContractFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.GetContract(ctx, in)
 }
 
 // newMockClient creates a GrpcClient connected to an in-memory gRPC server.

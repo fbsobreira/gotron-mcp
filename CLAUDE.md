@@ -108,4 +108,4 @@ result["txid"] = hex.EncodeToString(tx.Txid)
 - Follow Go conventions: gofmt, goimports, effective Go
 - Handle all errors explicitly — no blank `_` for error returns
 - Table-driven tests
-- Empty line at end of files
+- Files must end with exactly one newline character — no extra blank line

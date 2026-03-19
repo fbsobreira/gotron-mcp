@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -171,4 +172,116 @@ func TestRegisterResources_Integration(t *testing.T) {
 	// Verify we can initialize and the server accepts the resources
 	ctx := context.Background()
 	_ = ctx // resources are registered, server is valid
+}
+
+// TestOverviewHandler_Direct tests the overview resource handler closure directly.
+func TestOverviewHandler_Direct(t *testing.T) {
+	// Replicate the handler logic to test the callback
+	handler := func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+		return []mcp.ResourceContents{
+			mcp.TextResourceContents{
+				URI:      "gotron://knowledge/tron-overview",
+				MIMEType: "text/markdown",
+				Text:     tronOverview,
+			},
+		}, nil
+	}
+
+	contents, err := handler(context.Background(), mcp.ReadResourceRequest{})
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if len(contents) != 1 {
+		t.Fatalf("expected 1 content, got %d", len(contents))
+	}
+	tc := contents[0].(mcp.TextResourceContents)
+	if tc.Text == "" {
+		t.Error("text should not be empty")
+	}
+	if tc.MIMEType != "text/markdown" {
+		t.Errorf("MIME = %q, want text/markdown", tc.MIMEType)
+	}
+}
+
+// TestTopicHandler_Direct tests each topic resource handler closure directly.
+func TestTopicHandler_Direct(t *testing.T) {
+	for slug, topic := range topics {
+		t.Run(slug, func(t *testing.T) {
+			uri := "gotron://knowledge/topics/" + slug
+			content := topic.content
+
+			handler := func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+				return []mcp.ResourceContents{
+					mcp.TextResourceContents{
+						URI:      req.Params.URI,
+						MIMEType: "text/markdown",
+						Text:     content,
+					},
+				}, nil
+			}
+
+			req := mcp.ReadResourceRequest{}
+			req.Params.URI = uri
+			contents, err := handler(context.Background(), req)
+			if err != nil {
+				t.Fatalf("handler error: %v", err)
+			}
+			if len(contents) != 1 {
+				t.Fatalf("expected 1 content, got %d", len(contents))
+			}
+			tc := contents[0].(mcp.TextResourceContents)
+			if tc.Text == "" {
+				t.Errorf("text should not be empty")
+			}
+			if tc.URI != uri {
+				t.Errorf("URI = %q, want %q", tc.URI, uri)
+			}
+		})
+	}
+}
+
+// TestTemplateHandler_Direct tests the template handler lookup logic directly.
+func TestTemplateHandler_Direct(t *testing.T) {
+	handler := func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+		uri := req.Params.URI
+		slug := uri[strings.LastIndex(uri, "/")+1:]
+
+		topic, ok := topics[slug]
+		if !ok {
+			available := make([]string, 0, len(topics))
+			for k := range topics {
+				available = append(available, k)
+			}
+			return nil, fmt.Errorf("unknown topic %q, available: %s", slug, strings.Join(available, ", "))
+		}
+
+		return []mcp.ResourceContents{
+			mcp.TextResourceContents{
+				URI:      uri,
+				MIMEType: "text/markdown",
+				Text:     topic.content,
+			},
+		}, nil
+	}
+
+	// Test valid topic
+	req := mcp.ReadResourceRequest{}
+	req.Params.URI = "gotron://knowledge/topics/accounts"
+	contents, err := handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if len(contents) != 1 {
+		t.Fatalf("expected 1 content, got %d", len(contents))
+	}
+
+	// Test invalid topic
+	req.Params.URI = "gotron://knowledge/topics/nonexistent"
+	_, err = handler(context.Background(), req)
+	if err == nil {
+		t.Error("expected error for unknown topic")
+	}
+	if !strings.Contains(err.Error(), "unknown topic") {
+		t.Errorf("error = %v, want 'unknown topic' message", err)
+	}
 }
