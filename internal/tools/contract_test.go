@@ -680,3 +680,262 @@ func TestTriggerContract_PlainParams(t *testing.T) {
 		})
 	}
 }
+
+func TestTriggerConstantContract_PrePackedData(t *testing.T) {
+	mock := mockContractServer()
+	mock.TriggerConstantContractFunc = func(_ context.Context, ct *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+		if len(ct.Data) == 0 {
+			t.Error("expected pre-packed data to be set on TriggerSmartContract")
+		}
+		return &api.TransactionExtention{
+			ConstantResult: [][]byte{abiEncodeUint256(big.NewInt(42))},
+			Result:         &api.Return{Result: true},
+		}, nil
+	}
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleTriggerConstantContract(pool), map[string]any{
+		"contract_address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"data":             "0x70a082310000000000000000000000005cbdd86a2fa8dc4bddd8a8f69dba48572eec07fb",
+	})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", result.Content)
+	}
+	data := extractJSON(t, result)
+	if data["result_hex"] == nil || data["result_hex"] == "" {
+		t.Error("result_hex should not be empty")
+	}
+}
+
+func TestTriggerConstantContract_DataRequiresNoMethod(t *testing.T) {
+	mock := mockContractServer()
+	mock.TriggerConstantContractFunc = func(_ context.Context, _ *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+		return &api.TransactionExtention{
+			ConstantResult: [][]byte{abiEncodeUint256(big.NewInt(1))},
+			Result:         &api.Return{Result: true},
+		}, nil
+	}
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleTriggerConstantContract(pool), map[string]any{
+		"contract_address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"data":             "70a08231",
+	})
+	if result.IsError {
+		t.Fatalf("expected success with data and no method, got error: %v", result.Content)
+	}
+}
+
+func TestTriggerConstantContract_MethodRequiredWithoutData(t *testing.T) {
+	pool := newMockPool(t, mockContractServer())
+	result := callTool(t, handleTriggerConstantContract(pool), map[string]any{
+		"contract_address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+	})
+	if !result.IsError {
+		t.Error("expected error when neither method nor data is provided")
+	}
+}
+
+func TestTriggerConstantContract_CallValue(t *testing.T) {
+	mock := mockContractServer()
+	mock.TriggerConstantContractFunc = func(_ context.Context, ct *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+		if ct.CallValue != 1_000_000 {
+			t.Errorf("CallValue = %d, want 1000000", ct.CallValue)
+		}
+		return &api.TransactionExtention{
+			ConstantResult: [][]byte{abiEncodeUint256(big.NewInt(1))},
+			Result:         &api.Return{Result: true},
+		}, nil
+	}
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleTriggerConstantContract(pool), map[string]any{
+		"contract_address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"method":           "deposit()",
+		"call_value":       float64(1_000_000),
+	})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", result.Content)
+	}
+}
+
+func TestTriggerConstantContract_InvalidDataHex(t *testing.T) {
+	pool := newMockPool(t, mockContractServer())
+	result := callTool(t, handleTriggerConstantContract(pool), map[string]any{
+		"contract_address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"data":             "not-valid-hex",
+	})
+	if !result.IsError {
+		t.Error("expected error for invalid data hex")
+	}
+}
+
+func TestTriggerContract_PrePackedData(t *testing.T) {
+	mock := &mockWalletServer{
+		TriggerContractFunc: func(_ context.Context, ct *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+			if len(ct.Data) == 0 {
+				t.Error("expected pre-packed data to be set")
+			}
+			return &api.TransactionExtention{
+				Transaction: &core.Transaction{RawData: &core.TransactionRaw{}},
+				Txid:        []byte("mock-txid-1234567890123456"),
+				Result:      &api.Return{Result: true},
+			}, nil
+		},
+	}
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleTriggerContract(pool), map[string]any{
+		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"contract_address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8",
+		"data":             "0xa9059cbb0000000000000000000000005cbdd86a2fa8dc4bddd8a8f69dba48572eec07fb00000000000000000000000000000000000000000000000000000000000f4240",
+	})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", result.Content)
+	}
+}
+
+func TestTriggerContract_MethodRequiredWithoutData(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+	result := callTool(t, handleTriggerContract(pool), map[string]any{
+		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"contract_address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8",
+	})
+	if !result.IsError {
+		t.Error("expected error when neither method nor data is provided")
+	}
+}
+
+func TestTriggerConstantContract_TokenValue(t *testing.T) {
+	mock := mockContractServer()
+	mock.TriggerConstantContractFunc = func(_ context.Context, ct *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+		if ct.TokenId != 1000001 {
+			t.Errorf("TokenId = %d, want 1000001", ct.TokenId)
+		}
+		if ct.CallTokenValue != 500 {
+			t.Errorf("CallTokenValue = %d, want 500", ct.CallTokenValue)
+		}
+		return &api.TransactionExtention{
+			ConstantResult: [][]byte{abiEncodeUint256(big.NewInt(1))},
+			Result:         &api.Return{Result: true},
+		}, nil
+	}
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleTriggerConstantContract(pool), map[string]any{
+		"contract_address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"method":           "deposit()",
+		"token_id":         "1000001",
+		"token_value":      float64(500),
+	})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", result.Content)
+	}
+}
+
+func TestTriggerConstantContract_TokenValueWithoutID(t *testing.T) {
+	pool := newMockPool(t, mockContractServer())
+	result := callTool(t, handleTriggerConstantContract(pool), map[string]any{
+		"contract_address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"method":           "deposit()",
+		"token_value":      float64(500),
+	})
+	if !result.IsError {
+		t.Error("expected error for token_value without token_id")
+	}
+}
+
+func TestTriggerConstantContract_TokenIDWithoutValue(t *testing.T) {
+	pool := newMockPool(t, mockContractServer())
+	result := callTool(t, handleTriggerConstantContract(pool), map[string]any{
+		"contract_address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"method":           "deposit()",
+		"token_id":         "1000001",
+	})
+	if !result.IsError {
+		t.Error("expected error for token_id without token_value")
+	}
+}
+
+func TestTriggerConstantContract_NegativeCallValue(t *testing.T) {
+	pool := newMockPool(t, mockContractServer())
+	result := callTool(t, handleTriggerConstantContract(pool), map[string]any{
+		"contract_address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"method":           "deposit()",
+		"call_value":       float64(-1),
+	})
+	if !result.IsError {
+		t.Error("expected error for negative call_value")
+	}
+}
+
+func TestTriggerConstantContract_NegativeTokenValue(t *testing.T) {
+	pool := newMockPool(t, mockContractServer())
+	result := callTool(t, handleTriggerConstantContract(pool), map[string]any{
+		"contract_address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"method":           "deposit()",
+		"token_id":         "1000001",
+		"token_value":      float64(-1),
+	})
+	if !result.IsError {
+		t.Error("expected error for negative token_value")
+	}
+}
+
+func TestTriggerConstantContract_DataAndMethodIgnoresMethod(t *testing.T) {
+	mock := mockContractServer()
+	mock.TriggerConstantContractFunc = func(_ context.Context, ct *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+		// When data is provided, the SDK receives raw bytes, not method+params
+		if len(ct.Data) == 0 {
+			t.Error("expected pre-packed data")
+		}
+		return &api.TransactionExtention{
+			ConstantResult: [][]byte{abiEncodeUint256(big.NewInt(1))},
+			Result:         &api.Return{Result: true},
+		}, nil
+	}
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleTriggerConstantContract(pool), map[string]any{
+		"contract_address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"method":           "balanceOf(address)",
+		"data":             "70a08231",
+	})
+	if result.IsError {
+		t.Fatalf("expected success when both data and method are provided, got error: %v", result.Content)
+	}
+}
+
+func TestTriggerConstantContract_OversizedData(t *testing.T) {
+	pool := newMockPool(t, mockContractServer())
+	// Generate data hex > 1 MiB decoded (each "ab" = 1 byte)
+	bigData := strings.Repeat("ab", (1<<20)+1)
+	result := callTool(t, handleTriggerConstantContract(pool), map[string]any{
+		"contract_address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"data":             bigData,
+	})
+	if !result.IsError {
+		t.Error("expected error for oversized data")
+	}
+}
+
+func TestTriggerContract_NegativeCallValue(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+	result := callTool(t, handleTriggerContract(pool), map[string]any{
+		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"contract_address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8",
+		"method":           "transfer(address,uint256)",
+		"params":           `["TJRabPrwbZy45sbavfcjinPJC18kjpRTv8", "1000"]`,
+		"call_value":       float64(-1),
+	})
+	if !result.IsError {
+		t.Error("expected error for negative call_value")
+	}
+}
+
+func TestTriggerContract_OversizedData(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+	bigData := strings.Repeat("ab", (1<<20)+1)
+	result := callTool(t, handleTriggerContract(pool), map[string]any{
+		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"contract_address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8",
+		"data":             bigData,
+	})
+	if !result.IsError {
+		t.Error("expected error for oversized data")
+	}
+}

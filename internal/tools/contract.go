@@ -25,11 +25,15 @@ import (
 func RegisterContractReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("trigger_constant_contract",
-			mcp.WithDescription("Call a read-only (view/pure) smart contract method. No transaction created, no fees. Returns decoded result."),
+			mcp.WithDescription("Call a read-only (view/pure) smart contract method. No transaction created, no fees. Returns decoded result. Provide either method+params OR data (pre-packed calldata)."),
 			mcp.WithString("from", mcp.Description("Caller address (base58, starts with T; optional — defaults to zero address)")),
 			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
-			mcp.WithString("method", mcp.Required(), mcp.Description("Method signature (e.g., 'totalSupply()', 'balanceOf(address)')")),
+			mcp.WithString("method", mcp.Description("Method signature (e.g., 'totalSupply()', 'balanceOf(address)'). Required unless data is provided.")),
 			mcp.WithString("params", mcp.Description("Method parameters as JSON array. Plain values: [\"TJD...\", \"1000\"] (types inferred from method signature). Typed objects also accepted: [{\"address\": \"TJD...\"}, {\"uint256\": \"1000\"}]")),
+			mcp.WithString("data", mcp.Description("Pre-packed ABI calldata as hex (0x prefix optional). When provided, method and params are ignored.")),
+			mcp.WithNumber("call_value", mcp.Description("Amount in SUN to send with call (default: 0, 1 TRX = 1000000 SUN). Required for simulating payable functions.")),
+			mcp.WithString("token_id", mcp.Description("TRC10 token ID for simulating TRC10 token transfers")),
+			mcp.WithNumber("token_value", mcp.Description("TRC10 token amount to send with call (default: 0)")),
 		),
 		handleTriggerConstantContract(pool),
 	)
@@ -76,11 +80,12 @@ func RegisterContractReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 func RegisterContractWriteTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("trigger_contract",
-			mcp.WithDescription("Call a smart contract method. Returns unsigned transaction hex for signing."),
+			mcp.WithDescription("Call a smart contract method. Returns unsigned transaction hex for signing. Provide either method+params OR data (pre-packed calldata)."),
 			mcp.WithString("from", mcp.Required(), mcp.Description("Caller address (base58, starts with T)")),
 			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
-			mcp.WithString("method", mcp.Required(), mcp.Description("Method signature (e.g., 'transfer(address,uint256)')")),
-			mcp.WithString("params", mcp.Required(), mcp.Description("Method parameters as JSON array. Plain values: [\"TJD...\", \"1000\"] (types inferred from method signature). Typed objects also accepted: [{\"address\": \"TJD...\"}, {\"uint256\": \"1000\"}]")),
+			mcp.WithString("method", mcp.Description("Method signature (e.g., 'transfer(address,uint256)'). Required unless data is provided.")),
+			mcp.WithString("params", mcp.Description("Method parameters as JSON array. Plain values: [\"TJD...\", \"1000\"] (types inferred from method signature). Typed objects also accepted: [{\"address\": \"TJD...\"}, {\"uint256\": \"1000\"}]")),
+			mcp.WithString("data", mcp.Description("Pre-packed ABI calldata as hex (0x prefix optional). When provided, method and params are ignored.")),
 			mcp.WithNumber("fee_limit", mcp.Description("Fee limit in whole TRX (integer), range 0-15000 (default: 100)")),
 			mcp.WithNumber("call_value", mcp.Description("Amount to send with call in SUN (default: 0)")),
 		),
@@ -146,8 +151,8 @@ func handleDecodeABIOutput(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		dataHex = strings.TrimPrefix(strings.TrimPrefix(dataHex, "0x"), "0X")
-		if len(dataHex) > 1<<20 {
+		dataHex = stripHexPrefix(dataHex)
+		if len(dataHex) > maxCalldataHexLen {
 			return mcp.NewToolResultError("decode_abi_output: data exceeds maximum length"), nil
 		}
 		data, err := hex.DecodeString(dataHex)
@@ -260,9 +265,15 @@ func handleEstimateEnergy(pool *nodepool.Pool) server.ToolHandlerFunc {
 func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		from := req.GetString("from", "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb") // zero address default
-		contract := req.GetString("contract_address", "")
+		contractAddr := req.GetString("contract_address", "")
 		method := req.GetString("method", "")
 		params := req.GetString("params", "[]")
+		dataHex := req.GetString("data", "")
+		callValue := int64(req.GetInt("call_value", 0))
+		tokenID := req.GetString("token_id", "")
+		tokenValue := int64(req.GetInt("token_value", 0))
+		args := req.GetArguments()
+		_, hasTokenValue := args["token_value"]
 		conn := pool.Client()
 
 		if from != "" {
@@ -270,18 +281,64 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 				return mcp.NewToolResultError(fmt.Sprintf("invalid from address: %v", err)), nil
 			}
 		}
-		if err := validateAddress(contract); err != nil {
+		if err := validateAddress(contractAddr); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		tx, err := conn.TriggerConstantContractCtx(ctx, from, contract, method, params)
+		// Validate value params
+		if callValue < 0 {
+			return mcp.NewToolResultError("trigger_constant_contract: call_value must be non-negative"), nil
+		}
+		if tokenValue < 0 {
+			return mcp.NewToolResultError("trigger_constant_contract: token_value must be non-negative"), nil
+		}
+		if (tokenID != "") != hasTokenValue {
+			return mcp.NewToolResultError("trigger_constant_contract: token_id and token_value must both be provided together"), nil
+		}
+
+		// Build constant call options
+		var opts []client.ConstantCallOption
+		if callValue > 0 {
+			opts = append(opts, client.WithCallValue(callValue))
+		}
+		if tokenID != "" && hasTokenValue {
+			opt, err := client.WithTokenValue(tokenID, tokenValue)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("trigger_constant_contract: invalid token_id: %v", err)), nil
+			}
+			opts = append(opts, opt)
+		}
+
+		var tx *api.TransactionExtention
+		var err error
+
+		if dataHex != "" {
+			// Pre-packed calldata mode — ignore method entirely
+			method = ""
+			dataHex = stripHexPrefix(dataHex)
+			if len(dataHex) > maxCalldataHexLen {
+				return mcp.NewToolResultError("trigger_constant_contract: data exceeds maximum length"), nil
+			}
+			data, decErr := hex.DecodeString(dataHex)
+			if decErr != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("trigger_constant_contract: invalid data hex: %v", decErr)), nil
+			}
+			tx, err = conn.TriggerConstantContractWithDataCtx(ctx, from, contractAddr, data, opts...)
+		} else {
+			if method == "" {
+				return mcp.NewToolResultError("trigger_constant_contract: method is required when data is not provided"), nil
+			}
+			tx, err = conn.TriggerConstantContractCtx(ctx, from, contractAddr, method, params, opts...)
+		}
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("trigger_constant_contract: %v", err)), nil
 		}
 
 		result := map[string]any{
-			"contract_address": contract,
-			"method":           method,
+			"contract_address": contractAddr,
+		}
+		if method != "" {
+			result["method"] = method
 		}
 
 		if len(tx.ConstantResult) > 0 {
@@ -289,11 +346,13 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 			result["result_hex"] = hex.EncodeToString(rawResult)
 
 			// Try to decode the result using ABI if available
-			contractABI, abiErr := conn.GetContractABIResolvedCtx(ctx, contract)
-			if abiErr == nil && contractABI != nil {
-				decoded, decErr := abi.DecodeOutput(contractABI, method, rawResult)
-				if decErr == nil && decoded != nil {
-					result["result_decoded"] = stringifyDecoded(decoded)
+			if method != "" {
+				contractABI, abiErr := conn.GetContractABIResolvedCtx(ctx, contractAddr)
+				if abiErr == nil && contractABI != nil {
+					decoded, decErr := abi.DecodeOutput(contractABI, method, rawResult)
+					if decErr == nil && decoded != nil {
+						result["result_decoded"] = stringifyDecoded(decoded)
+					}
 				}
 			}
 
@@ -314,26 +373,50 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 func handleTriggerContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		from := req.GetString("from", "")
-		contract := req.GetString("contract_address", "")
+		contractAddr := req.GetString("contract_address", "")
 		method := req.GetString("method", "")
 		params := req.GetString("params", "")
+		dataHex := req.GetString("data", "")
 		feeLimit := req.GetInt("fee_limit", 100)
-		callValue := req.GetInt("call_value", 0)
+		callValue := int64(req.GetInt("call_value", 0))
 		conn := pool.Client()
 
 		if err := validateAddress(from); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid from address: %v", err)), nil
 		}
-		if err := validateAddress(contract); err != nil {
+		if err := validateAddress(contractAddr); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
+		if callValue < 0 {
+			return mcp.NewToolResultError("trigger_contract: call_value must be non-negative"), nil
+		}
 		if feeLimit < 0 || feeLimit > 15000 {
 			return mcp.NewToolResultError("fee_limit must be between 0 and 15000 TRX"), nil
 		}
 		feeLimitSun := int64(feeLimit) * 1_000_000
 
-		tx, err := conn.TriggerContractCtx(ctx, from, contract, method, params, feeLimitSun, int64(callValue), "", 0)
+		var tx *api.TransactionExtention
+		var err error
+
+		if dataHex != "" {
+			// Pre-packed calldata mode — ignore method entirely
+			method = ""
+			dataHex = stripHexPrefix(dataHex)
+			if len(dataHex) > maxCalldataHexLen {
+				return mcp.NewToolResultError("trigger_contract: data exceeds maximum length"), nil
+			}
+			data, decErr := hex.DecodeString(dataHex)
+			if decErr != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("trigger_contract: invalid data hex: %v", decErr)), nil
+			}
+			tx, err = conn.TriggerContractWithDataCtx(ctx, from, contractAddr, data, feeLimitSun, callValue, "", 0)
+		} else {
+			if method == "" {
+				return mcp.NewToolResultError("trigger_contract: method is required when data is not provided"), nil
+			}
+			tx, err = conn.TriggerContractCtx(ctx, from, contractAddr, method, params, feeLimitSun, callValue, "", 0)
+		}
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("trigger_contract: %v", err)), nil
 		}
@@ -347,10 +430,12 @@ func handleTriggerContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 			"transaction_hex":  hex.EncodeToString(txBytes),
 			"txid":             hex.EncodeToString(tx.Txid),
 			"from":             from,
-			"contract_address": contract,
-			"method":           method,
+			"contract_address": contractAddr,
 			"fee_limit_trx":    feeLimit,
 			"type":             "TriggerSmartContract",
+		}
+		if method != "" {
+			result["method"] = method
 		}
 
 		if len(tx.ConstantResult) > 0 {
@@ -392,6 +477,14 @@ func stringifyValue(v interface{}) interface{} {
 		return v
 	}
 }
+
+// stripHexPrefix removes a leading 0x or 0X prefix from a hex string.
+func stripHexPrefix(s string) string {
+	return strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
+}
+
+// maxCalldataHexLen is the maximum hex-encoded calldata length accepted (1 MiB decoded).
+const maxCalldataHexLen = 2 * (1 << 20)
 
 func isEstimateEnergyUnsupported(err error) bool {
 	if errors.Is(err, client.ErrEstimateEnergyNotSupported) {
