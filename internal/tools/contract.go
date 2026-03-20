@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"strings"
 
 	"math/big"
@@ -426,8 +427,8 @@ func handleTriggerContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 		args := req.GetArguments()
 		if _, has := args["permission_id"]; has {
 			pid := req.GetInt("permission_id", 0)
-			if pid < 0 {
-				return mcp.NewToolResultError("trigger_contract: permission_id must be non-negative"), nil
+			if pid < 0 || pid > math.MaxInt32 {
+				return mcp.NewToolResultError("trigger_contract: permission_id must be between 0 and 2147483647"), nil
 			}
 			call = call.WithPermissionID(int32(pid))
 		}

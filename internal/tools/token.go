@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math"
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/retry"
@@ -227,8 +228,8 @@ func handleTransferTRC20(pool *nodepool.Pool, cache *trc20.MetadataCache) server
 		args := req.GetArguments()
 		if _, has := args["permission_id"]; has {
 			pid := req.GetInt("permission_id", 0)
-			if pid < 0 {
-				return mcp.NewToolResultError("transfer_trc20: permission_id must be non-negative"), nil
+			if pid < 0 || pid > math.MaxInt32 {
+				return mcp.NewToolResultError("transfer_trc20: permission_id must be between 0 and 2147483647"), nil
 			}
 			call = call.WithPermissionID(int32(pid))
 		}
