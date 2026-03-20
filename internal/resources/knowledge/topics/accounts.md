@@ -183,7 +183,7 @@ privKey, pubKey := keys.FromMnemonicSeedAndPassphrase(mnemonic, passphrase, 0)
 
 // Preferred (v0.25.3+):
 // import "github.com/fbsobreira/gotron-sdk/pkg/mnemonic"
-// privKey, pubKey := mnemonic.FromSeedAndPassphrase(m, passphrase, 0)
+// privKey, pubKey := mnemonic.FromSeedAndPassphrase(seedPhrase, passphrase, 0)
 
 // Manual: parse BIP44 path (both formats accepted — with or without m/ prefix)
 params, err := hd.NewParamsFromPath("m/44'/195'/0'/0/0")
