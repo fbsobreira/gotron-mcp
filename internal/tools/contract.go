@@ -425,8 +425,11 @@ func handleTriggerContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 		// Apply optional permission_id for multi-sig
 		args := req.GetArguments()
 		if _, has := args["permission_id"]; has {
-			pid := int32(req.GetInt("permission_id", 0))
-			call = call.WithPermissionID(pid)
+			pid := req.GetInt("permission_id", 0)
+			if pid < 0 {
+				return mcp.NewToolResultError("trigger_contract: permission_id must be non-negative"), nil
+			}
+			call = call.WithPermissionID(int32(pid))
 		}
 
 		tx, err := call.Build(ctx)
