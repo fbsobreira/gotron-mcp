@@ -55,6 +55,11 @@ import "github.com/fbsobreira/gotron-sdk/pkg/standards/trc20"
 
 token := trc20.New(conn, "TContractAddr...")
 
+// With metadata caching (recommended for repeated queries)
+cache := trc20.NewMetadataCache(256)
+token = trc20.New(conn, "TContractAddr...", trc20.WithCache(cache))
+// Name, symbol, and decimals are cached after first fetch — thread-safe LRU
+
 // Get all metadata in one call
 info, err := token.Info(ctx)
 // info.Name, info.Symbol, info.Decimals (uint8), info.TotalSupply (*big.Int)
@@ -101,6 +106,6 @@ energy, err := token.Transfer(from, to, amount).EstimateEnergy(ctx)
 ## MCP Tools
 
 - `get_trc20_balance` — Get TRC20 token balance for an account
-- `get_trc20_token_info` — Get token name, symbol, and decimals
+- `get_trc20_token_info` — Get token name, symbol, decimals, and total supply
 - `transfer_trc20` — Create unsigned TRC20 transfer transaction
 - `estimate_trc20_energy` — Estimate energy cost for a TRC20 transfer (dry-run)

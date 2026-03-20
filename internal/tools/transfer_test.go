@@ -176,7 +176,7 @@ func TestTransferTRX_WithPermissionID(t *testing.T) {
 
 func TestTransferTRC20_InvalidAddress(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleTransferTRC20(pool), map[string]any{
+	result := callTool(t, handleTransferTRC20(pool, nil), map[string]any{
 		"from":             "invalid",
 		"to":               "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -189,7 +189,7 @@ func TestTransferTRC20_InvalidAddress(t *testing.T) {
 
 func TestTransferTRC20_InvalidContractAddress(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleTransferTRC20(pool), map[string]any{
+	result := callTool(t, handleTransferTRC20(pool, nil), map[string]any{
 		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":               "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"contract_address": "invalid",
@@ -202,7 +202,7 @@ func TestTransferTRC20_InvalidContractAddress(t *testing.T) {
 
 func TestTransferTRC20_InvalidToAddress(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleTransferTRC20(pool), map[string]any{
+	result := callTool(t, handleTransferTRC20(pool, nil), map[string]any{
 		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":               "bad",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -224,7 +224,7 @@ func TestTransferTRC20_InvalidFeeLimit(t *testing.T) {
 		},
 	}
 	pool := newMockPool(t, mock)
-	result := callTool(t, handleTransferTRC20(pool), map[string]any{
+	result := callTool(t, handleTransferTRC20(pool, nil), map[string]any{
 		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -257,7 +257,7 @@ func TestTransferTRC20_Success(t *testing.T) {
 		},
 	}
 	pool := newMockPool(t, mock)
-	result := callTool(t, handleTransferTRC20(pool), map[string]any{
+	result := callTool(t, handleTransferTRC20(pool, nil), map[string]any{
 		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",

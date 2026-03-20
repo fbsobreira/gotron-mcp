@@ -20,8 +20,8 @@ func TestRegisterAllTools(t *testing.T) {
 	RegisterProposalTools(s, pool)
 	RegisterResourceTools(s, pool)
 	RegisterSignTools(s, pool, t.TempDir())
-	RegisterTokenTools(s, pool)
-	RegisterTransferTools(s, pool)
+	trc20Cache := RegisterTokenTools(s, pool)
+	RegisterTransferTools(s, pool, trc20Cache)
 	RegisterWitnessReadTools(s, pool)
 	RegisterWitnessWriteTools(s, pool)
 	RegisterHistoryTools(s, &mockHistoryClient{

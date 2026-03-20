@@ -37,7 +37,7 @@ func abiEncodeString(s string) []byte {
 }
 
 // mockTRC20Server creates a mock that responds to TriggerConstantContract
-// with ABI-encoded results for balance, decimals, name, and symbol queries.
+// with ABI-encoded results for balance, decimals, name, symbol, and totalSupply queries.
 func mockTRC20Server(balance *big.Int, decimals int64, name, symbol string) *mockWalletServer {
 	return &mockWalletServer{
 		TriggerConstantContractFunc: func(_ context.Context, in *core.TriggerSmartContract) (*api.TransactionExtention, error) {
@@ -58,6 +58,8 @@ func mockTRC20Server(balance *big.Int, decimals int64, name, symbol string) *moc
 				result = abiEncodeString(name)
 			case bytes.Equal(selector, []byte{0x95, 0xd8, 0x9b, 0x41}): // symbol()
 				result = abiEncodeString(symbol)
+			case bytes.Equal(selector, []byte{0x18, 0x16, 0x0d, 0xdd}): // totalSupply()
+				result = abiEncodeUint256(big.NewInt(1_000_000_000))
 			default:
 				return nil, fmt.Errorf("unexpected selector: %x", selector)
 			}
@@ -70,9 +72,9 @@ func mockTRC20Server(balance *big.Int, decimals int64, name, symbol string) *moc
 	}
 }
 
-// mockTRC20EstimateServer extends mockTRC20Server to also handle
-// transfer(address,uint256) selector for WithEstimate() dry-runs.
-func mockTRC20EstimateServer(decimals int64, energyUsed int64) *mockWalletServer {
+// mockTRC20EstimateServer creates a mock that handles decimals() via
+// TriggerConstantContract and transfer energy estimation via EstimateEnergy.
+func mockTRC20EstimateServer(decimals int64, energyRequired int64) *mockWalletServer {
 	return &mockWalletServer{
 		TriggerConstantContractFunc: func(_ context.Context, in *core.TriggerSmartContract) (*api.TransactionExtention, error) {
 			data := in.Data
@@ -85,8 +87,6 @@ func mockTRC20EstimateServer(decimals int64, energyUsed int64) *mockWalletServer
 			switch {
 			case bytes.Equal(selector, []byte{0x31, 0x3c, 0xe5, 0x67}): // decimals()
 				result = abiEncodeUint256(big.NewInt(decimals))
-			case bytes.Equal(selector, []byte{0xa9, 0x05, 0x9c, 0xbb}): // transfer(address,uint256)
-				result = abiEncodeUint256(big.NewInt(1)) // success = true
 			default:
 				return nil, fmt.Errorf("unexpected selector: %x", selector)
 			}
@@ -94,7 +94,12 @@ func mockTRC20EstimateServer(decimals int64, energyUsed int64) *mockWalletServer
 			return &api.TransactionExtention{
 				ConstantResult: [][]byte{result},
 				Result:         &api.Return{Result: true},
-				EnergyUsed:     energyUsed,
+			}, nil
+		},
+		EstimateEnergyFunc: func(_ context.Context, in *core.TriggerSmartContract) (*api.EstimateEnergyMessage, error) {
+			return &api.EstimateEnergyMessage{
+				Result:         &api.Return{Result: true},
+				EnergyRequired: energyRequired,
 			}, nil
 		},
 	}
@@ -103,7 +108,7 @@ func mockTRC20EstimateServer(decimals int64, energyUsed int64) *mockWalletServer
 func TestEstimateTRC20Energy_Success(t *testing.T) {
 	mock := mockTRC20EstimateServer(6, 29000)
 	pool := newMockPool(t, mock)
-	result := callTool(t, handleEstimateTRC20Energy(pool), map[string]any{
+	result := callTool(t, handleEstimateTRC20Energy(pool, nil), map[string]any{
 		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -123,7 +128,7 @@ func TestEstimateTRC20Energy_Success(t *testing.T) {
 
 func TestEstimateTRC20Energy_InvalidTo(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleEstimateTRC20Energy(pool), map[string]any{
+	result := callTool(t, handleEstimateTRC20Energy(pool, nil), map[string]any{
 		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":               "bad",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -136,7 +141,7 @@ func TestEstimateTRC20Energy_InvalidTo(t *testing.T) {
 
 func TestEstimateTRC20Energy_InvalidContract(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleEstimateTRC20Energy(pool), map[string]any{
+	result := callTool(t, handleEstimateTRC20Energy(pool, nil), map[string]any{
 		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"contract_address": "bad",
@@ -149,7 +154,7 @@ func TestEstimateTRC20Energy_InvalidContract(t *testing.T) {
 
 func TestEstimateTRC20Energy_InvalidFrom(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleEstimateTRC20Energy(pool), map[string]any{
+	result := callTool(t, handleEstimateTRC20Energy(pool, nil), map[string]any{
 		"from":             "bad",
 		"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -163,7 +168,7 @@ func TestEstimateTRC20Energy_InvalidFrom(t *testing.T) {
 func TestEstimateTRC20Energy_InvalidAmount(t *testing.T) {
 	mock := mockTRC20EstimateServer(6, 29000)
 	pool := newMockPool(t, mock)
-	result := callTool(t, handleEstimateTRC20Energy(pool), map[string]any{
+	result := callTool(t, handleEstimateTRC20Energy(pool, nil), map[string]any{
 		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -177,7 +182,7 @@ func TestEstimateTRC20Energy_InvalidAmount(t *testing.T) {
 func TestEstimateTRC20Energy_ZeroAmount(t *testing.T) {
 	mock := mockTRC20EstimateServer(6, 29000)
 	pool := newMockPool(t, mock)
-	result := callTool(t, handleEstimateTRC20Energy(pool), map[string]any{
+	result := callTool(t, handleEstimateTRC20Energy(pool, nil), map[string]any{
 		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -190,7 +195,7 @@ func TestEstimateTRC20Energy_ZeroAmount(t *testing.T) {
 
 func TestGetTRC20Balance_InvalidAddress(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleGetTRC20Balance(pool), map[string]any{
+	result := callTool(t, handleGetTRC20Balance(pool, nil), map[string]any{
 		"address":          "",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 	})
@@ -201,7 +206,7 @@ func TestGetTRC20Balance_InvalidAddress(t *testing.T) {
 
 func TestGetTRC20Balance_InvalidContract(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleGetTRC20Balance(pool), map[string]any{
+	result := callTool(t, handleGetTRC20Balance(pool, nil), map[string]any{
 		"address":          "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"contract_address": "invalid",
 	})
@@ -215,7 +220,7 @@ func TestGetTRC20Balance_Success(t *testing.T) {
 	mock := mockTRC20Server(balance, 6, "Tether USD", "USDT")
 	pool := newMockPool(t, mock)
 
-	result := callTool(t, handleGetTRC20Balance(pool), map[string]any{
+	result := callTool(t, handleGetTRC20Balance(pool, nil), map[string]any{
 		"address":          "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 	})
@@ -230,15 +235,15 @@ func TestGetTRC20Balance_Success(t *testing.T) {
 	if data["balance_raw"] != "1000000" {
 		t.Errorf("balance_raw = %v, want 1000000", data["balance_raw"])
 	}
-	// 1_000_000 raw with 6 decimals = "1.000000"
-	if data["balance"] != "1.000000" {
-		t.Errorf("balance = %v, want 1.000000", data["balance"])
+	// 1_000_000 raw with 6 decimals = "1" (SDK trims trailing zeros)
+	if data["balance"] != "1" {
+		t.Errorf("balance = %v, want 1", data["balance"])
 	}
 }
 
 func TestGetTRC20TokenInfo_InvalidAddress(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleGetTRC20TokenInfo(pool), map[string]any{
+	result := callTool(t, handleGetTRC20TokenInfo(pool, nil), map[string]any{
 		"contract_address": "bad",
 	})
 	if !result.IsError {
@@ -250,7 +255,7 @@ func TestGetTRC20TokenInfo_Success(t *testing.T) {
 	mock := mockTRC20Server(big.NewInt(0), 18, "TestToken", "TTK")
 	pool := newMockPool(t, mock)
 
-	result := callTool(t, handleGetTRC20TokenInfo(pool), map[string]any{
+	result := callTool(t, handleGetTRC20TokenInfo(pool, nil), map[string]any{
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 	})
 	if result.IsError {
@@ -267,6 +272,9 @@ func TestGetTRC20TokenInfo_Success(t *testing.T) {
 	if data["decimals"] != float64(18) {
 		t.Errorf("decimals = %v, want 18", data["decimals"])
 	}
+	if data["total_supply"] != "1000000000" {
+		t.Errorf("total_supply = %v, want 1000000000", data["total_supply"])
+	}
 }
 
 func TestGetTRC20TokenInfo_NameError(t *testing.T) {
@@ -278,7 +286,7 @@ func TestGetTRC20TokenInfo_NameError(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 
-	result := callTool(t, handleGetTRC20TokenInfo(pool), map[string]any{
+	result := callTool(t, handleGetTRC20TokenInfo(pool, nil), map[string]any{
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 	})
 	if !result.IsError {
