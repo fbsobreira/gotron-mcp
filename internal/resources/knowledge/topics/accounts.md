@@ -14,7 +14,7 @@ import "github.com/fbsobreira/gotron-sdk/pkg/address"
 
 // Parse and validate base58 address
 addr, err := address.Base58ToAddress("TXyz...")
-if err != nil || !addr.IsValid() {
+if err != nil || !addr.IsValid() { // IsValid validates length, prefix, AND Base58Check checksum (v0.25.3+)
     // invalid address
 }
 
@@ -89,6 +89,8 @@ accounts := ks.Accounts()
 
 // Sign transaction with passphrase
 signedTx, err := ks.SignTxWithPassphrase(account, "passphrase", unsignedTx)
+
+// v0.25.3+: Keys are automatically zeroed from memory on Lock(), TimedUnlock(), Export(), and Update()
 ```
 
 ## SDK: Signer Interface (v0.25.2+)
@@ -125,6 +127,38 @@ Use with fluent builders:
 receipt, err := builder.Transfer(from, to, amount).Send(ctx, s)
 ```
 
+## SDK: Named Wallet Store (v0.25.3+)
+
+The `pkg/store` package provides named wallet management on top of the keystore:
+
+```go
+import "github.com/fbsobreira/gotron-sdk/pkg/store"
+
+// Create a store rooted at a custom directory
+s := store.NewStore("~/.gotron-mcp/wallets")
+s.InitConfigDir()
+
+// Or use the default ~/.tronctl directory
+s = store.DefaultStoreInstance()
+
+// List named wallets
+names := s.LocalAccounts()  // ["savings", "agent-bot", ...]
+
+// Get address for a named wallet
+addr, err := s.AddressFromAccountName("savings")
+
+// Find keystore by address
+ks := s.FromAddress("TJD...")
+
+// Unlock a wallet for signing
+ks, acct, err := s.UnlockedKeystore("TJD...", "passphrase")
+// Use with signer: signer.NewKeystoreSigner(ks, *acct)
+
+// Always close keystores when done
+defer ks.Close()
+defer s.Forget(ks)
+```
+
 ## SDK: Mnemonic Generation
 
 ```go
@@ -144,7 +178,12 @@ import (
 )
 
 // Quick: derive from mnemonic (uses default BIP44 path m/44'/195'/0'/0/{index})
+// Deprecated: use mnemonic.FromSeedAndPassphrase instead
 privKey, pubKey := keys.FromMnemonicSeedAndPassphrase(mnemonic, passphrase, 0)
+
+// Preferred (v0.25.3+):
+// import "github.com/fbsobreira/gotron-sdk/pkg/mnemonic"
+// privKey, pubKey := mnemonic.FromSeedAndPassphrase(seedPhrase, passphrase, 0)
 
 // Manual: parse BIP44 path (both formats accepted — with or without m/ prefix)
 params, err := hd.NewParamsFromPath("m/44'/195'/0'/0/0")

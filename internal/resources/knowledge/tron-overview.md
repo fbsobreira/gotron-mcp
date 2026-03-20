@@ -112,7 +112,10 @@ The SDK provides high-level fluent builders on top of the low-level gRPC client:
 | `pkg/txbuilder` | Native transaction builder — Transfer, FreezeV2, VoteWitness, DelegateResource |
 | `pkg/contract` | Smart contract call builder — Call, EstimateEnergy, Build, Send |
 | `pkg/standards/trc20` | Typed TRC20 wrapper — Info, BalanceOf, Transfer, Approve |
-| `pkg/txresult` | Shared `Receipt` type for all builder terminal operations |
+| `pkg/txcore` | Shared `Receipt` type and terminal operations for all builders |
+| `pkg/store` | Named wallet management with keystore — create, list, unlock wallets |
+| `pkg/mnemonic` | Mnemonic seed derivation — `FromSeedAndPassphrase` |
+| `pkg/standards/trc20enc` | Canonical TRC20 ABI encoding (cycle-free, importable from any layer) |
 
 See the `sdk` topic (`gotron://knowledge/topics/sdk`) for the full API reference.
 
@@ -149,6 +152,16 @@ Common `Ctx` methods:
 - `GetTransactionFromPendingCtx`, `GetTransactionListFromPendingCtx`, `GetPendingSizeCtx`, `IsTransactionPendingCtx`, `GetPendingTransactionsByAddressCtx`
 
 Always prefer `*Ctx` variants when a request context is available to enable proper cancellation and timeout handling.
+
+## Functional Client Options (v0.25.3+)
+
+```go
+conn := client.NewGrpcClientWithOptions("grpc.trongrid.io:50051",
+    client.WithTimeout(10 * time.Second),
+    client.WithAPIKey("your-key"),
+    client.WithContext(ctx),
+)
+```
 
 ## Key Concepts
 

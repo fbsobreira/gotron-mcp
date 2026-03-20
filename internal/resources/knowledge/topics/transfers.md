@@ -97,6 +97,7 @@ Supported contract types:
 - `VoteWitnessContract` — owner_address, votes (array of {vote_address, vote_count})
 - `DelegateResourceContract` — owner_address, receiver_address, balance (TRX), resource, lock, lock_period
 - `UnDelegateResourceContract` — owner_address, receiver_address, balance (TRX), resource
+- `WithdrawExpireUnfreezeContract` — owner_address
 
 Sentinel errors: `ErrNilTransaction`, `ErrNoContracts`, `ErrNilParameter`, `ErrUnsupportedContract`, `ErrUnmarshalContract`
 
@@ -165,6 +166,9 @@ receipt, err := builder.Transfer(from, to, amountSUN,
     txbuilder.WithPermissionID(2), // multi-sig active permission
 ).Send(ctx, s)
 
+// Sign without broadcasting (returns signed transaction for deferred broadcast)
+signed, err := builder.Transfer(from, to, amountSUN).Sign(ctx, s)
+
 // With options (fluent chaining)
 tx, err := builder.Transfer(from, to, amountSUN).
     WithMemo("payment").
@@ -172,9 +176,11 @@ tx, err := builder.Transfer(from, to, amountSUN).
     Build(ctx)
 ```
 
+> **Note (v0.25.3+):** Each builder `*Tx` is single-use. Calling any terminal operation (Build, Sign, Send, SendAndConfirm) a second time returns `txbuilder.ErrAlreadyBuilt`.
+
 ## SDK: Receipt Type
 
-All builder `Send` and `SendAndConfirm` operations return a `txresult.Receipt`:
+All builder `Send` and `SendAndConfirm` operations return a `txcore.Receipt`:
 
 ```go
 type Receipt struct {

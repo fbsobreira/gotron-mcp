@@ -231,7 +231,7 @@ result, err := call.Call(ctx)
 
 ### Deferred Error Pattern
 
-Errors can be stored via `SetError()` and surfaced at any terminal call. Used internally by wrappers like `trc20.Token.Transfer()`:
+Errors are accumulated during chaining via `SetError()` using `errors.Join` (v0.25.3+). All errors are preserved and surfaced at any terminal call. Used internally by wrappers like `trc20.Token.Transfer()`:
 
 ```go
 call := contract.New(conn, "TAddr...").
