@@ -2,7 +2,6 @@ package tools
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"slices"
 	"sort"
@@ -58,11 +57,11 @@ func handleListProposals(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 		var list []map[string]any
 		for _, p := range items {
-			proposerAddr := address.HexToAddress(hex.EncodeToString(p.ProposerAddress))
+			proposerAddr := address.BytesToAddress(p.ProposerAddress)
 
 			var approvals []string
 			for _, a := range p.Approvals {
-				addr := address.HexToAddress(hex.EncodeToString(a))
+				addr := address.BytesToAddress(a)
 				approvals = append(approvals, addr.String())
 			}
 

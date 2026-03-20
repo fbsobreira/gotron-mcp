@@ -64,10 +64,11 @@ defer conn.Stop()
 import "github.com/fbsobreira/gotron-sdk/pkg/address"
 
 addrB58, err := address.Base58ToAddress("TXyz...")  // validates + converts
-addrHex := address.HexToAddress("41...")             // no validation
-addrB58.String()   // base58
-addrHex.Hex()      // hex with 41 prefix
-addrB58.IsValid()  // check validity
+addrHex, err := address.HexToAddress("41...")       // validates + converts
+addr := address.BytesToAddress(rawBytes)            // from raw bytes (no error)
+addr.String()      // base58
+addr.Hex()         // hex with 41 prefix
+addr.IsValid()     // check validity (validates checksum)
 ```
 
 ### Amount Conventions
