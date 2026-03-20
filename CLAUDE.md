@@ -10,6 +10,7 @@ make fmt            # Format with goimports
 make test           # Run tests with race detector
 make lint           # Run golangci-lint
 make run-http       # Run HTTP mode locally on :8080
+GOTRON_MCP_KEYSTORE_PASSPHRASE=... # Passphrase for wallet encryption
 ```
 
 ## Architecture
@@ -27,7 +28,9 @@ make run-http       # Run HTTP mode locally on :8080
 2. Use the pattern: `func handleToolName(pool *nodepool.Pool) server.ToolHandlerFunc`
 3. Register in the `Register*Tools` function
 4. If it's a new file, wire it up in `internal/server/server.go`
-5. Read-only tools go in the read section; transaction builders are always registered; sign/broadcast require local mode + keystore
+5. Read-only tools go in the read section; transaction builders are always registered; wallet management and sign/broadcast require local mode + keystore
+   - Wallet management: create and list wallets (create_wallet, list_wallets) [local mode + keystore]
+   - Sign transactions: sign only, sign+broadcast, or sign+broadcast+confirm (sign_transaction, sign_and_broadcast, sign_and_confirm, broadcast_transaction) [local mode + keystore]
 
 ## GoTRON SDK Usage
 
