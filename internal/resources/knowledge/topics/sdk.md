@@ -1,6 +1,6 @@
 # GoTRON Fluent Builder API
 
-The GoTRON SDK (v0.25.2+) provides a fluent builder API for constructing, signing, and broadcasting TRON transactions. These packages sit on top of the low-level `pkg/client` gRPC methods and offer a more ergonomic, type-safe interface.
+The GoTRON SDK (v0.25.2+, updated v0.25.3) provides a fluent builder API for constructing, signing, and broadcasting TRON transactions. These packages sit on top of the low-level `pkg/client` gRPC methods and offer a more ergonomic, type-safe interface.
 
 ## SDK Entry Point (`pkg/tron`)
 
@@ -129,7 +129,12 @@ receipt, err := builder.Transfer(from, to, amount).Send(ctx, signer)
 
 // Sign, broadcast, and poll until confirmed
 receipt, err = builder.Transfer(from, to, amount).SendAndConfirm(ctx, signer)
+
+// Sign without broadcasting (returns signed transaction)
+signed, err := builder.Transfer(from, to, amount).Sign(ctx, signer)
 ```
+
+> **Important (v0.25.3+):** Each `*Tx` is single-use — calling `Build`, `Sign`, `Send`, or `SendAndConfirm` a second time on the same instance returns `txbuilder.ErrAlreadyBuilt`. Create a new builder chain for each operation.
 
 ### Options
 
@@ -235,7 +240,7 @@ Available options:
 
 ### Deferred Error Pattern
 
-Errors can be stored during chaining via `SetError()` and surfaced at any terminal call. This is used internally by wrappers like `trc20.Token.Transfer()`:
+Errors are accumulated during chaining via `SetError()` (using `errors.Join`) and surfaced at any terminal call. Multiple `SetError` calls are preserved, not just the first. This is used internally by wrappers like `trc20.Token.Transfer()`:
 
 ```go
 // SetError stores a deferred error — surfaces at any terminal call
@@ -329,7 +334,7 @@ receipt, err = token.Transfer(from, to, amount,
 energy, err := token.Transfer(from, to, amount).EstimateEnergy(ctx)
 ```
 
-## Receipt Type (`pkg/txresult`)
+## Receipt Type (`pkg/txcore`)
 
 All `Send` and `SendAndConfirm` terminal operations return a `Receipt`:
 
@@ -362,10 +367,11 @@ Both approaches are fully supported — builders wrap the low-level methods, not
 
 ## MCP Tools
 
-The MCP server currently uses low-level `pkg/client` methods for its tools:
+The MCP server uses the fluent builder APIs for all tools:
 
-- `trigger_constant_contract` — read-only contract calls
-- `trigger_contract` — write contract calls (returns unsigned tx)
-- `estimate_energy` — energy estimation
-- `transfer_trx` — TRX transfer (returns unsigned tx)
-- `transfer_trc20` — TRC20 transfer (returns unsigned tx)
+- Read-only contract calls use `contract.New(...).Call(ctx)`
+- Energy estimation uses `contract.New(...).EstimateEnergy(ctx)`
+- Write contract calls use `contract.New(...).Build(ctx)`
+- TRX transfers use `txbuilder.New(conn).Transfer(...).Build(ctx)`
+- TRC20 operations use `trc20.New(conn, addr).BalanceOf(ctx, ...)` / `.Transfer(...).Build(ctx)`
+- Staking/delegation use `txbuilder.New(conn).FreezeV2(...)` etc.
