@@ -59,7 +59,9 @@ func mockTRC20Server(balance *big.Int, decimals int64, name, symbol string) *moc
 			case bytes.Equal(selector, []byte{0x95, 0xd8, 0x9b, 0x41}): // symbol()
 				result = abiEncodeString(symbol)
 			case bytes.Equal(selector, []byte{0x18, 0x16, 0x0d, 0xdd}): // totalSupply()
-				result = abiEncodeUint256(big.NewInt(1_000_000_000))
+				// Use a value above 2^53 to catch JSON float64 precision loss
+				supply, _ := new(big.Int).SetString("100000000000000000000000000", 10) // 100M tokens with 18 decimals
+				result = abiEncodeUint256(supply)
 			default:
 				return nil, fmt.Errorf("unexpected selector: %x", selector)
 			}
@@ -97,6 +99,10 @@ func mockTRC20EstimateServer(decimals int64, energyRequired int64) *mockWalletSe
 			}, nil
 		},
 		EstimateEnergyFunc: func(_ context.Context, in *core.TriggerSmartContract) (*api.EstimateEnergyMessage, error) {
+			// Verify the transfer selector (0xa9059cbb) is in the calldata
+			if len(in.Data) < 4 || !bytes.Equal(in.Data[:4], []byte{0xa9, 0x05, 0x9c, 0xbb}) {
+				return nil, fmt.Errorf("expected transfer selector a9059cbb, got %x", in.Data[:4])
+			}
 			return &api.EstimateEnergyMessage{
 				Result:         &api.Return{Result: true},
 				EnergyRequired: energyRequired,
@@ -110,7 +116,7 @@ func TestEstimateTRC20Energy_Success(t *testing.T) {
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleEstimateTRC20Energy(pool, nil), map[string]any{
 		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
-		"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		"to":               "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"amount":           "100",
 	})
@@ -272,8 +278,8 @@ func TestGetTRC20TokenInfo_Success(t *testing.T) {
 	if data["decimals"] != float64(18) {
 		t.Errorf("decimals = %v, want 18", data["decimals"])
 	}
-	if data["total_supply"] != "1000000000" {
-		t.Errorf("total_supply = %v, want 1000000000", data["total_supply"])
+	if data["total_supply"] != "100000000000000000000000000" {
+		t.Errorf("total_supply = %v, want 100000000000000000000000000", data["total_supply"])
 	}
 }
 
