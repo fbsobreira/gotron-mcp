@@ -16,7 +16,6 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
 	"github.com/fbsobreira/gotron-sdk/pkg/client"
 	"github.com/fbsobreira/gotron-sdk/pkg/contract"
-	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"google.golang.org/protobuf/proto"
@@ -225,25 +224,29 @@ func handleGetContractABI(pool *nodepool.Pool) server.ToolHandlerFunc {
 func handleEstimateEnergy(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		from := req.GetString("from", "")
-		contract := req.GetString("contract_address", "")
+		contractAddr := req.GetString("contract_address", "")
 		method := req.GetString("method", "")
 		params := req.GetString("params", "")
 
 		if err := validateAddress(from); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid from address: %v", err)), nil
 		}
-		if err := validateAddress(contract); err != nil {
+		if err := validateAddress(contractAddr); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		estimate, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (*api.EstimateEnergyMessage, error) {
-			return pool.Client().EstimateEnergyCtx(ctx, from, contract, method, params, 0, "", 0)
+		newCall := func(c contract.Client) *contract.ContractCall {
+			return contract.New(c, contractAddr).From(from).Method(method).Params(params)
+		}
+
+		energy, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (int64, error) {
+			return newCall(pool.Client()).EstimateEnergy(ctx)
 		})
 		if err != nil && isEstimateEnergyUnsupported(err) {
 			// Active node doesn't support EstimateEnergy RPC — try fallback
 			if fallback := pool.FallbackClient(); fallback != nil {
 				log.Printf("estimate_energy: trying fallback node")
-				estimate, err = fallback.EstimateEnergyCtx(ctx, from, contract, method, params, 0, "", 0)
+				energy, err = newCall(fallback).EstimateEnergy(ctx)
 			}
 		}
 		if err != nil {
@@ -255,9 +258,9 @@ func handleEstimateEnergy(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 		result := map[string]any{
 			"from":             from,
-			"contract_address": contract,
+			"contract_address": contractAddr,
 			"method":           method,
-			"estimated_energy": estimate.EnergyRequired,
+			"estimated_energy": energy,
 		}
 
 		return mcp.NewToolResultJSON(result)
@@ -266,7 +269,7 @@ func handleEstimateEnergy(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		from := req.GetString("from", "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb") // zero address default
+		from := req.GetString("from", "")
 		contractAddr := req.GetString("contract_address", "")
 		method := req.GetString("method", "")
 		params := req.GetString("params", "[]")
@@ -298,21 +301,13 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError("trigger_constant_contract: token_id and token_value must both be provided together"), nil
 		}
 
-		// Build constant call options
-		var opts []client.ConstantCallOption
+		call := contract.New(conn, contractAddr).From(from)
 		if callValue > 0 {
-			opts = append(opts, client.WithCallValue(callValue))
+			call = call.WithCallValue(callValue)
 		}
 		if tokenID != "" && hasTokenValue {
-			opt, err := client.WithTokenValue(tokenID, tokenValue)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("trigger_constant_contract: invalid token_id: %v", err)), nil
-			}
-			opts = append(opts, opt)
+			call = call.WithTokenValue(tokenID, tokenValue)
 		}
-
-		var tx *api.TransactionExtention
-		var err error
 
 		if dataHex != "" {
 			// Pre-packed calldata mode — ignore method entirely
@@ -325,13 +320,15 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 			if decErr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("trigger_constant_contract: invalid data hex: %v", decErr)), nil
 			}
-			tx, err = conn.TriggerConstantContractWithDataCtx(ctx, from, contractAddr, data, opts...)
+			call = call.WithData(data)
 		} else {
 			if method == "" {
 				return mcp.NewToolResultError("trigger_constant_contract: method is required when data is not provided"), nil
 			}
-			tx, err = conn.TriggerConstantContractCtx(ctx, from, contractAddr, method, params, opts...)
+			call = call.Method(method).Params(params)
 		}
+
+		callResult, err := call.Call(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("trigger_constant_contract: %v", err)), nil
 		}
@@ -343,8 +340,8 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 			result["method"] = method
 		}
 
-		if len(tx.ConstantResult) > 0 {
-			rawResult := tx.ConstantResult[0]
+		if len(callResult.RawResults) > 0 {
+			rawResult := callResult.RawResults[0]
 			result["result_hex"] = hex.EncodeToString(rawResult)
 
 			// Try to decode the result using ABI if available
@@ -364,8 +361,8 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 			}
 		}
 
-		if tx.Result != nil {
-			result["energy_used"] = tx.EnergyUsed
+		if callResult.EnergyUsed > 0 {
+			result["energy_used"] = callResult.EnergyUsed
 		}
 
 		return mcp.NewToolResultJSON(result)
