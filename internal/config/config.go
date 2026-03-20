@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -24,6 +25,9 @@ type Config struct {
 	AuthTokenFile   string
 	RateLimit       int
 	TrustedProxy    string
+	KeystoreDir     string
+	KeystorePass    string
+	RequirePolicy   bool
 }
 
 var networkNodes = map[string]string{
@@ -50,6 +54,9 @@ func Parse() *Config {
 	flag.StringVar(&cfg.AuthTokenFile, "auth-token-file", envOrDefault("GOTRON_MCP_AUTH_TOKEN_FILE", ""), "Path to file with bearer tokens (one per line, hot-reloaded)")
 	flag.IntVar(&cfg.RateLimit, "rate-limit", envOrDefaultInt("GOTRON_MCP_RATE_LIMIT", 0), "Max requests per minute per IP (0 = unlimited)")
 	flag.StringVar(&cfg.TrustedProxy, "trusted-proxy", envOrDefault("GOTRON_MCP_TRUSTED_PROXY", "none"), "Trusted proxy mode: cloudflare, all, none")
+	flag.StringVar(&cfg.KeystoreDir, "keystore-dir", envOrDefault("GOTRON_MCP_KEYSTORE_DIR", ""), "Path to MCP wallet directory (default: ~/.gotron-mcp/wallets/)")
+	flag.StringVar(&cfg.KeystorePass, "keystore-pass", envOrDefault("GOTRON_MCP_KEYSTORE_PASSPHRASE", ""), "Passphrase for keystore encryption")
+	flag.BoolVar(&cfg.RequirePolicy, "require-policy", envOrDefault("GOTRON_MCP_REQUIRE_POLICY", "") == "true", "Refuse to sign if no policy config exists")
 
 	flag.Parse()
 
@@ -70,6 +77,13 @@ func Parse() *Config {
 
 	if cfg.Node == "" {
 		cfg.Node = resolveNode(cfg.Network)
+	}
+
+	if cfg.KeystoreDir == "" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			cfg.KeystoreDir = filepath.Join(home, ".gotron-mcp", "wallets")
+		}
 	}
 
 	return cfg
