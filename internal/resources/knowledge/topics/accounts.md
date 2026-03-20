@@ -90,7 +90,7 @@ accounts := ks.Accounts()
 // Sign transaction with passphrase
 signedTx, err := ks.SignTxWithPassphrase(account, "passphrase", unsignedTx)
 
-// v0.25.3+: Keys are automatically zeroed from memory on Lock(), Export(), and Update()
+// v0.25.3+: Keys are automatically zeroed from memory on Lock(), TimedUnlock(), Export(), and Update()
 ```
 
 ## SDK: Signer Interface (v0.25.2+)
