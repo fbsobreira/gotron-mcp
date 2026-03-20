@@ -58,7 +58,7 @@ func handleListWitnesses(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 		var list []map[string]any
 		for _, w := range witnesses.Witnesses {
-			addr := address.HexToAddress(hex.EncodeToString(w.Address))
+			addr := address.BytesToAddress(w.Address)
 			list = append(list, map[string]any{
 				"address":          addr.String(),
 				"vote_count":       w.VoteCount,

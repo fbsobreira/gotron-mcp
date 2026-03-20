@@ -70,7 +70,7 @@ func TestStringifyValue_BigInt(t *testing.T) {
 }
 
 func TestStringifyValue_Address(t *testing.T) {
-	addr := address.HexToAddress("410000000000000000000000000000000000000001")
+	addr := address.BytesToAddress([]byte{0x41, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1})
 	got := stringifyValue(addr)
 	s, ok := got.(string)
 	if !ok {
@@ -83,8 +83,8 @@ func TestStringifyValue_Address(t *testing.T) {
 
 func TestStringifyValue_AddressSlice(t *testing.T) {
 	addrs := []address.Address{
-		address.HexToAddress("410000000000000000000000000000000000000001"),
-		address.HexToAddress("410000000000000000000000000000000000000002"),
+		address.BytesToAddress([]byte{0x41, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}),
+		address.BytesToAddress([]byte{0x41, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2}),
 	}
 	got := stringifyValue(addrs)
 	strs, ok := got.([]string)

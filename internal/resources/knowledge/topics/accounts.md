@@ -18,8 +18,8 @@ if err != nil || !addr.IsValid() {
     // invalid address
 }
 
-// Convert hex to address (no validation)
-addr := address.HexToAddress("41abc...")
+// Convert hex to address (returns error on invalid hex)
+addr, err := address.HexToAddress("41abc...")
 
 // Convert raw bytes to TRON address (prepends 0x41 for 20-byte input)
 addr = address.BytesToAddress(rawBytes)
@@ -29,7 +29,7 @@ addr, err = address.EthAddressToAddress(ethAddrBytes)
 
 // Other conversions
 addr, err = address.Base64ToAddress(base64String)
-addr = address.BigToAddress(bigInt)
+addr, err = address.BigToAddress(bigInt)  // returns error on oversize big.Int
 addr = address.PubkeyToAddress(ecdsaPubKey)
 
 // Format

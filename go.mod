@@ -3,7 +3,7 @@ module github.com/fbsobreira/gotron-mcp
 go 1.25.1
 
 require (
-	github.com/fbsobreira/gotron-sdk v0.25.3-0.20260320011456-9df99c2a94f4
+	github.com/fbsobreira/gotron-sdk v0.25.3-0.20260320202924-6eab686352bd
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/mark3labs/mcp-go v0.45.0
 	golang.org/x/time v0.15.0
@@ -26,7 +26,6 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/pborman/uuid v1.2.1 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rjeczalik/notify v0.9.3 // indirect
 	github.com/shengdoushi/base58 v1.0.0 // indirect
 	github.com/spf13/cast v1.7.1 // indirect

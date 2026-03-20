@@ -20,8 +20,8 @@ github.com/ethereum/go-ethereum v1.17.0 h1:2D+1Fe23CwZ5tQoAS5DfwKFNI1HGcTwi65/kR
 github.com/ethereum/go-ethereum v1.17.0/go.mod h1:2W3msvdosS/MCWytpqTcqgFiRYbTH59FxDJzqah120o=
 github.com/fbsobreira/go-bip39 v1.2.0 h1:zp3VDGrQeGu8/iPB5wsHVSaOwQhBSLR71CE3nJVz4mY=
 github.com/fbsobreira/go-bip39 v1.2.0/go.mod h1:PRuO9kYh4Kn+tRALmXYtbizPeD8G2qm8FTVgxDaiXTM=
-github.com/fbsobreira/gotron-sdk v0.25.3-0.20260320011456-9df99c2a94f4 h1:pCznAKHW6zDDTWcUqHAt/gCQFNNl8OBRjlHtQDP83+4=
-github.com/fbsobreira/gotron-sdk v0.25.3-0.20260320011456-9df99c2a94f4/go.mod h1:EWEP3X7b39Y5WzhodlXRKFZwRfmdYgy/HoC4ic0G9No=
+github.com/fbsobreira/gotron-sdk v0.25.3-0.20260320202924-6eab686352bd h1:km68RiKKjP+7DQOecYwUXL/cIY+sXQDML+d1fiDS9AI=
+github.com/fbsobreira/gotron-sdk v0.25.3-0.20260320202924-6eab686352bd/go.mod h1:MriDda7kzNQrvBfM1qy2kh5Fmdhe23nhaTaObzoxHm0=
 github.com/frankban/quicktest v1.14.6 h1:7Xjx+VpznH+oBnejlPUj8oUpdxnVs4f8XU8WnHkI4W8=
 github.com/frankban/quicktest v1.14.6/go.mod h1:4ptaffx2x8+WTWXmUCuVU6aPUX1/Mz7zb5vbUoiM6w0=
 github.com/fsnotify/fsnotify v1.9.0 h1:2Ml+OJNzbYCTzsxtv8vKSFD9PbJjmhYF14k/jKC7S9k=
@@ -56,8 +56,6 @@ github.com/mitchellh/go-homedir v1.1.0 h1:lukF9ziXFxDFPkA1vsr5zpc1XuPDn/wFntq5mG
 github.com/mitchellh/go-homedir v1.1.0/go.mod h1:SfyaCUpYCn1Vlf4IUYiD9fPX4A5wJrkLzIz1N1q0pr0=
 github.com/pborman/uuid v1.2.1 h1:+ZZIw58t/ozdjRaXh/3awHfmWRbzYxJoAdNJxe/3pvw=
 github.com/pborman/uuid v1.2.1/go.mod h1:X/NO0urCmaxf9VXbdlT7C2Yzkj2IKimNn4k+gtPdI/k=
-github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
-github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/rjeczalik/notify v0.9.3 h1:6rJAzHTGKXGj76sbRgDiDcYj/HniypXmSJo1SWakZeY=
