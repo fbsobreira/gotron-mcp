@@ -19,7 +19,9 @@ func TestRegisterAllTools(t *testing.T) {
 	RegisterNetworkTools(s, pool, "mainnet", "mock:50051")
 	RegisterProposalTools(s, pool)
 	RegisterResourceTools(s, pool)
-	RegisterSignTools(s, pool, t.TempDir())
+	wm := newTestWalletManager(t)
+	RegisterWalletTools(s, wm)
+	RegisterSignTools(s, pool, wm)
 	trc20Cache := RegisterTokenTools(s, pool)
 	RegisterTransferTools(s, pool, trc20Cache)
 	RegisterWitnessReadTools(s, pool)
@@ -33,9 +35,11 @@ func TestRegisterAllTools(t *testing.T) {
 	tools := s.ListTools()
 
 	// Expected: 2 account + 1 address + 1 block + 5 contract read + 1 contract write +
-	// 8 network (5 existing + 3 pending pool) + 1 proposal + 5 resource + 2 sign + 3 token + 2 transfer +
-	// 1 witness read + 1 witness write + 3 history (TronGrid REST) = 36
-	const expectedToolCount = 36
+	// 8 network (5 existing + 3 pending pool) + 1 proposal + 5 resource +
+	// 4 sign (sign_transaction, sign_and_broadcast, sign_and_confirm, broadcast_transaction) +
+	// 2 wallet (create_wallet, list_wallets) +
+	// 3 token + 2 transfer + 1 witness read + 1 witness write + 3 history (TronGrid REST) = 40
+	const expectedToolCount = 40
 	if len(tools) != expectedToolCount {
 		t.Errorf("registered tool count = %d, want %d", len(tools), expectedToolCount)
 	}
@@ -51,7 +55,11 @@ func TestRegisterAllTools(t *testing.T) {
 		"list_proposals",
 		"freeze_balance",
 		"sign_transaction",
+		"sign_and_broadcast",
+		"sign_and_confirm",
 		"broadcast_transaction",
+		"create_wallet",
+		"list_wallets",
 		"get_trc20_balance",
 		"transfer_trx",
 		"transfer_trc20",

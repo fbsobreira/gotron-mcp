@@ -1,12 +1,15 @@
 package server
 
 import (
+	"log"
+
 	"github.com/fbsobreira/gotron-mcp/internal/config"
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/resources"
 	"github.com/fbsobreira/gotron-mcp/internal/tools"
 	"github.com/fbsobreira/gotron-mcp/internal/trongrid"
 	"github.com/fbsobreira/gotron-mcp/internal/version"
+	"github.com/fbsobreira/gotron-mcp/internal/wallet"
 	"github.com/mark3labs/mcp-go/server"
 )
 
@@ -66,9 +69,15 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 	tools.RegisterWitnessWriteTools(s, pool)
 	tools.RegisterContractWriteTools(s, pool)
 
-	// Sign/broadcast — local mode with keystore only
-	if !cfg.IsHostedMode() && cfg.Keystore != "" {
-		tools.RegisterSignTools(s, pool, cfg.Keystore)
+	// Sign/broadcast — local mode with wallet manager
+	if !cfg.IsHostedMode() && cfg.KeystoreDir != "" && cfg.KeystorePass != "" {
+		wm, err := wallet.NewManager(cfg.KeystoreDir, cfg.KeystorePass)
+		if err != nil {
+			log.Printf("warning: failed to create wallet manager: %v", err)
+		} else {
+			tools.RegisterWalletTools(s, wm)
+			tools.RegisterSignTools(s, pool, wm)
+		}
 	}
 
 	return s
