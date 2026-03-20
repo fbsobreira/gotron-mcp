@@ -49,7 +49,7 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 	// Always register read-only tools
 	tools.RegisterAccountTools(s, pool)
 	tools.RegisterBlockTools(s, pool)
-	tools.RegisterTokenTools(s, pool)
+	trc20Cache := tools.RegisterTokenTools(s, pool)
 	tools.RegisterContractReadTools(s, pool)
 	tools.RegisterNetworkTools(s, pool, cfg.Network, cfg.Node)
 	tools.RegisterAddressTools(s)
@@ -61,7 +61,7 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 	tools.RegisterHistoryTools(s, tgClient)
 
 	// Transaction builders — always available (return unsigned tx hex)
-	tools.RegisterTransferTools(s, pool)
+	tools.RegisterTransferTools(s, pool, trc20Cache)
 	tools.RegisterResourceTools(s, pool)
 	tools.RegisterWitnessWriteTools(s, pool)
 	tools.RegisterContractWriteTools(s, pool)

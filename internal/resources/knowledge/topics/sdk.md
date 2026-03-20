@@ -260,6 +260,28 @@ import "github.com/fbsobreira/gotron-sdk/pkg/standards/trc20"
 token := trc20.New(conn, "TContractAddr...")
 ```
 
+### Metadata Cache
+
+TRC20 token metadata (name, symbol, decimals) is immutable on-chain. The `MetadataCache` avoids redundant RPC calls by caching these values after the first fetch. It is thread-safe, LRU-evicted, and shared across multiple `Token` instances.
+
+```go
+// Create a shared cache (once at startup)
+cache := trc20.NewMetadataCache(256) // up to 256 tokens
+
+// Pass to Token instances — cached fields are served from memory
+token := trc20.New(conn, "TContractAddr...", trc20.WithCache(cache))
+
+// First call fetches from the network, subsequent calls hit the cache
+decimals, _ := token.Decimals(ctx) // RPC call
+decimals, _ = token.Decimals(ctx)  // cache hit — no RPC
+
+// Different Token instances sharing the same cache also benefit
+token2 := trc20.New(conn, "TContractAddr...", trc20.WithCache(cache))
+name, _ := token2.Name(ctx) // cache hit if previously fetched
+```
+
+Cache is **opt-in** — `trc20.New(conn, addr)` without `WithCache` makes a fresh RPC call every time. Only name, symbol, and decimals are cached; balances and total supply are always fetched live.
+
 ### Query Methods
 
 ```go
