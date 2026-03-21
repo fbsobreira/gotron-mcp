@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
@@ -102,7 +103,7 @@ func handleSignTransaction(wm *wallet.Manager) server.ToolHandlerFunc {
 
 		s, err := wm.GetSigner(walletName)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("wallet not found: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("sign_transaction: %v", err)), nil
 		}
 
 		signedTx, err := s.Sign(tx)
@@ -148,7 +149,7 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager) server.Tool
 
 		s, err := wm.GetSigner(walletName)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("wallet not found: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: %v", err)), nil
 		}
 
 		signedTx, err := s.Sign(tx)
@@ -205,7 +206,7 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager) server.ToolHa
 
 		s, err := wm.GetSigner(walletName)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("wallet not found: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: %v", err)), nil
 		}
 
 		signedTx, err := s.Sign(tx)
@@ -228,13 +229,26 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager) server.ToolHa
 		}
 
 		// Poll for confirmation
+		const maxConfirmAttempts = 20
 		ticker := time.NewTicker(3 * time.Second)
 		defer ticker.Stop()
 
-		for {
+		for attempt := 0; attempt < maxConfirmAttempts; attempt++ {
+			select {
+			case <-ctx.Done():
+				return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: context cancelled waiting for confirmation of %s", txid)), nil
+			case <-ticker.C:
+			}
+
 			info, infoErr := conn.GetTransactionInfoByIDCtx(ctx, txid)
-			if infoErr == nil && info != nil && info.BlockNumber > 0 {
-				result := map[string]any{
+			if infoErr != nil {
+				if strings.Contains(infoErr.Error(), "not found") {
+					continue // not indexed yet
+				}
+				return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: %v", infoErr)), nil
+			}
+			if info != nil && info.BlockNumber > 0 {
+				return mcp.NewToolResultJSON(map[string]any{
 					"txid":           txid,
 					"success":        true,
 					"confirmed":      true,
@@ -242,22 +256,11 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager) server.ToolHa
 					"fee":            info.Fee,
 					"energy_used":    info.Receipt.GetEnergyUsageTotal(),
 					"bandwidth_used": info.Receipt.GetNetUsage(),
-				}
-				return mcp.NewToolResultJSON(result)
-			}
-
-			select {
-			case <-ctx.Done():
-				return mcp.NewToolResultJSON(map[string]any{
-					"txid":      txid,
-					"success":   true,
-					"confirmed": false,
-					"message":   "context cancelled before confirmation",
 				})
-			case <-ticker.C:
-				// next iteration will query again
 			}
 		}
+
+		return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: confirmation timeout for %s after %d attempts", txid, maxConfirmAttempts)), nil
 	}
 }
 

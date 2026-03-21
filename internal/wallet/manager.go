@@ -2,8 +2,9 @@ package wallet
 
 import (
 	"fmt"
-	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/fbsobreira/gotron-sdk/pkg/keystore"
@@ -15,6 +16,8 @@ import (
 type Manager struct {
 	store      *store.Store
 	passphrase string
+	mu         sync.Mutex
+	unlockedKS []*keystore.KeyStore
 }
 
 // WalletInfo holds the name and address of a wallet.
@@ -86,6 +89,10 @@ func (m *Manager) GetSigner(nameOrAddress string) (signer.Signer, error) {
 		return nil, fmt.Errorf("unlock wallet: %w", err)
 	}
 
+	m.mu.Lock()
+	m.unlockedKS = append(m.unlockedKS, ks)
+	m.mu.Unlock()
+
 	return signer.NewKeystoreSigner(ks, *acct), nil
 }
 
@@ -96,6 +103,12 @@ func (m *Manager) SetKeystoreFactory(fn func(string) *keystore.KeyStore) {
 
 // Close closes all tracked keystores.
 func (m *Manager) Close() {
+	m.mu.Lock()
+	for _, ks := range m.unlockedKS {
+		ks.Close()
+	}
+	m.unlockedKS = nil
+	m.mu.Unlock()
 	m.store.CloseAll()
 }
 
@@ -112,13 +125,15 @@ func (m *Manager) resolveAddress(nameOrAddress string) (string, error) {
 	return addr, nil
 }
 
+var validWalletName = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
 // validateWalletName checks that the name is safe for filesystem use.
 func validateWalletName(name string) error {
 	if name == "" {
 		return fmt.Errorf("wallet name is required")
 	}
-	if name == "." || name == ".." || strings.ContainsAny(name, `/\`) || filepath.IsAbs(name) {
-		return fmt.Errorf("invalid wallet name %q", name)
+	if !validWalletName.MatchString(name) {
+		return fmt.Errorf("invalid wallet name %q: must contain only letters, digits, hyphens, and underscores", name)
 	}
 	return nil
 }

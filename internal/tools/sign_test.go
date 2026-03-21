@@ -89,14 +89,14 @@ func TestSignTransaction_WalletNotFound(t *testing.T) {
 	found := false
 	for _, c := range result.Content {
 		if tc, ok := c.(mcp.TextContent); ok {
-			if strings.Contains(tc.Text, "wallet not found") {
+			if strings.Contains(tc.Text, "sign_transaction:") {
 				found = true
 				break
 			}
 		}
 	}
 	if !found {
-		t.Errorf("expected error text containing 'wallet not found', got: %+v", result.Content)
+		t.Errorf("expected error text containing 'sign_transaction:', got: %+v", result.Content)
 	}
 }
 
@@ -112,31 +112,61 @@ func TestSignTransaction_InvalidHex(t *testing.T) {
 }
 
 func TestSignTransaction_Success(t *testing.T) {
-	wm, _ := newTestSignSetup(t, &mockWalletServer{})
+	t.Run("by name", func(t *testing.T) {
+		wm, _ := newTestSignSetup(t, &mockWalletServer{})
 
-	// Create a wallet
-	_, err := wm.CreateWallet("test-signer")
-	if err != nil {
-		t.Fatalf("CreateWallet: %v", err)
-	}
+		// Create a wallet
+		_, err := wm.CreateWallet("test-signer")
+		if err != nil {
+			t.Fatalf("CreateWallet: %v", err)
+		}
 
-	txHex := buildTestTxHex(t)
-	result := callTool(t, handleSignTransaction(wm), map[string]any{
-		"transaction_hex": txHex,
-		"wallet":          "test-signer",
+		txHex := buildTestTxHex(t)
+		result := callTool(t, handleSignTransaction(wm), map[string]any{
+			"transaction_hex": txHex,
+			"wallet":          "test-signer",
+		})
+		if result.IsError {
+			t.Fatalf("expected success, got error: %v", result.Content)
+		}
+
+		data := parseJSONResult(t, result)
+		signedHex, ok := data["signed_transaction_hex"].(string)
+		if !ok || signedHex == "" {
+			t.Errorf("signed_transaction_hex should be a non-empty string, got %v", data["signed_transaction_hex"])
+		}
+		if data["wallet"] != "test-signer" {
+			t.Errorf("wallet = %v, want test-signer", data["wallet"])
+		}
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
 
-	data := parseJSONResult(t, result)
-	signedHex, ok := data["signed_transaction_hex"].(string)
-	if !ok || signedHex == "" {
-		t.Errorf("signed_transaction_hex should be a non-empty string, got %v", data["signed_transaction_hex"])
-	}
-	if data["wallet"] != "test-signer" {
-		t.Errorf("wallet = %v, want test-signer", data["wallet"])
-	}
+	t.Run("by address", func(t *testing.T) {
+		wm, _ := newTestSignSetup(t, &mockWalletServer{})
+
+		// Create a wallet and use the returned address to sign
+		addr, err := wm.CreateWallet("addr-signer")
+		if err != nil {
+			t.Fatalf("CreateWallet: %v", err)
+		}
+
+		txHex := buildTestTxHex(t)
+		result := callTool(t, handleSignTransaction(wm), map[string]any{
+			"transaction_hex": txHex,
+			"wallet":          addr,
+		})
+		if result.IsError {
+			t.Fatalf("expected success, got error: %v", result.Content)
+		}
+
+		data := parseJSONResult(t, result)
+		signedHex, ok := data["signed_transaction_hex"].(string)
+		if !ok || signedHex == "" {
+			t.Errorf("signed_transaction_hex should be a non-empty string, got %v", data["signed_transaction_hex"])
+		}
+		if data["wallet"] != addr {
+			t.Errorf("wallet = %v, want %s", data["wallet"], addr)
+		}
+	})
 }
 
 // --- sign_and_broadcast tests ---

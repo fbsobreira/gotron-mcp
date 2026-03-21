@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -21,20 +22,23 @@ func newTestManager(t *testing.T) *Manager {
 }
 
 func TestNewManager_CreatesDir(t *testing.T) {
-	dir := t.TempDir()
-	m, err := NewManager(dir, "pass")
+	dir := filepath.Join(t.TempDir(), "wallets")
+	// Verify dir does not exist yet
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatal("expected dir to not exist before NewManager")
+	}
+	m, err := NewManager(dir, "test-pass")
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
-	m.SetKeystoreFactory(keystore.ForPathLight)
 	defer m.Close()
-
+	// Verify dir was created
 	info, err := os.Stat(dir)
 	if err != nil {
-		t.Fatalf("stat dir: %v", err)
+		t.Fatalf("dir not created: %v", err)
 	}
 	if !info.IsDir() {
-		t.Fatalf("expected directory, got file")
+		t.Fatal("expected dir to be a directory")
 	}
 }
 
@@ -94,6 +98,8 @@ func TestCreateWallet_InvalidName(t *testing.T) {
 		{"", "empty name"},
 		{"..", "dot-dot"},
 		{"foo/bar", "slash in name"},
+		{"my wallet", "space in name"},
+		{"bad!name", "special char in name"},
 	}
 
 	for _, tt := range tests {
