@@ -39,6 +39,8 @@ func (m *Manager) CreateWallet(name string) (string, error) {
 	if err := validateWalletName(name); err != nil {
 		return "", err
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.store.DoesNamedAccountExist(name) {
 		return "", fmt.Errorf("wallet %q already exists", name)
 	}
@@ -115,14 +117,16 @@ func (m *Manager) Close() {
 // resolveAddress converts a wallet name to its address, or returns the
 // input if it's already a base58 address (starts with T).
 func (m *Manager) resolveAddress(nameOrAddress string) (string, error) {
+	// Try as wallet name first
+	addr, err := m.store.AddressFromAccountName(nameOrAddress)
+	if err == nil {
+		return addr, nil
+	}
+	// Fall back to address if it looks like a base58 TRON address
 	if strings.HasPrefix(nameOrAddress, "T") && len(nameOrAddress) == 34 {
 		return nameOrAddress, nil
 	}
-	addr, err := m.store.AddressFromAccountName(nameOrAddress)
-	if err != nil {
-		return "", fmt.Errorf("wallet %q not found", nameOrAddress)
-	}
-	return addr, nil
+	return "", fmt.Errorf("wallet %q not found", nameOrAddress)
 }
 
 var validWalletName = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)

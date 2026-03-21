@@ -1,9 +1,11 @@
 package wallet
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/fbsobreira/gotron-sdk/pkg/keystore"
@@ -172,6 +174,46 @@ func TestGetSigner(t *testing.T) {
 	signerAddr := s.Address().String()
 	if signerAddr != addr {
 		t.Fatalf("signer address mismatch: got %s, want %s", signerAddr, addr)
+	}
+}
+
+func TestGetSigner_ByAddress(t *testing.T) {
+	m := newTestManager(t)
+	addr, err := m.CreateWallet("addr-test")
+	if err != nil {
+		t.Fatalf("CreateWallet: %v", err)
+	}
+	s, err := m.GetSigner(addr) // use address instead of name
+	if err != nil {
+		t.Fatalf("GetSigner by address: %v", err)
+	}
+	if s.Address().String() != addr {
+		t.Errorf("signer address = %s, want %s", s.Address().String(), addr)
+	}
+}
+
+func TestCreateWallet_Concurrent(t *testing.T) {
+	m := newTestManager(t)
+	var wg sync.WaitGroup
+	errors := make(chan error, 10)
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			_, err := m.CreateWallet(fmt.Sprintf("wallet-%d", idx))
+			if err != nil {
+				errors <- err
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errors)
+	for err := range errors {
+		t.Errorf("concurrent CreateWallet failed: %v", err)
+	}
+	wallets, _ := m.ListWallets()
+	if len(wallets) != 5 {
+		t.Errorf("expected 5 wallets, got %d", len(wallets))
 	}
 }
 

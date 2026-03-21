@@ -81,7 +81,9 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 			wm = nil
 		} else {
 			tools.RegisterWalletTools(s, wm)
-			tools.RegisterSignTools(s, pool, wm)
+			if !cfg.RequirePolicy {
+				tools.RegisterSignTools(s, pool, wm)
+			}
 		}
 	}
 

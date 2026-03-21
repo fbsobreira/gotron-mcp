@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -337,6 +338,101 @@ func TestBroadcastTransaction_InvalidProto(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected parse or broadcast error, got: %+v", result.Content)
+	}
+}
+
+func TestSignAndBroadcast_BroadcastFails(t *testing.T) {
+	mock := &mockWalletServer{
+		BroadcastTransactionFunc: func(_ context.Context, _ *core.Transaction) (*api.Return, error) {
+			return nil, fmt.Errorf("node unavailable")
+		},
+	}
+	wm, pool := newTestSignSetup(t, mock)
+	addr, _ := wm.CreateWallet("test-wallet")
+	_ = addr
+	txHex := buildTestTxHex(t)
+	result := callTool(t, handleSignAndBroadcast(pool, wm), map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "test-wallet",
+	})
+	if !result.IsError {
+		t.Error("expected error when broadcast fails")
+	}
+}
+
+func TestSignAndBroadcast_BroadcastRejected(t *testing.T) {
+	mock := &mockWalletServer{
+		BroadcastTransactionFunc: func(_ context.Context, _ *core.Transaction) (*api.Return, error) {
+			return &api.Return{
+				Result:  false,
+				Code:    api.Return_BANDWITH_ERROR,
+				Message: []byte("not enough bandwidth"),
+			}, fmt.Errorf("result error: not enough bandwidth")
+		},
+	}
+	wm, pool := newTestSignSetup(t, mock)
+	wm.CreateWallet("test-wallet")
+	txHex := buildTestTxHex(t)
+	result := callTool(t, handleSignAndBroadcast(pool, wm), map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "test-wallet",
+	})
+	// SDK BroadcastCtx returns error when Result is false
+	if !result.IsError {
+		t.Error("expected error when broadcast is rejected")
+	}
+}
+
+func TestSignAndConfirm_ContextCancelled(t *testing.T) {
+	mock := &mockWalletServer{
+		BroadcastTransactionFunc: func(_ context.Context, _ *core.Transaction) (*api.Return, error) {
+			return &api.Return{Result: true, Code: api.Return_SUCCESS}, nil
+		},
+		GetTransactionInfoByIdFunc: func(_ context.Context, _ *api.BytesMessage) (*core.TransactionInfo, error) {
+			return nil, fmt.Errorf("transaction not found")
+		},
+	}
+	wm, pool := newTestSignSetup(t, mock)
+	wm.CreateWallet("test-wallet")
+	txHex := buildTestTxHex(t)
+
+	// Use a cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "test-wallet",
+	}
+	handler := handleSignAndConfirm(pool, wm)
+	result, err := handler(ctx, req)
+	if err != nil {
+		t.Fatalf("handler returned Go error: %v", err)
+	}
+	if !result.IsError {
+		t.Error("expected error for cancelled context")
+	}
+}
+
+func TestSignAndConfirm_RPCError(t *testing.T) {
+	mock := &mockWalletServer{
+		BroadcastTransactionFunc: func(_ context.Context, _ *core.Transaction) (*api.Return, error) {
+			return &api.Return{Result: true, Code: api.Return_SUCCESS}, nil
+		},
+		GetTransactionInfoByIdFunc: func(_ context.Context, _ *api.BytesMessage) (*core.TransactionInfo, error) {
+			return nil, fmt.Errorf("rpc connection refused")
+		},
+	}
+	wm, pool := newTestSignSetup(t, mock)
+	wm.CreateWallet("test-wallet")
+	txHex := buildTestTxHex(t)
+	result := callTool(t, handleSignAndConfirm(pool, wm), map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "test-wallet",
+	})
+	if !result.IsError {
+		t.Error("expected error for RPC failure")
 	}
 }
 

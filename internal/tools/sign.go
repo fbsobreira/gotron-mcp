@@ -250,7 +250,7 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager) server.ToolHa
 			if info != nil && info.BlockNumber > 0 {
 				return mcp.NewToolResultJSON(map[string]any{
 					"txid":           txid,
-					"success":        true,
+					"success":        info.GetResult() != core.TransactionInfo_FAILED,
 					"confirmed":      true,
 					"block_number":   info.BlockNumber,
 					"fee":            info.Fee,
