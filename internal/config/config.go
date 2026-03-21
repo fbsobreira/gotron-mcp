@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -18,12 +19,14 @@ type Config struct {
 	Bind            string
 	FallbackNode    string
 	FallbackNodeTLS bool
-	Keystore        string
 	TLS             bool
 	AuthToken       string
 	AuthTokenFile   string
 	RateLimit       int
 	TrustedProxy    string
+	KeystoreDir     string
+	KeystorePass    string
+	RequirePolicy   bool
 }
 
 var networkNodes = map[string]string{
@@ -44,12 +47,14 @@ func Parse() *Config {
 	flag.StringVar(&cfg.Bind, "bind", "127.0.0.1", "HTTP server bind address")
 	flag.StringVar(&cfg.FallbackNode, "fallback-node", envOrDefault("GOTRON_MCP_FALLBACK_NODE", ""), "Fallback TRON gRPC node address")
 	flag.BoolVar(&cfg.FallbackNodeTLS, "fallback-tls", envOrDefault("GOTRON_MCP_FALLBACK_TLS", "") == "true", "Use TLS for fallback node connection")
-	flag.StringVar(&cfg.Keystore, "keystore", "", "Path to tronctl keystore directory")
 	flag.BoolVar(&cfg.TLS, "tls", envOrDefault("GOTRON_MCP_TLS", "") == "true", "Use TLS for gRPC connection (default: plaintext)")
 	flag.StringVar(&cfg.AuthToken, "auth-token", envOrDefault("GOTRON_MCP_AUTH_TOKEN", ""), "Bearer token for HTTP authentication")
 	flag.StringVar(&cfg.AuthTokenFile, "auth-token-file", envOrDefault("GOTRON_MCP_AUTH_TOKEN_FILE", ""), "Path to file with bearer tokens (one per line, hot-reloaded)")
 	flag.IntVar(&cfg.RateLimit, "rate-limit", envOrDefaultInt("GOTRON_MCP_RATE_LIMIT", 0), "Max requests per minute per IP (0 = unlimited)")
 	flag.StringVar(&cfg.TrustedProxy, "trusted-proxy", envOrDefault("GOTRON_MCP_TRUSTED_PROXY", "none"), "Trusted proxy mode: cloudflare, all, none")
+	flag.StringVar(&cfg.KeystoreDir, "keystore-dir", envOrDefault("GOTRON_MCP_KEYSTORE_DIR", ""), "Path to MCP wallet directory (default: ~/.gotron-mcp/wallets/)")
+	flag.StringVar(&cfg.KeystorePass, "keystore-pass", envOrDefault("GOTRON_MCP_KEYSTORE_PASSPHRASE", ""), "Passphrase for keystore encryption")
+	flag.BoolVar(&cfg.RequirePolicy, "require-policy", envOrDefault("GOTRON_MCP_REQUIRE_POLICY", "") == "true", "Refuse to sign if no policy config exists")
 
 	flag.Parse()
 
@@ -70,6 +75,13 @@ func Parse() *Config {
 
 	if cfg.Node == "" {
 		cfg.Node = resolveNode(cfg.Network)
+	}
+
+	if cfg.KeystoreDir == "" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			cfg.KeystoreDir = filepath.Join(home, ".gotron-mcp", "wallets")
+		}
 	}
 
 	return cfg

@@ -58,7 +58,10 @@ func main() {
 		}
 	}
 
-	s := mcpserver.New(cfg, pool)
+	s, wm := mcpserver.New(cfg, pool)
+	if wm != nil {
+		defer wm.Close()
+	}
 
 	switch cfg.Transport {
 	case "stdio":

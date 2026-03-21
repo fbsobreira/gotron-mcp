@@ -198,8 +198,36 @@ derivedKey, err := hd.DerivePrivateKeyForPath(btcec.S256(), secret, chainCode, "
 
 **Note (v0.25.2+):** `hd.DerivePrivateKeyForPath` and `hd.NewParamsFromPath` now return errors for invalid paths — always check the returned error. `keys.FromMnemonicSeedAndPassphrase` and `hd.ComputeMastersFromSeed` do not return errors; they return nil/zero values on failure.
 
+## MCP: Wallet Management
+
+The MCP server manages wallets in an isolated directory (`~/.gotron-mcp/wallets/` by default). A pre-configured passphrase (`GOTRON_MCP_KEYSTORE_PASSPHRASE` env) handles keystore encryption.
+
+### Configuration
+
+- `--keystore-dir` / `GOTRON_MCP_KEYSTORE_DIR` — wallet directory (default: `~/.gotron-mcp/wallets/`)
+- `--keystore-pass` / `GOTRON_MCP_KEYSTORE_PASSPHRASE` — passphrase for wallet encryption
+- `--require-policy` / `GOTRON_MCP_REQUIRE_POLICY` — refuse to sign without policy config (safety net)
+
+### Wallet Tools
+
+- `create_wallet(name)` — create a new named wallet, returns address
+- `list_wallets()` — list all wallets with names and addresses
+
+### Sign Tools
+
+- `sign_transaction(wallet, transaction_hex)` — sign and return signed hex (no broadcast)
+- `sign_and_broadcast(wallet, transaction_hex)` — sign + broadcast, returns txid and receipt
+- `sign_and_confirm(wallet, transaction_hex)` — sign + broadcast + poll for on-chain confirmation
+- `broadcast_transaction(signed_transaction_hex)` — broadcast a pre-signed transaction
+
 ## MCP Tools
 
 - `get_account` — Get account balance and details
 - `get_account_resources` — Get energy/bandwidth usage and limits
 - `validate_address` — Validate and convert address formats
+- `create_wallet` — Create a new named wallet
+- `list_wallets` — List all managed wallets
+- `sign_transaction` — Sign a transaction with a managed wallet
+- `sign_and_broadcast` — Sign and broadcast in one step
+- `sign_and_confirm` — Sign, broadcast, and wait for confirmation
+- `broadcast_transaction` — Broadcast a pre-signed transaction

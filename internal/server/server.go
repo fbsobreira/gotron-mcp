@@ -1,17 +1,22 @@
 package server
 
 import (
+	"log"
+
 	"github.com/fbsobreira/gotron-mcp/internal/config"
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/resources"
 	"github.com/fbsobreira/gotron-mcp/internal/tools"
 	"github.com/fbsobreira/gotron-mcp/internal/trongrid"
 	"github.com/fbsobreira/gotron-mcp/internal/version"
+	"github.com/fbsobreira/gotron-mcp/internal/wallet"
 	"github.com/mark3labs/mcp-go/server"
 )
 
 // New creates a configured MCP server with tools registered based on mode.
-func New(cfg *config.Config, pool *nodepool.Pool) *server.MCPServer {
+// It returns the MCP server and an optional wallet manager (nil when wallet is
+// not configured). The caller should defer wm.Close() when non-nil.
+func New(cfg *config.Config, pool *nodepool.Pool) (*server.MCPServer, *wallet.Manager) {
 	s := server.NewMCPServer(
 		"gotron-mcp",
 		version.Version,
@@ -66,10 +71,21 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 	tools.RegisterWitnessWriteTools(s, pool)
 	tools.RegisterContractWriteTools(s, pool)
 
-	// Sign/broadcast — local mode with keystore only
-	if !cfg.IsHostedMode() && cfg.Keystore != "" {
-		tools.RegisterSignTools(s, pool, cfg.Keystore)
+	// Sign/broadcast — local mode with wallet manager
+	var wm *wallet.Manager
+	if !cfg.IsHostedMode() && cfg.KeystoreDir != "" && cfg.KeystorePass != "" {
+		var err error
+		wm, err = wallet.NewManager(cfg.KeystoreDir, cfg.KeystorePass)
+		if err != nil {
+			log.Printf("warning: failed to create wallet manager: %v", err)
+			wm = nil
+		} else {
+			tools.RegisterWalletTools(s, wm)
+			if !cfg.RequirePolicy {
+				tools.RegisterSignTools(s, pool, wm)
+			}
+		}
 	}
 
-	return s
+	return s, wm
 }
