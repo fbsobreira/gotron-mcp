@@ -211,7 +211,10 @@ func TestCreateWallet_Concurrent(t *testing.T) {
 	for err := range errors {
 		t.Errorf("concurrent CreateWallet failed: %v", err)
 	}
-	wallets, _ := m.ListWallets()
+	wallets, err := m.ListWallets()
+	if err != nil {
+		t.Fatalf("ListWallets: %v", err)
+	}
 	if len(wallets) != 5 {
 		t.Errorf("expected 5 wallets, got %d", len(wallets))
 	}

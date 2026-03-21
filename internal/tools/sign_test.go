@@ -348,8 +348,9 @@ func TestSignAndBroadcast_BroadcastFails(t *testing.T) {
 		},
 	}
 	wm, pool := newTestSignSetup(t, mock)
-	addr, _ := wm.CreateWallet("test-wallet")
-	_ = addr
+	if _, err := wm.CreateWallet("test-wallet"); err != nil {
+		t.Fatalf("CreateWallet: %v", err)
+	}
 	txHex := buildTestTxHex(t)
 	result := callTool(t, handleSignAndBroadcast(pool, wm), map[string]any{
 		"transaction_hex": txHex,
@@ -371,7 +372,9 @@ func TestSignAndBroadcast_BroadcastRejected(t *testing.T) {
 		},
 	}
 	wm, pool := newTestSignSetup(t, mock)
-	wm.CreateWallet("test-wallet")
+	if _, err := wm.CreateWallet("test-wallet"); err != nil {
+		t.Fatalf("CreateWallet: %v", err)
+	}
 	txHex := buildTestTxHex(t)
 	result := callTool(t, handleSignAndBroadcast(pool, wm), map[string]any{
 		"transaction_hex": txHex,
@@ -393,7 +396,9 @@ func TestSignAndConfirm_ContextCancelled(t *testing.T) {
 		},
 	}
 	wm, pool := newTestSignSetup(t, mock)
-	wm.CreateWallet("test-wallet")
+	if _, err := wm.CreateWallet("test-wallet"); err != nil {
+		t.Fatalf("CreateWallet: %v", err)
+	}
 	txHex := buildTestTxHex(t)
 
 	// Use a cancelled context
@@ -425,7 +430,9 @@ func TestSignAndConfirm_RPCError(t *testing.T) {
 		},
 	}
 	wm, pool := newTestSignSetup(t, mock)
-	wm.CreateWallet("test-wallet")
+	if _, err := wm.CreateWallet("test-wallet"); err != nil {
+		t.Fatalf("CreateWallet: %v", err)
+	}
 	txHex := buildTestTxHex(t)
 	result := callTool(t, handleSignAndConfirm(pool, wm), map[string]any{
 		"transaction_hex": txHex,
