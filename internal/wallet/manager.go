@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/fbsobreira/gotron-sdk/pkg/keys"
 	"github.com/fbsobreira/gotron-sdk/pkg/keystore"
 	"github.com/fbsobreira/gotron-sdk/pkg/signer"
 	"github.com/fbsobreira/gotron-sdk/pkg/store"
@@ -45,10 +45,11 @@ func (m *Manager) CreateWallet(name string) (string, error) {
 		return "", fmt.Errorf("wallet %q already exists", name)
 	}
 
-	key, err := crypto.GenerateKey()
+	key, err := keys.GenerateKey()
 	if err != nil {
 		return "", fmt.Errorf("generate key: %w", err)
 	}
+	defer keys.ZeroPrivateKey(key)
 
 	ks := m.store.FromAccountName(name)
 	defer func() {
@@ -56,7 +57,7 @@ func (m *Manager) CreateWallet(name string) (string, error) {
 		m.store.Forget(ks)
 	}()
 
-	acct, err := ks.ImportECDSA(key, m.passphrase)
+	acct, err := ks.ImportECDSA(key.ToECDSA(), m.passphrase)
 	if err != nil {
 		return "", fmt.Errorf("import key: %w", err)
 	}
