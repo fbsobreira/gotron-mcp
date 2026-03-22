@@ -59,19 +59,13 @@ func handleListProposals(pool *nodepool.Pool) server.ToolHandlerFunc {
 		for _, p := range items {
 			proposerAddr := address.BytesToAddress(p.ProposerAddress)
 
-			var approvals []string
-			for _, a := range p.Approvals {
-				addr := address.BytesToAddress(a)
-				approvals = append(approvals, addr.String())
-			}
-
 			list = append(list, map[string]any{
 				"proposal_id":     p.ProposalId,
 				"proposer":        proposerAddr.String(),
 				"parameters":      p.Parameters,
 				"expiration_time": p.ExpirationTime,
 				"create_time":     p.CreateTime,
-				"approvals":       approvals,
+				"approval_count":  len(p.Approvals),
 				"state":           p.State.String(),
 			})
 		}
