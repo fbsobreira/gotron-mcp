@@ -1,2 +1,14 @@
+codecov:
+  branch: develop
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        branches:
+          - develop
+          - main
+
 ignore:
   - "cmd/**"
