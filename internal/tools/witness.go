@@ -7,6 +7,7 @@ import (
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
+	"github.com/fbsobreira/gotron-sdk/pkg/txbuilder"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"google.golang.org/protobuf/proto"
@@ -16,7 +17,9 @@ import (
 func RegisterWitnessReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("list_witnesses",
-			mcp.WithDescription("List all super representatives (witnesses) on the TRON network"),
+			mcp.WithDescription("List super representatives (witnesses) on the TRON network with pagination support."),
+			mcp.WithNumber("limit", mcp.Description("Max witnesses to return (default: 5)")),
+			mcp.WithNumber("offset", mcp.Description("Skip first N witnesses (default: 0, for pagination)")),
 		),
 		handleListWitnesses(pool),
 	)
@@ -26,9 +29,11 @@ func RegisterWitnessReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 func RegisterWitnessWriteTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("vote_witness",
-			mcp.WithDescription("Vote for super representatives. Returns unsigned transaction hex."),
-			mcp.WithString("from", mcp.Required(), mcp.Description("Voter address")),
-			mcp.WithObject("votes", mcp.Required(), mcp.Description("Map of witness address to vote count")),
+			mcp.WithDescription("Vote for super representatives. Returns unsigned transaction hex for signing. Requires staked TRX (1 TRX staked = 1 vote)."),
+			mcp.WithString("from", mcp.Required(), mcp.Description("Voter address (base58, starts with T)")),
+			mcp.WithObject("votes", mcp.Required(), mcp.Description("Map of witness address to vote count, e.g., {\"TKSXDA...\": 100, \"TLyqz...\": 50}")),
+			mcp.WithString("memo", mcp.Description("Optional memo to attach to the transaction")),
+			mcp.WithNumber("permission_id", mcp.Description("Permission ID for multi-sig transactions")),
 		),
 		handleVoteWitness(pool),
 	)
@@ -36,6 +41,15 @@ func RegisterWitnessWriteTools(s *server.MCPServer, pool *nodepool.Pool) {
 
 func handleListWitnesses(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		limit := req.GetInt("limit", 5)
+		offset := req.GetInt("offset", 0)
+		if limit <= 0 {
+			limit = 5
+		}
+		if offset < 0 {
+			offset = 0
+		}
+
 		conn := pool.Client()
 		witnesses, err := conn.ListWitnessesCtx(ctx)
 		if err != nil {
@@ -44,7 +58,7 @@ func handleListWitnesses(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 		var list []map[string]any
 		for _, w := range witnesses.Witnesses {
-			addr := address.HexToAddress(hex.EncodeToString(w.Address))
+			addr := address.BytesToAddress(w.Address)
 			list = append(list, map[string]any{
 				"address":          addr.String(),
 				"vote_count":       w.VoteCount,
@@ -56,9 +70,25 @@ func handleListWitnesses(pool *nodepool.Pool) server.ToolHandlerFunc {
 			})
 		}
 
+		// Apply pagination
+		total := len(list)
+		if offset > total {
+			offset = total
+		}
+		remaining := total - offset
+		if limit > remaining {
+			limit = remaining
+		}
+		page := list[offset : offset+limit]
+
 		result := map[string]any{
-			"witnesses": list,
-			"count":     len(list),
+			"witnesses": page,
+			"total":     total,
+			"returned":  len(page),
+		}
+		if offset+limit < total {
+			result["has_more"] = true
+			result["next_offset"] = offset + limit
 		}
 
 		return mcp.NewToolResultJSON(result)
@@ -105,7 +135,8 @@ func handleVoteWitness(pool *nodepool.Pool) server.ToolHandlerFunc {
 			}
 		}
 
-		tx, err := conn.VoteWitnessAccountCtx(ctx, from, witnessVotes)
+		opts := builderOptions(req)
+		tx, err := txbuilder.New(conn).VoteWitness(from, opts...).Votes(witnessVotes).Build(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("vote_witness: %v", err)), nil
 		}

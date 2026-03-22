@@ -8,6 +8,7 @@ import (
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/retry"
 	"github.com/fbsobreira/gotron-sdk/pkg/client"
+	"github.com/fbsobreira/gotron-sdk/pkg/client/transaction"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -17,9 +18,9 @@ import (
 func RegisterBlockTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("get_block",
-			mcp.WithDescription("Get a TRON block by number or latest. Use include_transactions to get transaction details with pagination."),
+			mcp.WithDescription("Get a TRON block by number or latest. Use include_transactions to get transaction details with decoded contract data (sender, receiver, amounts) and pagination."),
 			mcp.WithNumber("block_number", mcp.Description("Block number (omit for latest)")),
-			mcp.WithBoolean("include_transactions", mcp.Description("Include transaction IDs and types (default: false)")),
+			mcp.WithBoolean("include_transactions", mcp.Description("Include decoded transaction details with contract data — sender, receiver, amounts (default: false)")),
 			mcp.WithNumber("limit", mcp.Description("Max transactions to return when include_transactions is true (default: 50)")),
 			mcp.WithNumber("offset", mcp.Description("Skip first N transactions (default: 0, for pagination)")),
 			mcp.WithString("transaction_type", mcp.Description("Filter transactions by type (e.g., 'TransferContract', 'TriggerSmartContract')")),
@@ -103,6 +104,14 @@ func handleGetBlock(pool *nodepool.Pool) server.ToolHandlerFunc {
 				}
 				if tx.Transaction != nil && tx.Transaction.RawData != nil && len(tx.Transaction.RawData.Contract) > 0 {
 					txInfo["type"] = tx.Transaction.RawData.Contract[0].Type.String()
+				}
+				if tx.Transaction != nil {
+					if decoded, decErr := transaction.DecodeContractData(tx.Transaction); decErr == nil {
+						txInfo["contract_type"] = decoded.Type
+						txInfo["contract_data"] = decoded.Fields
+					} else {
+						txInfo["contract_decode_error"] = decErr.Error()
+					}
 				}
 				txs = append(txs, txInfo)
 			}

@@ -27,6 +27,21 @@ checksum:
 
 changelog:
   sort: asc
+  groups:
+    - title: Features
+      regexp: '^feat[:(!]'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^fix[:(!]'
+      order: 1
+    - title: Refactoring
+      regexp: '^refactor[:(!]'
+      order: 2
+    - title: Build
+      regexp: '^build[:(!]'
+      order: 3
+    - title: Other
+      order: 999
   filters:
     exclude:
       - "^docs:"

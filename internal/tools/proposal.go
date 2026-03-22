@@ -2,8 +2,9 @@ package tools
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
+	"slices"
+	"sort"
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
@@ -11,33 +12,60 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// RegisterProposalTools registers the list_proposals tool.
+// RegisterProposalTools registers list_proposals and get_proposal tools.
 func RegisterProposalTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("list_proposals",
-			mcp.WithDescription("List all governance proposals on the TRON network"),
+			mcp.WithDescription("List governance proposals on the TRON network with pagination support. Returns a compact summary per proposal (use get_proposal for full details including approval addresses). Newest first by default."),
+			mcp.WithNumber("limit", mcp.Description("Max proposals to return (default: 5)")),
+			mcp.WithNumber("offset", mcp.Description("Skip first N proposals (default: 0, for pagination)")),
+			mcp.WithString("order", mcp.Description("Sort order by proposal ID: 'desc' (default, newest first) or 'asc' (oldest first)")),
 		),
 		handleListProposals(pool),
+	)
+
+	s.AddTool(
+		mcp.NewTool("get_proposal",
+			mcp.WithDescription("Get full details of a governance proposal by ID, including the complete list of approval addresses."),
+			mcp.WithNumber("proposal_id", mcp.Required(), mcp.Description("Proposal ID")),
+		),
+		handleGetProposal(pool),
 	)
 }
 
 func handleListProposals(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		limit := req.GetInt("limit", 5)
+		offset := req.GetInt("offset", 0)
+		order := req.GetString("order", "desc")
+		if limit <= 0 {
+			limit = 5
+		}
+		if offset < 0 {
+			offset = 0
+		}
+		if order != "desc" && order != "asc" {
+			return mcp.NewToolResultError("list_proposals: order must be 'asc' or 'desc'"), nil
+		}
+
 		conn := pool.Client()
 		proposals, err := conn.ProposalsListCtx(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("list_proposals: %v", err)), nil
 		}
 
-		var list []map[string]any
-		for _, p := range proposals.Proposals {
-			proposerAddr := address.HexToAddress(hex.EncodeToString(p.ProposerAddress))
-
-			var approvals []string
-			for _, a := range p.Approvals {
-				addr := address.HexToAddress(hex.EncodeToString(a))
-				approvals = append(approvals, addr.String())
+		// Sort by proposal ID (copy to avoid mutating SDK response)
+		items := slices.Clone(proposals.Proposals)
+		sort.SliceStable(items, func(i, j int) bool {
+			if order == "desc" {
+				return items[i].ProposalId > items[j].ProposalId
 			}
+			return items[i].ProposalId < items[j].ProposalId
+		})
+
+		var list []map[string]any
+		for _, p := range items {
+			proposerAddr := address.BytesToAddress(p.ProposerAddress)
 
 			list = append(list, map[string]any{
 				"proposal_id":     p.ProposalId,
@@ -45,16 +73,74 @@ func handleListProposals(pool *nodepool.Pool) server.ToolHandlerFunc {
 				"parameters":      p.Parameters,
 				"expiration_time": p.ExpirationTime,
 				"create_time":     p.CreateTime,
-				"approvals":       approvals,
+				"approval_count":  len(p.Approvals),
 				"state":           p.State.String(),
 			})
 		}
 
+		// Apply pagination
+		total := len(list)
+		if offset > total {
+			offset = total
+		}
+		remaining := total - offset
+		if limit > remaining {
+			limit = remaining
+		}
+		page := list[offset : offset+limit]
+
 		result := map[string]any{
-			"proposals": list,
-			"count":     len(list),
+			"proposals": page,
+			"total":     total,
+			"returned":  len(page),
+		}
+		if offset+limit < total {
+			result["has_more"] = true
+			result["next_offset"] = offset + limit
 		}
 
 		return mcp.NewToolResultJSON(result)
+	}
+}
+
+func handleGetProposal(pool *nodepool.Pool) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		proposalID := int64(req.GetInt("proposal_id", -1))
+		if proposalID < 0 {
+			return mcp.NewToolResultError("get_proposal: proposal_id is required"), nil
+		}
+
+		conn := pool.Client()
+		proposals, err := conn.ProposalsListCtx(ctx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("get_proposal: %v", err)), nil
+		}
+
+		for _, p := range proposals.Proposals {
+			if p.ProposalId != proposalID {
+				continue
+			}
+
+			proposerAddr := address.BytesToAddress(p.ProposerAddress)
+
+			var approvals []string
+			for _, a := range p.Approvals {
+				addr := address.BytesToAddress(a)
+				approvals = append(approvals, addr.String())
+			}
+
+			return mcp.NewToolResultJSON(map[string]any{
+				"proposal_id":     p.ProposalId,
+				"proposer":        proposerAddr.String(),
+				"parameters":      p.Parameters,
+				"expiration_time": p.ExpirationTime,
+				"create_time":     p.CreateTime,
+				"approvals":       approvals,
+				"approval_count":  len(approvals),
+				"state":           p.State.String(),
+			})
+		}
+
+		return mcp.NewToolResultError(fmt.Sprintf("get_proposal: proposal %d not found", proposalID)), nil
 	}
 }

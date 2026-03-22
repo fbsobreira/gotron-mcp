@@ -10,6 +10,7 @@ make fmt            # Format with goimports
 make test           # Run tests with race detector
 make lint           # Run golangci-lint
 make run-http       # Run HTTP mode locally on :8080
+GOTRON_MCP_KEYSTORE_PASSPHRASE=... # Passphrase for wallet encryption
 ```
 
 ## Architecture
@@ -27,7 +28,9 @@ make run-http       # Run HTTP mode locally on :8080
 2. Use the pattern: `func handleToolName(pool *nodepool.Pool) server.ToolHandlerFunc`
 3. Register in the `Register*Tools` function
 4. If it's a new file, wire it up in `internal/server/server.go`
-5. Read-only tools go in the read section; transaction builders are always registered; sign/broadcast require local mode + keystore
+5. Read-only tools go in the read section; transaction builders are always registered; wallet management and sign/broadcast require local mode + keystore
+   - Wallet management: create and list wallets (create_wallet, list_wallets) [local mode + keystore]
+   - Sign transactions: sign only, sign+broadcast, or sign+broadcast+confirm (sign_transaction, sign_and_broadcast, sign_and_confirm, broadcast_transaction) [local mode + keystore]
 
 ## GoTRON SDK Usage
 
@@ -64,10 +67,11 @@ defer conn.Stop()
 import "github.com/fbsobreira/gotron-sdk/pkg/address"
 
 addrB58, err := address.Base58ToAddress("TXyz...")  // validates + converts
-addrHex := address.HexToAddress("41...")             // no validation
-addrB58.String()   // base58
-addrHex.Hex()      // hex with 41 prefix
-addrB58.IsValid()  // check validity
+addrHex, err := address.HexToAddress("41...")       // validates + converts
+addr := address.BytesToAddress(rawBytes)            // from raw bytes (no error)
+addr.String()      // base58
+addr.Hex()         // hex with 41 prefix
+addr.IsValid()     // check validity (validates checksum)
 ```
 
 ### Amount Conventions
@@ -108,4 +112,4 @@ result["txid"] = hex.EncodeToString(tx.Txid)
 - Follow Go conventions: gofmt, goimports, effective Go
 - Handle all errors explicitly — no blank `_` for error returns
 - Table-driven tests
-- Empty line at end of files
+- Files must end with exactly one newline character — no extra blank line

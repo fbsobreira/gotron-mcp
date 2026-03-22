@@ -3,7 +3,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/fbsobreira/gotron-mcp.svg)](https://pkg.go.dev/github.com/fbsobreira/gotron-mcp)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fbsobreira/gotron-mcp)](https://goreportcard.com/report/github.com/fbsobreira/gotron-mcp)
 [![CI](https://github.com/fbsobreira/gotron-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/fbsobreira/gotron-mcp/actions/workflows/test.yml)
-[![Coverage](https://codecov.io/gh/fbsobreira/gotron-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/fbsobreira/gotron-mcp)
+[![Coverage](https://codecov.io/gh/fbsobreira/gotron-mcp/branch/develop/graph/badge.svg)](https://codecov.io/gh/fbsobreira/gotron-mcp)
 [![License](https://img.shields.io/github/license/fbsobreira/gotron-mcp)](LICENSE)
 
 MCP server for TRON blockchain — let AI agents query balances, tokens, blocks, and build transactions.

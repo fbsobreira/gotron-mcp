@@ -1,0 +1,377 @@
+# GoTRON Fluent Builder API
+
+The GoTRON SDK (v0.26.0) provides a fluent builder API for constructing, signing, and broadcasting TRON transactions. These packages sit on top of the low-level `pkg/client` gRPC methods and offer a more ergonomic, type-safe interface.
+
+## SDK Entry Point (`pkg/tron`)
+
+```go
+import "github.com/fbsobreira/gotron-sdk/pkg/tron"
+
+sdk := tron.New(conn) // conn is *client.GrpcClient
+
+// Access builders
+builder := sdk.TxBuilder()                    // native transaction builder
+call := sdk.Contract("TContractAddr...")      // smart contract call builder
+token := sdk.TRC20("TContractAddr...")        // typed TRC20 wrapper
+client := sdk.Client()                        // underlying gRPC client
+```
+
+## Signer Interface (`pkg/signer`)
+
+All builder terminal operations that sign transactions accept a `signer.Signer`:
+
+```go
+import "github.com/fbsobreira/gotron-sdk/pkg/signer"
+
+type Signer interface {
+    Sign(tx *core.Transaction) (*core.Transaction, error)
+    Address() address.Address
+}
+```
+
+### Implementations
+
+```go
+// From raw ECDSA private key (validates secp256k1 curve)
+s, err := signer.NewPrivateKeySigner(ecdsaKey)
+
+// From btcec private key
+s, err := signer.NewPrivateKeySignerFromBTCEC(btcecKey)
+
+// From pre-unlocked keystore account
+s := signer.NewKeystoreSigner(ks, account)
+
+// From keystore with passphrase (unlocks per-sign)
+s := signer.NewKeystorePassphraseSigner(ks, account, "passphrase")
+
+// From Ledger hardware wallet
+s, err := signer.NewLedgerSigner()
+```
+
+## Transaction Builder (`pkg/txbuilder`)
+
+Fluent builder for native TRON transactions (transfers, staking, voting, delegation).
+
+```go
+import "github.com/fbsobreira/gotron-sdk/pkg/txbuilder"
+
+builder := txbuilder.New(conn)
+// Or with shared defaults:
+builder = txbuilder.New(conn, txbuilder.WithMemo("hello"))
+```
+
+### Transfer
+
+```go
+receipt, err := builder.Transfer(from, to, amountSUN).Send(ctx, signer)
+```
+
+### Staking
+
+```go
+import "github.com/fbsobreira/gotron-sdk/pkg/proto/core"
+
+// Stake TRX for energy
+receipt, err := builder.FreezeV2(from, amountSUN, core.ResourceCode_ENERGY).
+    Send(ctx, signer)
+
+// Unstake
+receipt, err = builder.UnfreezeV2(from, amountSUN, core.ResourceCode_ENERGY).
+    Send(ctx, signer)
+
+// Withdraw expired unfrozen TRX (after 14-day waiting period)
+receipt, err = builder.WithdrawExpireUnfreeze(from, 0).Send(ctx, signer)
+```
+
+### Resource Delegation
+
+```go
+// Delegate with optional lock period
+receipt, err := builder.DelegateResource(from, to, core.ResourceCode_ENERGY, amountSUN).
+    Lock(86400). // lock for 86400 blocks (~3 days)
+    Send(ctx, signer)
+
+// Undelegate
+receipt, err = builder.UnDelegateResource(from, to, core.ResourceCode_ENERGY, amountSUN).
+    Send(ctx, signer)
+```
+
+### Voting
+
+```go
+// Fluent vote chaining
+receipt, err := builder.VoteWitness(from).
+    Vote("TSR1addr...", 1000).
+    Vote("TSR2addr...", 500).
+    Send(ctx, signer)
+
+// Or from a map
+votes := map[string]int64{"TSR1addr...": 1000, "TSR2addr...": 500}
+receipt, err = builder.VoteWitness(from).
+    Votes(votes).
+    Send(ctx, signer)
+```
+
+### Terminal Operations
+
+Every builder method returns a `*Tx` (or `*DelegateTx`, `*VoteTx`) with these terminals:
+
+```go
+// Build unsigned transaction (for external signing)
+tx, err := builder.Transfer(from, to, amount).Build(ctx)
+
+// Decode transaction for human-readable display
+decoded, err := builder.Transfer(from, to, amount).Decode(ctx)
+// decoded.Type = "TransferContract", decoded.Fields = {...}
+
+// Sign and broadcast
+receipt, err := builder.Transfer(from, to, amount).Send(ctx, signer)
+
+// Sign, broadcast, and poll until confirmed
+receipt, err = builder.Transfer(from, to, amount).SendAndConfirm(ctx, signer)
+
+// Sign without broadcasting (returns signed transaction)
+signed, err := builder.Transfer(from, to, amount).Sign(ctx, signer)
+```
+
+> **Important (v0.25.3+):** Each `*Tx` is single-use — calling `Build`, `Sign`, `Send`, or `SendAndConfirm` a second time on the same instance returns `txbuilder.ErrAlreadyBuilt`. Create a new builder chain for each operation.
+
+### Options
+
+All builder methods accept **optional** configuration. Both options below are entirely optional — most transactions don't need them.
+
+- **`WithMemo(string)`** — Attaches an arbitrary text memo to the transaction, stored on-chain in `RawData.Data`. Useful for labeling payments, adding references, or including notes visible to both sender and recipient in explorers.
+- **`WithPermissionID(int32)`** — Sets the permission ID for multi-signature accounts. TRON accounts can have multiple permission levels (owner=0, active=2+). Required when signing with a non-owner key on a multi-sig account. Not needed for standard single-key accounts.
+
+Options can be passed as variadic arguments to builder methods, or chained fluently on the returned `*Tx`:
+
+```go
+// As variadic options (applied at build time)
+builder.Transfer(from, to, amount, txbuilder.WithMemo("payment for services"))
+builder.Transfer(from, to, amount, txbuilder.WithPermissionID(2))
+
+// As fluent chaining (on *Tx, *DelegateTx, *VoteTx)
+builder.Transfer(from, to, amount).WithMemo("payment").WithPermissionID(2).Build(ctx)
+builder.DelegateResource(from, to, res, amt).Lock(86400).WithMemo("delegation").Build(ctx)
+builder.VoteWitness(from).Votes(votes).WithMemo("my votes").Build(ctx)
+```
+
+## Contract Call Builder (`pkg/contract`)
+
+Fluent builder for smart contract interactions.
+
+```go
+import "github.com/fbsobreira/gotron-sdk/pkg/contract"
+
+call := contract.New(conn, "TContractAddr...").
+    From("TCallerAddr...").
+    Method("transfer(address,uint256)").
+    Params(`["TToAddr...", "1000000"]`).
+    Apply(contract.WithFeeLimit(100_000_000))
+```
+
+### Fluent Setters
+
+```go
+call.Method("transfer(address,uint256)")   // method signature
+call.From("TCallerAddr...")                // caller address
+call.Params(`["TAddr...", "1000"]`)        // JSON params (plain or typed)
+call.WithData(packedBytes)                 // pre-packed ABI data (alternative to Method+Params)
+call.WithABI(abiJSON)                      // parsed ABI for future use
+call.Apply(opts...)                        // apply multiple options at once
+
+// Chainable option setters (alternative to Apply)
+call.WithFeeLimit(100_000_000)             // max TRX to burn (in SUN)
+call.WithCallValue(1_000_000)              // TRX to send with call (in SUN)
+call.WithTokenValue("1000001", 500)        // TRC10 token ID and amount
+call.WithPermissionID(2)                   // multi-sig permission
+```
+
+### Terminal Operations
+
+```go
+// Read-only call (no transaction, no fees)
+result, err := call.Call(ctx)
+// result.RawResults [][]byte — raw return data
+// result.EnergyUsed int64
+
+// Estimate energy cost
+energy, err := call.EstimateEnergy(ctx)
+
+// Build unsigned transaction
+tx, err := call.Build(ctx)
+
+// Decode for human-readable display
+decoded, err := call.Decode(ctx)
+
+// Sign and broadcast
+receipt, err := call.Send(ctx, signer)
+
+// Sign, broadcast, and poll until confirmed
+receipt, err = call.SendAndConfirm(ctx, signer)
+```
+
+### Options
+
+All options are **optional**. They can be passed via `Apply()` or chained fluently:
+
+```go
+// Via Apply (useful for passing multiple options at once)
+call.Apply(
+    contract.WithFeeLimit(100_000_000),
+    contract.WithPermissionID(2),
+)
+
+// Via fluent chaining (equivalent)
+contract.New(conn, "TAddr...").
+    From("TCaller...").
+    Method("transfer(address,uint256)").
+    Params(`["TTo...", "1000"]`).
+    WithFeeLimit(100_000_000).
+    WithPermissionID(2).
+    Send(ctx, signer)
+```
+
+Available options:
+- **`WithFeeLimit(int64)`** — Max TRX to burn in SUN. Required for state-changing calls (Build/Send)
+- **`WithCallValue(int64)`** — TRX amount in SUN sent with the call (for payable methods)
+- **`WithTokenValue(tokenID, amount)`** — TRC10 token ID and amount sent with the call
+- **`WithPermissionID(int32)`** — Permission ID for multi-sig accounts (see txbuilder Options section)
+
+### Deferred Error Pattern
+
+Errors are accumulated during chaining via `SetError()` (using `errors.Join`) and surfaced at any terminal call. Multiple `SetError` calls are preserved, not just the first. This is used internally by wrappers like `trc20.Token.Transfer()`:
+
+```go
+// SetError stores a deferred error — surfaces at any terminal call
+call := contract.New(conn, "TAddr...").
+    SetError(fmt.Errorf("custom validation failed")).
+    Method("transfer(address,uint256)")
+
+result, err := call.Call(ctx)     // returns the deferred error
+// err: "custom validation failed"
+
+// Check for deferred errors explicitly
+if call.Err() != nil { ... }
+```
+
+## TRC20 Typed Wrapper (`pkg/standards/trc20`)
+
+Type-safe TRC20 token interactions with automatic decimal handling.
+
+```go
+import "github.com/fbsobreira/gotron-sdk/pkg/standards/trc20"
+
+token := trc20.New(conn, "TContractAddr...")
+```
+
+### Metadata Cache
+
+TRC20 token metadata (name, symbol, decimals) is immutable on-chain. The `MetadataCache` avoids redundant RPC calls by caching these values after the first fetch. It is thread-safe, LRU-evicted, and shared across multiple `Token` instances.
+
+```go
+// Create a shared cache (once at startup)
+cache := trc20.NewMetadataCache(256) // up to 256 tokens
+
+// Pass to Token instances — cached fields are served from memory
+token := trc20.New(conn, "TContractAddr...", trc20.WithCache(cache))
+
+// First call fetches from the network, subsequent calls hit the cache
+decimals, _ := token.Decimals(ctx) // RPC call
+decimals, _ = token.Decimals(ctx)  // cache hit — no RPC
+
+// Different Token instances sharing the same cache also benefit
+token2 := trc20.New(conn, "TContractAddr...", trc20.WithCache(cache))
+name, _ := token2.Name(ctx) // cache hit if previously fetched
+```
+
+Cache is **opt-in** — `trc20.New(conn, addr)` without `WithCache` makes a fresh RPC call every time. Only name, symbol, and decimals are cached; balances and total supply are always fetched live.
+
+### Query Methods
+
+```go
+// Get all metadata in one call
+info, err := token.Info(ctx)
+// info.Name, info.Symbol, info.Decimals (uint8), info.TotalSupply (*big.Int)
+
+// Individual queries
+name, err := token.Name(ctx)
+symbol, err := token.Symbol(ctx)
+decimals, err := token.Decimals(ctx)    // returns uint8
+supply, err := token.TotalSupply(ctx)   // returns *big.Int
+
+// Balance with formatted display
+bal, err := token.BalanceOf(ctx, "TOwnerAddr...")
+// bal.Raw     *big.Int — raw token units
+// bal.Display string   — formatted (e.g., "1,000.50")
+// bal.Symbol  string   — token symbol
+
+// Allowance
+allowance, err := token.Allowance(ctx, "TOwner...", "TSpender...")
+```
+
+### Write Methods
+
+Write methods return `*contract.ContractCall` for fluent terminal operations:
+
+```go
+// Transfer tokens
+receipt, err := token.Transfer(from, to, amount).Send(ctx, signer)
+
+// Approve spender
+receipt, err = token.Approve(from, spender, amount).Send(ctx, signer)
+
+// Transfer on behalf (requires prior approval)
+receipt, err = token.TransferFrom(caller, from, to, amount).Send(ctx, signer)
+
+// With options
+receipt, err = token.Transfer(from, to, amount,
+    contract.WithFeeLimit(150_000_000),
+    contract.WithPermissionID(2),
+).Send(ctx, signer)
+
+// Estimate energy before sending
+energy, err := token.Transfer(from, to, amount).EstimateEnergy(ctx)
+```
+
+## Receipt Type (`pkg/txcore`)
+
+All `Send` and `SendAndConfirm` terminal operations return a `Receipt`:
+
+```go
+type Receipt struct {
+    TxID          string   // transaction hash
+    BlockNumber   int64    // block that includes the tx
+    Confirmed     bool     // true after confirmation polling
+    EnergyUsed    int64    // energy consumed
+    BandwidthUsed int64    // bandwidth consumed
+    Fee           int64    // fee in SUN
+    Result        []byte   // contract return data
+    Error         string   // TRON error message if failed
+}
+```
+
+`Send` returns a receipt with `TxID` immediately after broadcast. `SendAndConfirm` polls until the transaction is confirmed (or context cancelled) and fills in all fields.
+
+## Choosing Between Approaches
+
+| Use Case | Low-Level (`pkg/client`) | Builder (`pkg/txbuilder` / `pkg/contract`) |
+|----------|-------------------------|-------------------------------------------|
+| Simple read-only query | `conn.TriggerConstantContractCtx(...)` | `contract.New(...).Call(ctx)` |
+| Build + external signing | `conn.TransferCtx(...)` | `builder.Transfer(...).Build(ctx)` |
+| Sign + broadcast | Manual: build → sign → broadcast | `builder.Transfer(...).Send(ctx, signer)` |
+| Wait for confirmation | Manual polling loop | `builder.Transfer(...).SendAndConfirm(ctx, signer)` |
+| TRC20 with decimal handling | Manual: fetch decimals → scale amount | `trc20.New(...).BalanceOf(ctx, addr)` |
+
+Both approaches are fully supported — builders wrap the low-level methods, not replace them.
+
+## MCP Tools
+
+The MCP server uses the fluent builder APIs for all tools:
+
+- Read-only contract calls use `contract.New(...).Call(ctx)`
+- Energy estimation uses `contract.New(...).EstimateEnergy(ctx)`
+- Write contract calls use `contract.New(...).Build(ctx)`
+- TRX transfers use `txbuilder.New(conn).Transfer(...).Build(ctx)`
+- TRC20 operations use `trc20.New(conn, addr).BalanceOf(ctx, ...)` / `.Transfer(...).Build(ctx)`
+- Staking/delegation use `txbuilder.New(conn).FreezeV2(...)` etc.
