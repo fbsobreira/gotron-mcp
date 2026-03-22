@@ -169,9 +169,7 @@ func TestRegisterResources_Integration(t *testing.T) {
 	)
 	RegisterResources(s)
 
-	// Verify we can initialize and the server accepts the resources
-	ctx := context.Background()
-	_ = ctx // resources are registered, server is valid
+	// resources are registered, server is valid
 }
 
 // TestOverviewHandler_Direct tests the overview resource handler closure directly.

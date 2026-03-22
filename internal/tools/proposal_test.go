@@ -26,6 +26,16 @@ func TestListProposals_Success(t *testing.T) {
 	if result.IsError {
 		t.Fatalf("expected success, got error: %v", result.Content)
 	}
+
+	data := parseJSONResult(t, result)
+	ps := data["proposals"].([]any)
+	if len(ps) == 0 {
+		t.Fatal("expected at least one proposal")
+	}
+	p := ps[0].(map[string]any)
+	if p["approval_count"] == nil {
+		t.Error("expected approval_count field")
+	}
 }
 
 // makeProposals creates n Proposal protos with distinct IDs.
