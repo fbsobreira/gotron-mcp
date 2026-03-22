@@ -18,7 +18,7 @@ func RegisterWitnessReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("list_witnesses",
 			mcp.WithDescription("List super representatives (witnesses) on the TRON network with pagination support."),
-			mcp.WithNumber("limit", mcp.Description("Max witnesses to return (default: 10)")),
+			mcp.WithNumber("limit", mcp.Description("Max witnesses to return (default: 5)")),
 			mcp.WithNumber("offset", mcp.Description("Skip first N witnesses (default: 0, for pagination)")),
 		),
 		handleListWitnesses(pool),
@@ -41,10 +41,10 @@ func RegisterWitnessWriteTools(s *server.MCPServer, pool *nodepool.Pool) {
 
 func handleListWitnesses(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		limit := req.GetInt("limit", 10)
+		limit := req.GetInt("limit", 5)
 		offset := req.GetInt("offset", 0)
 		if limit <= 0 {
-			limit = 10
+			limit = 5
 		}
 		if offset < 0 {
 			offset = 0

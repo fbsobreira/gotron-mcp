@@ -200,6 +200,8 @@ derivedKey, err := hd.DerivePrivateKeyForPath(btcec.S256(), secret, chainCode, "
 
 ## MCP: Wallet Management
 
+> **Note:** Wallet and signing tools require local mode with `--keystore-dir` and `GOTRON_MCP_KEYSTORE_PASSPHRASE` configured. They are not available in hosted (HTTP) mode or when keystore is not configured.
+
 The MCP server manages wallets in an isolated directory (`~/.gotron-mcp/wallets/` by default). A pre-configured passphrase (`GOTRON_MCP_KEYSTORE_PASSPHRASE` env) handles keystore encryption.
 
 ### Configuration

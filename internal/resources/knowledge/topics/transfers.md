@@ -178,6 +178,62 @@ tx, err := builder.Transfer(from, to, amountSUN).
 
 > **Note (v0.25.3+):** Each builder `*Tx` is single-use. Calling any terminal operation (Build, Sign, Send, SendAndConfirm) a second time returns `txbuilder.ErrAlreadyBuilt`.
 
+## SDK: Complete Signing Flow (Recommended)
+
+End-to-end example from private key to confirmed transaction:
+
+```go
+import (
+    "github.com/fbsobreira/gotron-sdk/pkg/client"
+    "github.com/fbsobreira/gotron-sdk/pkg/keys"
+    "github.com/fbsobreira/gotron-sdk/pkg/signer"
+    "github.com/fbsobreira/gotron-sdk/pkg/txbuilder"
+)
+
+// 1. Connect to TRON node
+conn := client.NewGrpcClient("grpc.trongrid.io:50051")
+conn.Start()
+defer conn.Stop()
+
+// 2. Create a signer from private key
+privKey, err := keys.GetPrivateKeyFromHex("your_hex_private_key")
+s, err := signer.NewPrivateKeySignerFromBTCEC(privKey)
+
+// 3. Build and send in one step
+builder := txbuilder.New(conn)
+receipt, err := builder.Transfer(from, to, amountSUN).Send(ctx, s)
+// receipt.TxID = "abc123..."
+
+// 4. Or build, sign, and broadcast separately
+tx, err := builder.Transfer(from, to, amountSUN).Build(ctx)
+signed, err := s.Sign(tx.Transaction)
+result, err := conn.BroadcastCtx(ctx, signed)
+
+// 5. Or wait for confirmation
+receipt, err = builder.Transfer(from, to, amountSUN).SendAndConfirm(ctx, s)
+// receipt.Confirmed = true, receipt.BlockNumber = 12345678
+```
+
+**From keystore:**
+
+```go
+import "github.com/fbsobreira/gotron-sdk/pkg/keystore"
+
+ks := keystore.NewKeyStore("/path/to/keystore", keystore.StandardScryptN, keystore.StandardScryptP)
+defer ks.Close()
+accounts := ks.Accounts()
+if len(accounts) == 0 {
+    // handle: no accounts in keystore
+}
+account := accounts[0]
+if err := ks.Unlock(account, "passphrase"); err != nil {
+    // handle: wrong passphrase or locked
+}
+s := signer.NewKeystoreSigner(ks, account)
+
+receipt, err := builder.Transfer(from, to, amountSUN).Send(ctx, s)
+```
+
 ## SDK: Receipt Type
 
 All builder `Send` and `SendAndConfirm` operations return a `txcore.Receipt`:
