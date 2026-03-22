@@ -161,7 +161,7 @@ func TestListProposals_NegativeParams(t *testing.T) {
 	if got := int(data["total"].(float64)); got != 5 {
 		t.Errorf("total = %d, want 5", got)
 	}
-	// Negative limit should clamp to default 10, negative offset to 0
+	// Negative limit should clamp to default 5, negative offset to 0
 	if got := int(data["returned"].(float64)); got != 5 {
 		t.Errorf("returned = %d, want 5", got)
 	}

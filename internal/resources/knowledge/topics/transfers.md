@@ -215,13 +215,20 @@ receipt, err = builder.Transfer(from, to, amountSUN).SendAndConfirm(ctx, s)
 ```
 
 **From keystore:**
+
 ```go
 import "github.com/fbsobreira/gotron-sdk/pkg/keystore"
 
 ks := keystore.NewKeyStore("/path/to/keystore", keystore.StandardScryptN, keystore.StandardScryptP)
 defer ks.Close()
-account := ks.Accounts()[0]
-ks.Unlock(account, "passphrase")
+accounts := ks.Accounts()
+if len(accounts) == 0 {
+    // handle: no accounts in keystore
+}
+account := accounts[0]
+if err := ks.Unlock(account, "passphrase"); err != nil {
+    // handle: wrong passphrase or locked
+}
 s := signer.NewKeystoreSigner(ks, account)
 
 receipt, err := builder.Transfer(from, to, amountSUN).Send(ctx, s)
