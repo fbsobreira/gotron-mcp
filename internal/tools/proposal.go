@@ -17,7 +17,7 @@ func RegisterProposalTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("list_proposals",
 			mcp.WithDescription("List governance proposals on the TRON network with pagination support. Returns newest first by default."),
-			mcp.WithNumber("limit", mcp.Description("Max proposals to return (default: 10)")),
+			mcp.WithNumber("limit", mcp.Description("Max proposals to return (default: 5)")),
 			mcp.WithNumber("offset", mcp.Description("Skip first N proposals (default: 0, for pagination)")),
 			mcp.WithString("order", mcp.Description("Sort order by proposal ID: 'desc' (default, newest first) or 'asc' (oldest first)")),
 		),
@@ -27,11 +27,11 @@ func RegisterProposalTools(s *server.MCPServer, pool *nodepool.Pool) {
 
 func handleListProposals(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		limit := req.GetInt("limit", 10)
+		limit := req.GetInt("limit", 5)
 		offset := req.GetInt("offset", 0)
 		order := req.GetString("order", "desc")
 		if limit <= 0 {
-			limit = 10
+			limit = 5
 		}
 		if offset < 0 {
 			offset = 0

@@ -69,10 +69,10 @@ func TestListProposals(t *testing.T) {
 		{
 			name:         "default pagination",
 			args:         map[string]any{},
-			wantReturned: 10,
+			wantReturned: 5,
 			wantTotal:    15,
 			wantHasMore:  true,
-			wantNextOff:  10,
+			wantNextOff:  5,
 		},
 		{
 			name:         "custom limit",
