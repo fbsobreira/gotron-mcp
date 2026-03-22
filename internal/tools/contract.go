@@ -41,7 +41,7 @@ func RegisterContractReadTools(s *server.MCPServer, pool *nodepool.Pool) {
 
 	s.AddTool(
 		mcp.NewTool("get_contract_abi",
-			mcp.WithDescription("Get the ABI of a smart contract on TRON. Automatically resolves proxy contracts (ERC-1967)."),
+			mcp.WithDescription("Get the ABI of a smart contract on TRON. Automatically resolves proxy contracts (ERC-1967). Note: many TRON contracts are deployed without on-chain ABI — if empty, check TronScan for verified source code."),
 			mcp.WithString("contract_address", mcp.Required(), mcp.Description("Smart contract address (base58, starts with T)")),
 		),
 		handleGetContractABI(pool),
@@ -215,7 +215,7 @@ func handleGetContractABI(pool *nodepool.Pool) server.ToolHandlerFunc {
 		}
 
 		if len(formatted) == 0 {
-			result["note"] = "No ABI found on-chain. This contract may not have its ABI published. Check TronScan for verified source code and ABI."
+			result["note"] = "No ABI found on-chain. Many TRON contracts are deployed without storing the ABI. Proxy resolution was attempted. This is not a transient error — retrying will return the same result. Check TronScan for verified source code and ABI."
 		}
 
 		return mcp.NewToolResultJSON(result)
