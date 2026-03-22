@@ -72,18 +72,23 @@ func handleListWitnesses(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 		// Apply pagination
 		total := len(list)
-		offset = min(offset, total)
-		end := min(offset+limit, total)
-		page := list[offset:end]
+		if offset > total {
+			offset = total
+		}
+		remaining := total - offset
+		if limit > remaining {
+			limit = remaining
+		}
+		page := list[offset : offset+limit]
 
 		result := map[string]any{
 			"witnesses": page,
 			"total":     total,
 			"returned":  len(page),
 		}
-		if end < total {
+		if offset+limit < total {
 			result["has_more"] = true
-			result["next_offset"] = end
+			result["next_offset"] = offset + limit
 		}
 
 		return mcp.NewToolResultJSON(result)

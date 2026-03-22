@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
@@ -143,8 +144,10 @@ func builderOptions(req mcp.CallToolRequest) []txbuilder.Option {
 	}
 	args := req.GetArguments()
 	if _, has := args["permission_id"]; has {
-		pid := int32(req.GetInt("permission_id", 0))
-		opts = append(opts, txbuilder.WithPermissionID(pid))
+		pid := req.GetInt("permission_id", 0)
+		if pid >= 0 && pid <= math.MaxInt32 {
+			opts = append(opts, txbuilder.WithPermissionID(int32(pid)))
+		}
 	}
 	return opts
 }

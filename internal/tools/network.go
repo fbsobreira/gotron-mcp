@@ -58,6 +58,8 @@ func RegisterNetworkTools(s *server.MCPServer, pool *nodepool.Pool, network, nod
 	s.AddTool(
 		mcp.NewTool("get_pending_transactions",
 			mcp.WithDescription("List pending transaction IDs and pool size from the mempool"),
+			mcp.WithNumber("limit", mcp.Description("Max transaction IDs to return (default: 10)")),
+			mcp.WithNumber("offset", mcp.Description("Skip first N transaction IDs (default: 0, for pagination)")),
 		),
 		handleGetPendingTransactions(pool),
 	)
@@ -217,6 +219,15 @@ func handleGetBandwidthPrices(pool *nodepool.Pool) server.ToolHandlerFunc {
 
 func handleGetPendingTransactions(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		limit := req.GetInt("limit", 10)
+		offset := req.GetInt("offset", 0)
+		if limit <= 0 {
+			limit = 10
+		}
+		if offset < 0 {
+			offset = 0
+		}
+
 		conn := pool.Client()
 
 		size, err := conn.GetPendingSizeCtx(ctx)
@@ -234,9 +245,26 @@ func handleGetPendingTransactions(pool *nodepool.Pool) server.ToolHandlerFunc {
 			txIDs = []string{}
 		}
 
+		// Apply pagination
+		total := len(txIDs)
+		if offset > total {
+			offset = total
+		}
+		remaining := total - offset
+		if limit > remaining {
+			limit = remaining
+		}
+		page := txIDs[offset : offset+limit]
+
 		result := map[string]any{
 			"pool_size":       size.GetNum(),
-			"transaction_ids": txIDs,
+			"transaction_ids": page,
+			"total":           total,
+			"returned":        len(page),
+		}
+		if offset+limit < total {
+			result["has_more"] = true
+			result["next_offset"] = offset + limit
 		}
 
 		return mcp.NewToolResultJSON(result)
