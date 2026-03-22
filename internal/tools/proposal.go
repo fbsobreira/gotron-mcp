@@ -12,16 +12,24 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// RegisterProposalTools registers the list_proposals tool.
+// RegisterProposalTools registers list_proposals and get_proposal tools.
 func RegisterProposalTools(s *server.MCPServer, pool *nodepool.Pool) {
 	s.AddTool(
 		mcp.NewTool("list_proposals",
-			mcp.WithDescription("List governance proposals on the TRON network with pagination support. Returns newest first by default."),
+			mcp.WithDescription("List governance proposals on the TRON network with pagination support. Returns a compact summary per proposal (use get_proposal for full details including approval addresses). Newest first by default."),
 			mcp.WithNumber("limit", mcp.Description("Max proposals to return (default: 5)")),
 			mcp.WithNumber("offset", mcp.Description("Skip first N proposals (default: 0, for pagination)")),
 			mcp.WithString("order", mcp.Description("Sort order by proposal ID: 'desc' (default, newest first) or 'asc' (oldest first)")),
 		),
 		handleListProposals(pool),
+	)
+
+	s.AddTool(
+		mcp.NewTool("get_proposal",
+			mcp.WithDescription("Get full details of a governance proposal by ID, including the complete list of approval addresses."),
+			mcp.WithNumber("proposal_id", mcp.Required(), mcp.Description("Proposal ID")),
+		),
+		handleGetProposal(pool),
 	)
 }
 
@@ -87,5 +95,47 @@ func handleListProposals(pool *nodepool.Pool) server.ToolHandlerFunc {
 		}
 
 		return mcp.NewToolResultJSON(result)
+	}
+}
+
+func handleGetProposal(pool *nodepool.Pool) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		proposalID := int64(req.GetInt("proposal_id", -1))
+		if proposalID < 0 {
+			return mcp.NewToolResultError("proposal_id is required"), nil
+		}
+
+		conn := pool.Client()
+		proposals, err := conn.ProposalsListCtx(ctx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("get_proposal: %v", err)), nil
+		}
+
+		for _, p := range proposals.Proposals {
+			if p.ProposalId != proposalID {
+				continue
+			}
+
+			proposerAddr := address.BytesToAddress(p.ProposerAddress)
+
+			var approvals []string
+			for _, a := range p.Approvals {
+				addr := address.BytesToAddress(a)
+				approvals = append(approvals, addr.String())
+			}
+
+			return mcp.NewToolResultJSON(map[string]any{
+				"proposal_id":     p.ProposalId,
+				"proposer":        proposerAddr.String(),
+				"parameters":      p.Parameters,
+				"expiration_time": p.ExpirationTime,
+				"create_time":     p.CreateTime,
+				"approvals":       approvals,
+				"approval_count":  len(approvals),
+				"state":           p.State.String(),
+			})
+		}
+
+		return mcp.NewToolResultError(fmt.Sprintf("get_proposal: proposal %d not found", proposalID)), nil
 	}
 }
