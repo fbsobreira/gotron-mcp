@@ -102,7 +102,7 @@ func handleGetProposal(pool *nodepool.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		proposalID := int64(req.GetInt("proposal_id", -1))
 		if proposalID < 0 {
-			return mcp.NewToolResultError("proposal_id is required"), nil
+			return mcp.NewToolResultError("get_proposal: proposal_id is required"), nil
 		}
 
 		conn := pool.Client()
