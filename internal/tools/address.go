@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"math"
 	"strings"
 
@@ -147,6 +148,8 @@ func builderOptions(req mcp.CallToolRequest) []txbuilder.Option {
 		pid := req.GetInt("permission_id", 0)
 		if pid >= 0 && pid <= math.MaxInt32 {
 			opts = append(opts, txbuilder.WithPermissionID(int32(pid)))
+		} else {
+			log.Printf("warning: permission_id %d out of range (0-%d), ignoring", pid, math.MaxInt32)
 		}
 	}
 	return opts
