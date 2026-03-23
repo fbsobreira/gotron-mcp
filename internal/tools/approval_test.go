@@ -150,6 +150,26 @@ func TestRevokeApproval_InvalidOwner(t *testing.T) {
 	assert.True(t, result.IsError)
 }
 
+func TestRevokeApproval_InvalidSpender(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+	result := callTool(t, handleRevokeApproval(pool, nil), map[string]any{
+		"owner":            "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"spender":          "bad",
+		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+	})
+	assert.True(t, result.IsError)
+}
+
+func TestRevokeApproval_InvalidContract(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+	result := callTool(t, handleRevokeApproval(pool, nil), map[string]any{
+		"owner":            "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"spender":          "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		"contract_address": "bad",
+	})
+	assert.True(t, result.IsError)
+}
+
 func TestRevokeApproval_InvalidFeeLimit(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
 	result := callTool(t, handleRevokeApproval(pool, nil), map[string]any{
@@ -187,6 +207,49 @@ func TestRevokeApproval_Success(t *testing.T) {
 	assert.Equal(t, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", data["spender"])
 	assert.NotEmpty(t, data["transaction_hex"])
 	assert.NotEmpty(t, data["txid"])
+}
+
+func TestRevokeApproval_BuildError(t *testing.T) {
+	mock := &mockWalletServer{
+		TriggerContractFunc: func(_ context.Context, _ *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+			return nil, fmt.Errorf("contract call failed")
+		},
+	}
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleRevokeApproval(pool, nil), map[string]any{
+		"owner":            "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"spender":          "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+	})
+	assert.True(t, result.IsError)
+}
+
+func TestRevokeApproval_WithPermissionID(t *testing.T) {
+	mock := &mockWalletServer{
+		TriggerContractFunc: func(_ context.Context, _ *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+			return &api.TransactionExtention{
+				Result: &api.Return{Result: true},
+				Txid:   []byte{0x01, 0x02, 0x03},
+				Transaction: &core.Transaction{
+					RawData: &core.TransactionRaw{
+						Contract: []*core.Transaction_Contract{{}},
+					},
+				},
+			}, nil
+		},
+	}
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleRevokeApproval(pool, nil), map[string]any{
+		"owner":            "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"spender":          "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		"permission_id":    float64(2),
+	})
+	require.False(t, result.IsError, "got error: %v", result.Content)
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, "RevokeApproval", data["type"])
+	assert.NotEmpty(t, data["transaction_hex"])
 }
 
 func TestFormatBigIntWithDecimals(t *testing.T) {
