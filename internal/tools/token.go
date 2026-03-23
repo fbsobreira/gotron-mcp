@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"math"
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
@@ -164,6 +165,13 @@ func handleEstimateTRC20Energy(pool *nodepool.Pool, cache *trc20.MetadataCache) 
 		}
 
 		energy, err := token.Transfer(from, to, amount).EstimateEnergy(ctx)
+		if err != nil && isEstimateEnergyUnsupported(err) {
+			if fallback := pool.FallbackClient(); fallback != nil {
+				log.Printf("estimate_trc20_energy: trying fallback node")
+				fbToken := trc20Token(fallback, contractAddr, cache)
+				energy, err = fbToken.Transfer(from, to, amount).EstimateEnergy(ctx)
+			}
+		}
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("estimate_trc20_energy: %v", err)), nil
 		}
