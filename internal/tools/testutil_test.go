@@ -49,6 +49,9 @@ type mockWalletServer struct {
 	DelegateResourceFunc           func(context.Context, *core.DelegateResourceContract) (*api.TransactionExtention, error)
 	UnDelegateResourceFunc         func(context.Context, *core.UnDelegateResourceContract) (*api.TransactionExtention, error)
 	WithdrawExpireUnfreezeFunc     func(context.Context, *core.WithdrawExpireUnfreezeContract) (*api.TransactionExtention, error)
+	GetDelegatedResourceV2Func              func(context.Context, *api.DelegatedResourceMessage) (*api.DelegatedResourceList, error)
+	GetDelegatedResourceAccountIndexV2Func func(context.Context, *api.BytesMessage) (*core.DelegatedResourceAccountIndex, error)
+	GetCanDelegatedMaxSizeFunc              func(context.Context, *api.CanDelegatedMaxSizeRequestMessage) (*api.CanDelegatedMaxSizeResponseMessage, error)
 }
 
 func (m *mockWalletServer) GetAccount(ctx context.Context, in *core.Account) (*core.Account, error) {
@@ -231,6 +234,27 @@ func (m *mockWalletServer) WithdrawExpireUnfreeze(ctx context.Context, in *core.
 		return m.WithdrawExpireUnfreezeFunc(ctx, in)
 	}
 	return m.UnimplementedWalletServer.WithdrawExpireUnfreeze(ctx, in)
+}
+
+func (m *mockWalletServer) GetDelegatedResourceV2(ctx context.Context, in *api.DelegatedResourceMessage) (*api.DelegatedResourceList, error) {
+	if m.GetDelegatedResourceV2Func != nil {
+		return m.GetDelegatedResourceV2Func(ctx, in)
+	}
+	return m.UnimplementedWalletServer.GetDelegatedResourceV2(ctx, in)
+}
+
+func (m *mockWalletServer) GetDelegatedResourceAccountIndexV2(ctx context.Context, in *api.BytesMessage) (*core.DelegatedResourceAccountIndex, error) {
+	if m.GetDelegatedResourceAccountIndexV2Func != nil {
+		return m.GetDelegatedResourceAccountIndexV2Func(ctx, in)
+	}
+	return m.UnimplementedWalletServer.GetDelegatedResourceAccountIndexV2(ctx, in)
+}
+
+func (m *mockWalletServer) GetCanDelegatedMaxSize(ctx context.Context, in *api.CanDelegatedMaxSizeRequestMessage) (*api.CanDelegatedMaxSizeResponseMessage, error) {
+	if m.GetCanDelegatedMaxSizeFunc != nil {
+		return m.GetCanDelegatedMaxSizeFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.GetCanDelegatedMaxSize(ctx, in)
 }
 
 // newMockClient creates a GrpcClient connected to an in-memory gRPC server.
