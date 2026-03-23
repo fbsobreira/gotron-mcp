@@ -37,6 +37,7 @@ Available capabilities:
 - Network info, chain parameters, energy/bandwidth prices (get_network, get_chain_parameters)
 - Transaction lookup (get_transaction)
 - Transaction history, TRC20 transfers, contract events via TronGrid REST API (get_transaction_history, get_trc20_transfers, get_contract_events)
+- Comprehensive account overview in one call (analyze_account)
 - Account permissions and multi-sig structure (get_account_permissions)
 - Resource delegation info and delegatable amounts (get_delegated_resources, get_delegatable_amount)
 - Governance: list witnesses, proposals (list_witnesses, list_proposals)
@@ -63,6 +64,7 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 	tools.RegisterWitnessReadTools(s, pool)
 	tools.RegisterProposalTools(s, pool)
 	tools.RegisterDelegationTools(s, pool)
+	tools.RegisterAnalyzeTools(s, pool)
 
 	// TronGrid REST API tools (transaction history, TRC20 transfers, contract events)
 	tgClient := trongrid.NewClient(cfg.Network, cfg.APIKey)
