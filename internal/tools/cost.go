@@ -67,7 +67,13 @@ func handleAnalyzeTransferCost(pool *nodepool.Pool, cache *trc20.MetadataCache) 
 		// 2. Get current energy/bandwidth prices
 		progress.Send(2, "Fetching current prices...")
 		energyPrice := getCurrentPrice(ctx, pool.Client(), "energy")
+		if energyPrice == 0 {
+			log.Printf("analyze_transfer_cost: warning: energy price unavailable, burn costs will show as 0")
+		}
 		bandwidthPrice := getCurrentPrice(ctx, pool.Client(), "bandwidth")
+		if bandwidthPrice == 0 {
+			log.Printf("analyze_transfer_cost: warning: bandwidth price unavailable, burn costs will show as 0")
+		}
 
 		// 3. Estimate energy (TRC20 only)
 		var energyRequired int64
@@ -136,8 +142,8 @@ func buildCostResult(
 	energyPrice, bandwidthPrice int64,
 	energyEstimated bool,
 ) map[string]any {
-	energyAvailable := res.EnergyLimit - res.EnergyUsed
-	bandwidthAvailable := (res.NetLimit - res.NetUsed) + (res.FreeNetLimit - res.FreeNetUsed)
+	energyAvailable := max(0, res.EnergyLimit-res.EnergyUsed)
+	bandwidthAvailable := max(0, res.NetLimit-res.NetUsed) + max(0, res.FreeNetLimit-res.FreeNetUsed)
 
 	result := map[string]any{
 		"transfer_type":               transferType,
@@ -241,9 +247,7 @@ func estimateTRC20Energy(ctx context.Context, pool *nodepool.Pool, from, to, con
 		return token.Transfer(from, to, amount)
 	}
 
-	energy, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (int64, error) {
-		return newCall(pool.Client()).EstimateEnergy(ctx)
-	})
+	energy, err := newCall(pool.Client()).EstimateEnergy(ctx)
 	if err != nil && isEstimateEnergyUnsupported(err) {
 		if fallback := pool.FallbackClient(); fallback != nil {
 			energy, err = newCall(fallback).EstimateEnergy(ctx)
