@@ -115,6 +115,7 @@ func TestGetTRC20Allowance_Limited(t *testing.T) {
 	assert.Equal(t, false, data["is_unlimited"])
 	assert.Equal(t, "medium", data["risk_level"])
 	assert.Equal(t, "1000", data["allowance_display"])
+	assert.Equal(t, 2, callCount, "expected exactly 2 RPC calls (allowance + decimals)")
 }
 
 func TestGetTRC20Allowance_Unlimited(t *testing.T) {
@@ -172,19 +173,48 @@ func TestRevokeApproval_InvalidContract(t *testing.T) {
 }
 
 func TestRevokeApproval_InvalidFeeLimit(t *testing.T) {
-	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleRevokeApproval(pool, nil), map[string]any{
-		"owner":            "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
-		"spender":          "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-		"fee_limit":        float64(20000),
-	})
-	assert.True(t, result.IsError)
+	tests := []struct {
+		name     string
+		feeLimit float64
+	}{
+		{"above max", 20000},
+		{"negative", -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pool := newMockPool(t, &mockWalletServer{})
+			result := callTool(t, handleRevokeApproval(pool, nil), map[string]any{
+				"owner":            "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+				"spender":          "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+				"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+				"fee_limit":        tt.feeLimit,
+			})
+			assert.True(t, result.IsError)
+		})
+	}
 }
 
 func TestRevokeApproval_Success(t *testing.T) {
 	mock := &mockWalletServer{
-		TriggerContractFunc: func(_ context.Context, _ *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+		TriggerContractFunc: func(_ context.Context, in *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+			// Verify the calldata starts with approve(address,uint256) selector: 0x095ea7b3
+			data := in.GetData()
+			require.True(t, len(data) >= 4, "calldata too short")
+			assert.Equal(t, "095ea7b3", hex.EncodeToString(data[:4]), "expected approve selector")
+
+			// Verify amount is 0 (last 32 bytes should be all zeros)
+			if len(data) >= 68 {
+				amountBytes := data[36:68]
+				allZero := true
+				for _, b := range amountBytes {
+					if b != 0 {
+						allZero = false
+						break
+					}
+				}
+				assert.True(t, allZero, "expected amount=0 for revoke")
+			}
+
 			return &api.TransactionExtention{
 				Result: &api.Return{Result: true},
 				Txid:   []byte{0x01, 0x02, 0x03},
