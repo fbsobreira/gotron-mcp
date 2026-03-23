@@ -39,6 +39,7 @@ Available capabilities:
 - Transaction history, TRC20 transfers, contract events via TronGrid REST API (get_transaction_history, get_trc20_transfers, get_contract_events)
 - Comprehensive account overview in one call (analyze_account)
 - Transfer cost estimation with energy/bandwidth breakdown (analyze_transfer_cost)
+- TRC20 approval safety: check allowances and revoke approvals (get_trc20_allowance, revoke_approval)
 - Account permissions and multi-sig structure (get_account_permissions)
 - Resource delegation info and delegatable amounts (get_delegated_resources, get_delegatable_amount)
 - Governance: list witnesses, proposals (list_witnesses, list_proposals)
@@ -67,6 +68,7 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 	tools.RegisterDelegationTools(s, pool)
 	tools.RegisterAnalyzeTools(s, pool)
 	tools.RegisterCostTools(s, pool, trc20Cache)
+	tools.RegisterApprovalReadTools(s, pool, trc20Cache)
 
 	// TronGrid REST API tools (transaction history, TRC20 transfers, contract events)
 	tgClient := trongrid.NewClient(cfg.Network, cfg.APIKey)
@@ -77,6 +79,7 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 	tools.RegisterResourceTools(s, pool)
 	tools.RegisterWitnessWriteTools(s, pool)
 	tools.RegisterContractWriteTools(s, pool)
+	tools.RegisterApprovalWriteTools(s, pool, trc20Cache)
 
 	// Sign/broadcast — local mode with wallet manager
 	var wm *wallet.Manager
