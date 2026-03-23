@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTRXToSun(t *testing.T) {
@@ -33,7 +34,7 @@ func TestTRXToSun(t *testing.T) {
 				assert.Error(t, err, "TRXToSun(%q)", tt.trx)
 				return
 			}
-			assert.NoError(t, err, "TRXToSun(%q)", tt.trx)
+			require.NoError(t, err, "TRXToSun(%q)", tt.trx)
 			assert.Equal(t, tt.want, got, "TRXToSun(%q)", tt.trx)
 		})
 	}

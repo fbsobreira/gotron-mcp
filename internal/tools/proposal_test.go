@@ -127,7 +127,7 @@ func TestListProposals(t *testing.T) {
 
 			hasMore, ok := data["has_more"]
 			if tt.wantHasMore {
-				assert.True(t, ok && hasMore == true, "has_more = %v, want true", hasMore)
+				require.True(t, ok && hasMore == true, "has_more = %v, want true", hasMore)
 				assert.Equal(t, tt.wantNextOff, int(data["next_offset"].(float64)))
 			} else {
 				assert.False(t, ok, "has_more should not be present, got %v", hasMore)
