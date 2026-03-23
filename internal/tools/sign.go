@@ -89,6 +89,7 @@ func computeTxID(tx *core.Transaction) (string, error) {
 
 func handleSignTransaction(wm *wallet.Manager) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		progress := newProgressReporter(ctx, req, 2)
 		txHex := req.GetString("transaction_hex", "")
 		walletName := req.GetString("wallet", "")
 
@@ -96,11 +97,13 @@ func handleSignTransaction(wm *wallet.Manager) server.ToolHandlerFunc {
 			return mcp.NewToolResultError("wallet is required"), nil
 		}
 
+		progress.Send(1, "Validating transaction...")
 		tx, err := parseAndValidateTx(txHex)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
+		progress.Send(2, "Signing with wallet...")
 		s, err := wm.GetSigner(walletName)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("sign_transaction: %v", err)), nil
@@ -127,6 +130,7 @@ func handleSignTransaction(wm *wallet.Manager) server.ToolHandlerFunc {
 
 func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		progress := newProgressReporter(ctx, req, 3)
 		txHex := req.GetString("transaction_hex", "")
 		walletName := req.GetString("wallet", "")
 
@@ -134,6 +138,7 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager) server.Tool
 			return mcp.NewToolResultError("wallet is required"), nil
 		}
 
+		progress.Send(1, "Validating transaction...")
 		tx, err := parseAndValidateTx(txHex)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
@@ -147,6 +152,7 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager) server.Tool
 			contractData = decoded.Fields
 		}
 
+		progress.Send(2, "Signing with wallet...")
 		s, err := wm.GetSigner(walletName)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: %v", err)), nil
@@ -162,6 +168,7 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager) server.Tool
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
+		progress.Send(3, "Broadcasting to network...")
 		conn := pool.Client()
 		ret, err := conn.BroadcastCtx(ctx, signedTx)
 		if err != nil {
@@ -187,6 +194,10 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager) server.Tool
 
 func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		const maxConfirmAttempts = 20
+		// 3 setup steps + polling attempts + 1 confirmation step
+		progress := newProgressReporter(ctx, req, 4+maxConfirmAttempts)
+
 		txHex := req.GetString("transaction_hex", "")
 		walletName := req.GetString("wallet", "")
 
@@ -194,6 +205,7 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager) server.ToolHa
 			return mcp.NewToolResultError("wallet is required"), nil
 		}
 
+		progress.Send(1, "Validating transaction...")
 		tx, err := parseAndValidateTx(txHex)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
@@ -204,6 +216,7 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager) server.ToolHa
 			_ = decoded // logged for future policy use
 		}
 
+		progress.Send(2, "Signing with wallet...")
 		s, err := wm.GetSigner(walletName)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: %v", err)), nil
@@ -219,6 +232,7 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager) server.ToolHa
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
+		progress.Send(3, "Broadcasting to network...")
 		conn := pool.Client()
 		ret, err := conn.BroadcastCtx(ctx, signedTx)
 		if err != nil {
@@ -229,7 +243,6 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager) server.ToolHa
 		}
 
 		// Poll for confirmation
-		const maxConfirmAttempts = 20
 		ticker := time.NewTicker(3 * time.Second)
 		defer ticker.Stop()
 
@@ -240,6 +253,8 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager) server.ToolHa
 			case <-ticker.C:
 			}
 
+			progress.Send(4+attempt, fmt.Sprintf("Waiting for confirmation (attempt %d/%d)...", attempt+1, maxConfirmAttempts))
+
 			info, infoErr := conn.GetTransactionInfoByIDCtx(ctx, txid)
 			if infoErr != nil {
 				if strings.Contains(infoErr.Error(), "not found") {
@@ -248,6 +263,7 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager) server.ToolHa
 				return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: %v", infoErr)), nil
 			}
 			if info != nil && info.BlockNumber > 0 {
+				progress.Send(4+maxConfirmAttempts, fmt.Sprintf("Confirmed in block %d", info.BlockNumber))
 				return mcp.NewToolResultJSON(map[string]any{
 					"txid":           txid,
 					"success":        info.GetResult() != core.TransactionInfo_FAILED,
