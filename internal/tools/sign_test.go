@@ -144,7 +144,7 @@ func TestSignTransaction_Success(t *testing.T) {
 
 func TestSignAndBroadcast_InvalidHex(t *testing.T) {
 	wm, pool := newTestSignSetup(t, &mockWalletServer{})
-	result := callTool(t, handleSignAndBroadcast(pool, wm), map[string]any{
+	result := callTool(t, handleSignAndBroadcast(pool, wm, nil), map[string]any{
 		"transaction_hex": "not-hex",
 		"wallet":          "test",
 	})
@@ -154,7 +154,7 @@ func TestSignAndBroadcast_InvalidHex(t *testing.T) {
 func TestSignAndBroadcast_WalletNotFound(t *testing.T) {
 	wm, pool := newTestSignSetup(t, &mockWalletServer{})
 	txHex := buildTestTxHex(t)
-	result := callTool(t, handleSignAndBroadcast(pool, wm), map[string]any{
+	result := callTool(t, handleSignAndBroadcast(pool, wm, nil), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "nonexistent",
 	})
@@ -177,7 +177,7 @@ func TestSignAndBroadcast_Success(t *testing.T) {
 	require.NoError(t, err, "CreateWallet")
 
 	txHex := buildTestTxHex(t)
-	result := callTool(t, handleSignAndBroadcast(pool, wm), map[string]any{
+	result := callTool(t, handleSignAndBroadcast(pool, wm, nil), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "broadcast-signer",
 	})
@@ -218,7 +218,7 @@ func TestSignAndConfirm_Success(t *testing.T) {
 	require.NoError(t, err, "CreateWallet")
 
 	txHex := buildTestTxHex(t)
-	result := callTool(t, handleSignAndConfirm(pool, wm), map[string]any{
+	result := callTool(t, handleSignAndConfirm(pool, wm, nil), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "confirm-signer",
 	})
@@ -287,7 +287,7 @@ func TestSignAndBroadcast_BroadcastFails(t *testing.T) {
 	_, err := wm.CreateWallet("test-wallet")
 	require.NoError(t, err, "CreateWallet")
 	txHex := buildTestTxHex(t)
-	result := callTool(t, handleSignAndBroadcast(pool, wm), map[string]any{
+	result := callTool(t, handleSignAndBroadcast(pool, wm, nil), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "test-wallet",
 	})
@@ -308,7 +308,7 @@ func TestSignAndBroadcast_BroadcastRejected(t *testing.T) {
 	_, err := wm.CreateWallet("test-wallet")
 	require.NoError(t, err, "CreateWallet")
 	txHex := buildTestTxHex(t)
-	result := callTool(t, handleSignAndBroadcast(pool, wm), map[string]any{
+	result := callTool(t, handleSignAndBroadcast(pool, wm, nil), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "test-wallet",
 	})
@@ -339,7 +339,7 @@ func TestSignAndConfirm_ContextCancelled(t *testing.T) {
 		"transaction_hex": txHex,
 		"wallet":          "test-wallet",
 	}
-	handler := handleSignAndConfirm(pool, wm)
+	handler := handleSignAndConfirm(pool, wm, nil)
 	result, goErr := handler(ctx, req)
 	require.NoError(t, goErr, "handler returned Go error")
 	assert.True(t, result.IsError, "expected error for cancelled context")
@@ -358,7 +358,7 @@ func TestSignAndConfirm_RPCError(t *testing.T) {
 	_, err := wm.CreateWallet("test-wallet")
 	require.NoError(t, err, "CreateWallet")
 	txHex := buildTestTxHex(t)
-	result := callTool(t, handleSignAndConfirm(pool, wm), map[string]any{
+	result := callTool(t, handleSignAndConfirm(pool, wm, nil), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "test-wallet",
 	})

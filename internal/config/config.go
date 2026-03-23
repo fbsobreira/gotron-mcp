@@ -27,6 +27,8 @@ type Config struct {
 	KeystoreDir     string
 	KeystorePass    string
 	RequirePolicy   bool
+	PolicyConfig    string
+	StateDir        string
 }
 
 var networkNodes = map[string]string{
@@ -55,6 +57,8 @@ func Parse() *Config {
 	flag.StringVar(&cfg.KeystoreDir, "keystore-dir", envOrDefault("GOTRON_MCP_KEYSTORE_DIR", ""), "Path to MCP wallet directory (default: ~/.gotron-mcp/wallets/)")
 	flag.StringVar(&cfg.KeystorePass, "keystore-pass", envOrDefault("GOTRON_MCP_KEYSTORE_PASSPHRASE", ""), "Passphrase for keystore encryption")
 	flag.BoolVar(&cfg.RequirePolicy, "require-policy", envOrDefault("GOTRON_MCP_REQUIRE_POLICY", "") == "true", "Refuse to sign if no policy config exists")
+	flag.StringVar(&cfg.PolicyConfig, "policy-config", envOrDefault("GOTRON_MCP_POLICY_CONFIG", ""), "Path to policy YAML config (default: ~/.gotron-mcp/policy.yaml)")
+	flag.StringVar(&cfg.StateDir, "state-dir", envOrDefault("GOTRON_MCP_STATE_DIR", ""), "Path to state directory for spend tracking (default: ~/.gotron-mcp/)")
 
 	flag.Parse()
 
@@ -77,11 +81,15 @@ func Parse() *Config {
 		cfg.Node = resolveNode(cfg.Network)
 	}
 
-	if cfg.KeystoreDir == "" {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			cfg.KeystoreDir = filepath.Join(home, ".gotron-mcp", "wallets")
-		}
+	home, _ := os.UserHomeDir()
+	if cfg.KeystoreDir == "" && home != "" {
+		cfg.KeystoreDir = filepath.Join(home, ".gotron-mcp", "wallets")
+	}
+	if cfg.PolicyConfig == "" && home != "" {
+		cfg.PolicyConfig = filepath.Join(home, ".gotron-mcp", "policy.yaml")
+	}
+	if cfg.StateDir == "" && home != "" {
+		cfg.StateDir = filepath.Join(home, ".gotron-mcp")
 	}
 
 	return cfg
