@@ -11,6 +11,7 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestGetTRC20Allowance_InvalidOwner(t *testing.T) {
@@ -82,7 +83,7 @@ func TestGetTRC20Allowance_Zero(t *testing.T) {
 }
 
 func TestGetTRC20Allowance_Limited(t *testing.T) {
-	// Return decimals (6) on first call, allowance (1000000000 = 1000 tokens) on second
+	// Return allowance (1000000000 = 1000 tokens) on first call, decimals (6) on second
 	callCount := 0
 	mock := &mockWalletServer{
 		TriggerConstantContractFunc: func(_ context.Context, _ *core.TriggerSmartContract) (*api.TransactionExtention, error) {
@@ -250,6 +251,15 @@ func TestRevokeApproval_WithPermissionID(t *testing.T) {
 	data := parseJSONResult(t, result)
 	assert.Equal(t, "RevokeApproval", data["type"])
 	assert.NotEmpty(t, data["transaction_hex"])
+
+	// Verify permission_id is embedded in the built transaction
+	txHex := data["transaction_hex"].(string)
+	txBytes, err := hex.DecodeString(txHex)
+	require.NoError(t, err)
+	var tx core.Transaction
+	require.NoError(t, proto.Unmarshal(txBytes, &tx))
+	require.NotEmpty(t, tx.RawData.Contract)
+	assert.Equal(t, int32(2), tx.RawData.Contract[0].PermissionId)
 }
 
 func TestFormatBigIntWithDecimals(t *testing.T) {
