@@ -7,16 +7,22 @@ import (
 
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetAccountPermissions_InvalidAddress(t *testing.T) {
-	pool := newMockPool(t, &mockWalletServer{})
+	mock := &mockWalletServer{
+		GetAccountFunc: func(_ context.Context, _ *core.Account) (*core.Account, error) {
+			t.Fatal("RPC should not be called for invalid address")
+			return nil, nil
+		},
+	}
+	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetAccountPermissions(pool), map[string]any{
 		"address": "invalid",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid address")
 }
 
 func TestGetAccountPermissions_Error(t *testing.T) {
@@ -29,9 +35,7 @@ func TestGetAccountPermissions_Error(t *testing.T) {
 	result := callTool(t, handleGetAccountPermissions(pool), map[string]any{
 		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 	})
-	if !result.IsError {
-		t.Error("expected error when GetAccount fails")
-	}
+	assert.True(t, result.IsError, "expected error when GetAccount fails")
 }
 
 func TestGetAccountPermissions_Success(t *testing.T) {
@@ -68,35 +72,37 @@ func TestGetAccountPermissions_Success(t *testing.T) {
 	result := callTool(t, handleGetAccountPermissions(pool), map[string]any{
 		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
-	if data["address"] != "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF" {
-		t.Errorf("address = %v", data["address"])
-	}
+	assert.Equal(t, "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", data["address"])
 
+	// Owner permission
 	owner, ok := data["owner"].(map[string]any)
-	if !ok {
-		t.Fatal("expected owner permission")
-	}
-	if owner["threshold"] != float64(1) {
-		t.Errorf("owner threshold = %v, want 1", owner["threshold"])
-	}
+	require.True(t, ok, "expected owner permission")
+	assert.Equal(t, float64(1), owner["threshold"])
+	assert.Equal(t, "owner", owner["name"])
+	assert.Equal(t, "Owner", owner["type"])
+	keys := owner["keys"].([]any)
+	require.Len(t, keys, 1)
+	key := keys[0].(map[string]any)
+	assert.Equal(t, float64(1), key["weight"])
+	assert.NotEmpty(t, key["address"])
 
+	// Active permission
 	active, ok := data["active"].([]any)
-	if !ok || len(active) != 1 {
-		t.Fatalf("expected 1 active permission, got %v", data["active"])
-	}
+	require.True(t, ok)
+	require.Len(t, active, 1)
 	ap := active[0].(map[string]any)
-	if ap["threshold"] != float64(2) {
-		t.Errorf("active threshold = %v, want 2", ap["threshold"])
-	}
+	assert.Equal(t, float64(2), ap["threshold"])
+	assert.Equal(t, "active", ap["name"])
+	assert.Equal(t, "ff0f", ap["operations"])
+	aKeys := ap["keys"].([]any)
+	require.Len(t, aKeys, 1)
+	assert.Equal(t, float64(1), aKeys[0].(map[string]any)["weight"])
 
-	if _, ok := data["witness"]; ok {
-		t.Error("witness should not be present when nil")
-	}
+	// No witness
+	assert.Nil(t, data["witness"], "witness should not be present when nil")
 }
 
 func TestGetAccountPermissions_WithWitness(t *testing.T) {
@@ -116,7 +122,7 @@ func TestGetAccountPermissions_WithWitness(t *testing.T) {
 					PermissionName: "witness",
 					Threshold:      1,
 					Type:           core.Permission_Witness,
-					Keys:           []*core.Key{{Address: witnessAddr, Weight: 1}},
+					Keys:           []*core.Key{{Address: witnessAddr, Weight: 3}},
 				},
 			}, nil
 		},
@@ -125,18 +131,17 @@ func TestGetAccountPermissions_WithWitness(t *testing.T) {
 	result := callTool(t, handleGetAccountPermissions(pool), map[string]any{
 		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
 	witness, ok := data["witness"].(map[string]any)
-	if !ok {
-		t.Fatal("expected witness permission")
-	}
-	if witness["name"] != "witness" {
-		t.Errorf("witness name = %v, want witness", witness["name"])
-	}
+	require.True(t, ok, "expected witness permission")
+	assert.Equal(t, "witness", witness["name"])
+	assert.Equal(t, "Witness", witness["type"])
+	assert.Equal(t, float64(1), witness["threshold"])
+	keys := witness["keys"].([]any)
+	require.Len(t, keys, 1)
+	assert.Equal(t, float64(3), keys[0].(map[string]any)["weight"])
 }
 
 func TestGetAccountPermissions_NoPermissions(t *testing.T) {
@@ -149,24 +154,26 @@ func TestGetAccountPermissions_NoPermissions(t *testing.T) {
 	result := callTool(t, handleGetAccountPermissions(pool), map[string]any{
 		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError)
 
 	data := parseJSONResult(t, result)
-	if _, ok := data["owner"]; ok {
-		t.Error("owner should not be present when nil")
-	}
+	assert.Nil(t, data["owner"])
+	assert.Nil(t, data["witness"])
+	assert.Nil(t, data["active"])
 }
 
 func TestGetDelegatedResources_InvalidAddress(t *testing.T) {
-	pool := newMockPool(t, &mockWalletServer{})
+	mock := &mockWalletServer{
+		GetDelegatedResourceAccountIndexV2Func: func(_ context.Context, _ *api.BytesMessage) (*core.DelegatedResourceAccountIndex, error) {
+			t.Fatal("RPC should not be called for invalid address")
+			return nil, nil
+		},
+	}
+	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetDelegatedResources(pool), map[string]any{
 		"address": "bad",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid address")
 }
 
 func TestGetDelegatedResources_Success(t *testing.T) {
@@ -176,8 +183,9 @@ func TestGetDelegatedResources_Success(t *testing.T) {
 	mock := &mockWalletServer{
 		GetDelegatedResourceAccountIndexV2Func: func(_ context.Context, _ *api.BytesMessage) (*core.DelegatedResourceAccountIndex, error) {
 			return &core.DelegatedResourceAccountIndex{
-				Account:    fromAddr,
-				ToAccounts: [][]byte{toAddr},
+				Account:      fromAddr,
+				ToAccounts:   [][]byte{toAddr},
+				FromAccounts: [][]byte{toAddr},
 			}, nil
 		},
 		GetDelegatedResourceV2Func: func(_ context.Context, _ *api.DelegatedResourceMessage) (*api.DelegatedResourceList, error) {
@@ -186,10 +194,10 @@ func TestGetDelegatedResources_Success(t *testing.T) {
 					{
 						From:                      fromAddr,
 						To:                        toAddr,
-						FrozenBalanceForEnergy:     5000000,
-						FrozenBalanceForBandwidth:  2000000,
-						ExpireTimeForEnergy:        1710864000,
-						ExpireTimeForBandwidth:     1710950400,
+						FrozenBalanceForEnergy:    5000000,
+						FrozenBalanceForBandwidth: 2000000,
+						ExpireTimeForEnergy:       1710864000,
+						ExpireTimeForBandwidth:    1710950400,
 					},
 				},
 			}, nil
@@ -199,31 +207,29 @@ func TestGetDelegatedResources_Success(t *testing.T) {
 	result := callTool(t, handleGetDelegatedResources(pool), map[string]any{
 		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
+
+	// delegated_to
 	delegated := data["delegated_to"].([]any)
-	if len(delegated) != 1 {
-		t.Fatalf("expected 1 delegation, got %d", len(delegated))
-	}
+	require.Len(t, delegated, 1)
 	d := delegated[0].(map[string]any)
-	if d["energy_sun"] != float64(5000000) {
-		t.Errorf("energy_sun = %v, want 5000000", d["energy_sun"])
-	}
-	if d["energy_trx"] != "5.000000" {
-		t.Errorf("energy_trx = %v, want 5.000000", d["energy_trx"])
-	}
-	if d["bandwidth_sun"] != float64(2000000) {
-		t.Errorf("bandwidth_sun = %v, want 2000000", d["bandwidth_sun"])
-	}
-	if d["expire_time_energy"] != float64(1710864000) {
-		t.Errorf("expire_time_energy = %v, want 1710864000", d["expire_time_energy"])
-	}
-	if d["expire_time_bandwidth"] != float64(1710950400) {
-		t.Errorf("expire_time_bandwidth = %v, want 1710950400", d["expire_time_bandwidth"])
-	}
+	assert.Equal(t, float64(5000000), d["energy_sun"])
+	assert.Equal(t, "5.000000", d["energy_trx"])
+	assert.Equal(t, float64(2000000), d["bandwidth_sun"])
+	assert.Equal(t, "2.000000", d["bandwidth_trx"])
+	assert.Equal(t, float64(1710864000), d["expire_time_energy"])
+	assert.Equal(t, float64(1710950400), d["expire_time_bandwidth"])
+	assert.NotEmpty(t, d["from"])
+	assert.NotEmpty(t, d["to"])
+
+	// received_from
+	received := data["received_from"].([]any)
+	require.Len(t, received, 1)
+	r := received[0].(map[string]any)
+	assert.Equal(t, float64(5000000), r["energy_sun"])
+	assert.Equal(t, float64(2000000), r["bandwidth_sun"])
 }
 
 func TestGetDelegatedResources_IndexError(t *testing.T) {
@@ -236,22 +242,18 @@ func TestGetDelegatedResources_IndexError(t *testing.T) {
 	result := callTool(t, handleGetDelegatedResources(pool), map[string]any{
 		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 	})
-	if !result.IsError {
-		t.Error("expected error when GetDelegatedResourceAccountIndexV2 fails")
-	}
+	assert.True(t, result.IsError, "expected error when index lookup fails")
 }
 
 func TestGetDelegatedResources_ResourceError(t *testing.T) {
 	toAddr := []byte{0x41, 0x14, 0x13, 0x12, 0x11, 0x10, 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01}
 	callCount := 0
 	mock := &mockWalletServer{
-		GetDelegatedResourceAccountIndexV2Func: func(_ context.Context, in *api.BytesMessage) (*core.DelegatedResourceAccountIndex, error) {
+		GetDelegatedResourceAccountIndexV2Func: func(_ context.Context, _ *api.BytesMessage) (*core.DelegatedResourceAccountIndex, error) {
 			callCount++
 			if callCount == 1 {
-				// First call (delegated-to) returns empty so it succeeds
 				return &core.DelegatedResourceAccountIndex{}, nil
 			}
-			// Second call (received-from) returns an account with FromAccounts to trigger GetDelegatedResourceV2
 			return &core.DelegatedResourceAccountIndex{
 				FromAccounts: [][]byte{toAddr},
 			}, nil
@@ -264,9 +266,7 @@ func TestGetDelegatedResources_ResourceError(t *testing.T) {
 	result := callTool(t, handleGetDelegatedResources(pool), map[string]any{
 		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 	})
-	if !result.IsError {
-		t.Error("expected error when GetDelegatedResourceV2 fails")
-	}
+	assert.True(t, result.IsError, "expected error when resource lookup fails")
 }
 
 func TestGetDelegatedResources_Empty(t *testing.T) {
@@ -279,69 +279,72 @@ func TestGetDelegatedResources_Empty(t *testing.T) {
 	result := callTool(t, handleGetDelegatedResources(pool), map[string]any{
 		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError)
 
 	data := parseJSONResult(t, result)
-	delegated := data["delegated_to"].([]any)
-	if len(delegated) != 0 {
-		t.Errorf("expected empty delegated_to, got %d", len(delegated))
-	}
-	received := data["received_from"].([]any)
-	if len(received) != 0 {
-		t.Errorf("expected empty received_from, got %d", len(received))
-	}
+	assert.Len(t, data["delegated_to"].([]any), 0)
+	assert.Len(t, data["received_from"].([]any), 0)
 }
 
 func TestGetDelegatableAmount_InvalidAddress(t *testing.T) {
-	pool := newMockPool(t, &mockWalletServer{})
+	mock := &mockWalletServer{
+		GetCanDelegatedMaxSizeFunc: func(_ context.Context, _ *api.CanDelegatedMaxSizeRequestMessage) (*api.CanDelegatedMaxSizeResponseMessage, error) {
+			t.Fatal("RPC should not be called for invalid address")
+			return nil, nil
+		},
+	}
+	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetDelegatableAmount(pool), map[string]any{
 		"address":  "bad",
 		"resource": "ENERGY",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid address")
 }
 
 func TestGetDelegatableAmount_InvalidResource(t *testing.T) {
-	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleGetDelegatableAmount(pool), map[string]any{
-		"address":  "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
-		"resource": "INVALID",
-	})
-	if !result.IsError {
-		t.Error("expected error for invalid resource")
-	}
-}
-
-func TestGetDelegatableAmount_Success(t *testing.T) {
 	mock := &mockWalletServer{
 		GetCanDelegatedMaxSizeFunc: func(_ context.Context, _ *api.CanDelegatedMaxSizeRequestMessage) (*api.CanDelegatedMaxSizeResponseMessage, error) {
-			return &api.CanDelegatedMaxSizeResponseMessage{
-				MaxSize: 5000000000,
-			}, nil
+			t.Fatal("RPC should not be called for invalid resource")
+			return nil, nil
 		},
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetDelegatableAmount(pool), map[string]any{
 		"address":  "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
-		"resource": "ENERGY",
+		"resource": "INVALID",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	assert.True(t, result.IsError, "expected error for invalid resource")
+}
 
-	data := parseJSONResult(t, result)
-	if data["resource"] != "ENERGY" {
-		t.Errorf("resource = %v, want ENERGY", data["resource"])
+func TestGetDelegatableAmount_Success(t *testing.T) {
+	tests := []struct {
+		name     string
+		resource string
+	}{
+		{"ENERGY", "ENERGY"},
+		{"BANDWIDTH", "BANDWIDTH"},
 	}
-	if data["max_delegatable_sun"] != float64(5000000000) {
-		t.Errorf("max_delegatable_sun = %v, want 5000000000", data["max_delegatable_sun"])
-	}
-	if data["max_delegatable_trx"] != "5000.000000" {
-		t.Errorf("max_delegatable_trx = %v, want 5000.000000", data["max_delegatable_trx"])
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockWalletServer{
+				GetCanDelegatedMaxSizeFunc: func(_ context.Context, in *api.CanDelegatedMaxSizeRequestMessage) (*api.CanDelegatedMaxSizeResponseMessage, error) {
+					return &api.CanDelegatedMaxSizeResponseMessage{
+						MaxSize: 5000000000,
+					}, nil
+				},
+			}
+			pool := newMockPool(t, mock)
+			result := callTool(t, handleGetDelegatableAmount(pool), map[string]any{
+				"address":  "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+				"resource": tt.resource,
+			})
+			require.False(t, result.IsError, "expected success, got error: %v", result.Content)
+
+			data := parseJSONResult(t, result)
+			assert.Equal(t, tt.resource, data["resource"])
+			assert.Equal(t, float64(5000000000), data["max_delegatable_sun"])
+			assert.Equal(t, "5000.000000", data["max_delegatable_trx"])
+		})
 	}
 }
 
@@ -356,7 +359,5 @@ func TestGetDelegatableAmount_Error(t *testing.T) {
 		"address":  "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"resource": "BANDWIDTH",
 	})
-	if !result.IsError {
-		t.Error("expected error when GetCanDelegatedMaxSize fails")
-	}
+	assert.True(t, result.IsError, "expected error when GetCanDelegatedMaxSize fails")
 }
