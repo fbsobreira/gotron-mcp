@@ -9,6 +9,8 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/client"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -28,68 +30,46 @@ func newTestPool(primaryAddr, fallbackAddr string) *Pool {
 
 func TestClient_ReturnsPrimary(t *testing.T) {
 	p := newTestPool("primary:50051", "")
-	if p.Client() != p.primary.client {
-		t.Error("Client() should return primary client")
-	}
+	assert.Equal(t, p.primary.client, p.Client(), "Client() should return primary client")
 }
 
 func TestActiveNode_ReturnsPrimaryAddress(t *testing.T) {
 	p := newTestPool("primary:50051", "")
-	if got := p.ActiveNode(); got != "primary:50051" {
-		t.Errorf("ActiveNode() = %q, want %q", got, "primary:50051")
-	}
+	assert.Equal(t, "primary:50051", p.ActiveNode())
 }
 
 func TestClientAndNode_ConsistentSnapshot(t *testing.T) {
 	p := newTestPool("primary:50051", "fallback:50051")
 	c, addr := p.ClientAndNode()
-	if c != p.primary.client {
-		t.Error("ClientAndNode() client should be primary")
-	}
-	if addr != "primary:50051" {
-		t.Errorf("ClientAndNode() addr = %q, want %q", addr, "primary:50051")
-	}
+	assert.Equal(t, p.primary.client, c, "ClientAndNode() client should be primary")
+	assert.Equal(t, "primary:50051", addr)
 }
 
 func TestFallbackClient_Nil(t *testing.T) {
 	p := newTestPool("primary:50051", "")
-	if got := p.FallbackClient(); got != nil {
-		t.Error("FallbackClient() should be nil when no fallback configured")
-	}
+	assert.Nil(t, p.FallbackClient(), "FallbackClient() should be nil when no fallback configured")
 }
 
 func TestFallbackClient_ReturnsFallback(t *testing.T) {
 	p := newTestPool("primary:50051", "fallback:50051")
-	if p.FallbackClient() != p.fallback.client {
-		t.Error("FallbackClient() should return fallback client")
-	}
+	assert.Equal(t, p.fallback.client, p.FallbackClient(), "FallbackClient() should return fallback client")
 }
 
 func TestFailover_SwitchesToFallback(t *testing.T) {
 	p := newTestPool("primary:50051", "fallback:50051")
 
 	switched := p.Failover()
-	if !switched {
-		t.Error("Failover() should return true")
-	}
-	if p.Client() != p.fallback.client {
-		t.Error("Client() should return fallback after failover")
-	}
-	if got := p.ActiveNode(); got != "fallback:50051" {
-		t.Errorf("ActiveNode() = %q, want %q", got, "fallback:50051")
-	}
+	assert.True(t, switched, "Failover() should return true")
+	assert.Equal(t, p.fallback.client, p.Client(), "Client() should return fallback after failover")
+	assert.Equal(t, "fallback:50051", p.ActiveNode())
 }
 
 func TestFailover_NoFallback(t *testing.T) {
 	p := newTestPool("primary:50051", "")
 
 	switched := p.Failover()
-	if switched {
-		t.Error("Failover() should return false when no fallback")
-	}
-	if p.Client() != p.primary.client {
-		t.Error("Client() should still return primary")
-	}
+	assert.False(t, switched, "Failover() should return false when no fallback")
+	assert.Equal(t, p.primary.client, p.Client(), "Client() should still return primary")
 }
 
 func TestFailover_AlreadyOnFallback(t *testing.T) {
@@ -97,9 +77,7 @@ func TestFailover_AlreadyOnFallback(t *testing.T) {
 	p.Failover() // first failover
 
 	switched := p.Failover()
-	if switched {
-		t.Error("Failover() should return false when already on fallback")
-	}
+	assert.False(t, switched, "Failover() should return false when already on fallback")
 }
 
 func TestRecover_SwitchesBackToPrimary(t *testing.T) {
@@ -107,51 +85,35 @@ func TestRecover_SwitchesBackToPrimary(t *testing.T) {
 	p.Failover()
 
 	recovered := p.Recover()
-	if !recovered {
-		t.Error("Recover() should return true")
-	}
-	if p.Client() != p.primary.client {
-		t.Error("Client() should return primary after recover")
-	}
-	if got := p.ActiveNode(); got != "primary:50051" {
-		t.Errorf("ActiveNode() = %q, want %q", got, "primary:50051")
-	}
+	assert.True(t, recovered, "Recover() should return true")
+	assert.Equal(t, p.primary.client, p.Client(), "Client() should return primary after recover")
+	assert.Equal(t, "primary:50051", p.ActiveNode())
 }
 
 func TestRecover_AlreadyOnPrimary(t *testing.T) {
 	p := newTestPool("primary:50051", "fallback:50051")
 
 	recovered := p.Recover()
-	if recovered {
-		t.Error("Recover() should return false when already on primary")
-	}
+	assert.False(t, recovered, "Recover() should return false when already on primary")
 }
 
 func TestFailoverThenRecover_Cycle(t *testing.T) {
 	p := newTestPool("primary:50051", "fallback:50051")
 
 	// Start on primary
-	if p.ActiveNode() != "primary:50051" {
-		t.Fatal("should start on primary")
-	}
+	require.Equal(t, "primary:50051", p.ActiveNode(), "should start on primary")
 
 	// Failover to fallback
 	p.Failover()
-	if p.ActiveNode() != "fallback:50051" {
-		t.Fatal("should be on fallback")
-	}
+	require.Equal(t, "fallback:50051", p.ActiveNode(), "should be on fallback")
 
 	// Recover to primary
 	p.Recover()
-	if p.ActiveNode() != "primary:50051" {
-		t.Fatal("should be back on primary")
-	}
+	require.Equal(t, "primary:50051", p.ActiveNode(), "should be back on primary")
 
 	// Failover again
 	p.Failover()
-	if p.ActiveNode() != "fallback:50051" {
-		t.Fatal("should be on fallback again")
-	}
+	require.Equal(t, "fallback:50051", p.ActiveNode(), "should be on fallback again")
 }
 
 func TestClientAndNode_AfterFailover(t *testing.T) {
@@ -159,42 +121,28 @@ func TestClientAndNode_AfterFailover(t *testing.T) {
 	p.Failover()
 
 	c, addr := p.ClientAndNode()
-	if c != p.fallback.client {
-		t.Error("ClientAndNode() client should be fallback after failover")
-	}
-	if addr != "fallback:50051" {
-		t.Errorf("ClientAndNode() addr = %q, want %q", addr, "fallback:50051")
-	}
+	assert.Equal(t, p.fallback.client, c, "ClientAndNode() client should be fallback after failover")
+	assert.Equal(t, "fallback:50051", addr)
 }
 
 func TestNewFromClient(t *testing.T) {
 	c := client.NewGrpcClient("test:50051")
 	p := NewFromClient(c, "test:50051")
-	if p.Client() != c {
-		t.Error("NewFromClient should return pool with provided client")
-	}
-	if got := p.ActiveNode(); got != "test:50051" {
-		t.Errorf("ActiveNode() = %q, want %q", got, "test:50051")
-	}
-	if p.FallbackClient() != nil {
-		t.Error("NewFromClient should not have fallback")
-	}
+	assert.Equal(t, c, p.Client(), "NewFromClient should return pool with provided client")
+	assert.Equal(t, "test:50051", p.ActiveNode())
+	assert.Nil(t, p.FallbackClient(), "NewFromClient should not have fallback")
 }
 
 func TestSetAPIKey(t *testing.T) {
 	p := newTestPool("primary:50051", "")
 	err := p.SetAPIKey("test-key")
-	if err != nil {
-		t.Errorf("SetAPIKey() returned error: %v", err)
-	}
+	assert.NoError(t, err, "SetAPIKey()")
 }
 
 func TestSetAPIKey_WithFallback(t *testing.T) {
 	p := newTestPool("primary:50051", "fallback:50051")
 	err := p.SetAPIKey("test-key")
-	if err != nil {
-		t.Errorf("SetAPIKey() with fallback returned error: %v", err)
-	}
+	assert.NoError(t, err, "SetAPIKey() with fallback")
 }
 
 func TestStop(t *testing.T) {
@@ -234,17 +182,13 @@ func TestConcurrentFailoverRecover(t *testing.T) {
 
 	// After concurrent operations, pool must be in a valid state
 	c, addr := p.ClientAndNode()
-	if addr != "primary:50051" && addr != "fallback:50051" {
-		t.Errorf("ActiveNode() = %q, want primary or fallback", addr)
+	assert.True(t, addr == "primary:50051" || addr == "fallback:50051", "ActiveNode() = %q, want primary or fallback", addr)
+	assert.NotNil(t, c, "Client() should not be nil")
+	if addr == "primary:50051" {
+		assert.Equal(t, p.primary.client, c, "client/node mismatch: addr is primary but client is not")
 	}
-	if c == nil {
-		t.Error("Client() should not be nil")
-	}
-	if addr == "primary:50051" && c != p.primary.client {
-		t.Error("client/node mismatch: addr is primary but client is not")
-	}
-	if addr == "fallback:50051" && c != p.fallback.client {
-		t.Error("client/node mismatch: addr is fallback but client is not")
+	if addr == "fallback:50051" {
+		assert.Equal(t, p.fallback.client, c, "client/node mismatch: addr is fallback but client is not")
 	}
 }
 
@@ -285,9 +229,7 @@ func newBufconnClient(t *testing.T, mock *mockWalletServer) *client.GrpcClient {
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
-	if err != nil {
-		t.Fatalf("failed to create mock client: %v", err)
-	}
+	require.NoError(t, err, "failed to create mock client")
 	t.Cleanup(func() { _ = conn.Close() })
 
 	c := client.NewGrpcClient("bufconn")
@@ -323,15 +265,9 @@ func startMockServer(t *testing.T, mock *mockWalletServer) *bufconn.Listener {
 func TestNew_Success(t *testing.T) {
 	lis := startMockServer(t, &mockWalletServer{healthy: true})
 	p, err := New("passthrough:///bufconn", bufconnDialOpts(lis))
-	if err != nil {
-		t.Fatalf("New() error: %v", err)
-	}
-	if p.Client() == nil {
-		t.Error("Client() should not be nil")
-	}
-	if got := p.ActiveNode(); got != "passthrough:///bufconn" {
-		t.Errorf("ActiveNode() = %q", got)
-	}
+	require.NoError(t, err, "New()")
+	assert.NotNil(t, p.Client(), "Client() should not be nil")
+	assert.Equal(t, "passthrough:///bufconn", p.ActiveNode())
 	p.Stop()
 }
 
@@ -340,34 +276,24 @@ func TestAddFallback_Success(t *testing.T) {
 	fallbackLis := startMockServer(t, &mockWalletServer{healthy: true})
 
 	p, err := New("passthrough:///primary", bufconnDialOpts(primaryLis))
-	if err != nil {
-		t.Fatalf("New() error: %v", err)
-	}
+	require.NoError(t, err, "New()")
 	defer p.Stop()
 
 	err = p.AddFallback("passthrough:///fallback", bufconnDialOpts(fallbackLis))
-	if err != nil {
-		t.Fatalf("AddFallback() error: %v", err)
-	}
-	if p.FallbackClient() == nil {
-		t.Error("FallbackClient() should not be nil after AddFallback")
-	}
+	require.NoError(t, err, "AddFallback()")
+	assert.NotNil(t, p.FallbackClient(), "FallbackClient() should not be nil after AddFallback")
 }
 
 func TestCheckHealth_Healthy(t *testing.T) {
 	c := newBufconnClient(t, &mockWalletServer{healthy: true})
 	p := NewFromClient(c, "bufconn")
-	if !p.CheckHealth() {
-		t.Error("CheckHealth() should return true when node is healthy")
-	}
+	assert.True(t, p.CheckHealth(), "CheckHealth() should return true when node is healthy")
 }
 
 func TestCheckHealth_Unhealthy_NoFallback(t *testing.T) {
 	c := newBufconnClient(t, &mockWalletServer{healthy: false})
 	p := NewFromClient(c, "bufconn")
-	if p.CheckHealth() {
-		t.Error("CheckHealth() should return false when node is unhealthy")
-	}
+	assert.False(t, p.CheckHealth(), "CheckHealth() should return false when node is unhealthy")
 }
 
 func TestCheckHealth_Unhealthy_WithFallback(t *testing.T) {
@@ -377,13 +303,9 @@ func TestCheckHealth_Unhealthy_WithFallback(t *testing.T) {
 	p := NewFromClient(primary, "primary")
 	p.fallback = &node{client: fallback, address: "fallback"}
 
-	if p.CheckHealth() {
-		t.Error("CheckHealth() should return false when primary is unhealthy")
-	}
+	assert.False(t, p.CheckHealth(), "CheckHealth() should return false when primary is unhealthy")
 	// Should have failed over to fallback
-	if p.ActiveNode() != "fallback" {
-		t.Errorf("should have failed over, active = %q", p.ActiveNode())
-	}
+	assert.Equal(t, "fallback", p.ActiveNode(), "should have failed over")
 }
 
 func TestCheckHealth_OnFallback_PrimaryRecovers(t *testing.T) {
@@ -394,11 +316,7 @@ func TestCheckHealth_OnFallback_PrimaryRecovers(t *testing.T) {
 	p.fallback = &node{client: fallback, address: "fallback"}
 	p.Failover() // move to fallback
 
-	if !p.CheckHealth() {
-		t.Error("CheckHealth() should return true when fallback is healthy")
-	}
+	assert.True(t, p.CheckHealth(), "CheckHealth() should return true when fallback is healthy")
 	// Should have recovered to primary since primary is also healthy
-	if p.ActiveNode() != "primary" {
-		t.Errorf("should have recovered to primary, active = %q", p.ActiveNode())
-	}
+	assert.Equal(t, "primary", p.ActiveNode(), "should have recovered to primary")
 }

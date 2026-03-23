@@ -7,6 +7,8 @@ import (
 
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -26,9 +28,7 @@ func TestGetBlock_Latest(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetBlock(pool), map[string]any{})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 }
 
 func TestGetBlock_ByNumber(t *testing.T) {
@@ -49,9 +49,7 @@ func TestGetBlock_ByNumber(t *testing.T) {
 	result := callTool(t, handleGetBlock(pool), map[string]any{
 		"block_number": float64(100),
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 }
 
 func makeBlockWithTransactions(txCount int) *api.BlockExtention {
@@ -99,21 +97,13 @@ func TestGetBlock_WithTransactions(t *testing.T) {
 		"block_number":         float64(500),
 		"include_transactions": true,
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
-	if data["transaction_count"] != float64(10) {
-		t.Errorf("transaction_count = %v, want 10", data["transaction_count"])
-	}
+	assert.Equal(t, float64(10), data["transaction_count"], "transaction_count")
 	txs, ok := data["transactions"].([]any)
-	if !ok {
-		t.Fatal("expected transactions array")
-	}
-	if len(txs) != 10 {
-		t.Errorf("transactions length = %d, want 10", len(txs))
-	}
+	require.True(t, ok, "expected transactions array")
+	assert.Len(t, txs, 10, "transactions length")
 }
 
 func TestGetBlock_WithTypeFilter(t *testing.T) {
@@ -129,15 +119,11 @@ func TestGetBlock_WithTypeFilter(t *testing.T) {
 		"include_transactions": true,
 		"transaction_type":     "TransferContract",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
 	filtered := int(data["transactions_filtered"].(float64))
-	if filtered != 5 {
-		t.Errorf("transactions_filtered = %d, want 5", filtered)
-	}
+	assert.Equal(t, 5, filtered, "transactions_filtered")
 }
 
 func TestGetBlock_WithPagination(t *testing.T) {
@@ -154,18 +140,12 @@ func TestGetBlock_WithPagination(t *testing.T) {
 		"limit":                float64(3),
 		"offset":               float64(2),
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
 	returned := int(data["transactions_returned"].(float64))
-	if returned != 3 {
-		t.Errorf("transactions_returned = %d, want 3", returned)
-	}
-	if data["has_more"] != true {
-		t.Error("expected has_more = true")
-	}
+	assert.Equal(t, 3, returned, "transactions_returned")
+	assert.Equal(t, true, data["has_more"], "expected has_more = true")
 }
 
 func TestGetBlock_LatestError(t *testing.T) {
@@ -176,9 +156,7 @@ func TestGetBlock_LatestError(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetBlock(pool), map[string]any{})
-	if !result.IsError {
-		t.Error("expected error when latest block fails")
-	}
+	assert.True(t, result.IsError, "expected error when latest block fails")
 }
 
 func TestGetBlock_ByNumberError(t *testing.T) {
@@ -191,7 +169,5 @@ func TestGetBlock_ByNumberError(t *testing.T) {
 	result := callTool(t, handleGetBlock(pool), map[string]any{
 		"block_number": float64(999999),
 	})
-	if !result.IsError {
-		t.Error("expected error when block number fails")
-	}
+	assert.True(t, result.IsError, "expected error when block number fails")
 }

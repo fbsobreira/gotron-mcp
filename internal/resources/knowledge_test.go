@@ -8,6 +8,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRegisterResources_NoError(t *testing.T) {
@@ -16,32 +18,21 @@ func TestRegisterResources_NoError(t *testing.T) {
 }
 
 func TestEmbeddedContent_NotEmpty(t *testing.T) {
-	if tronOverview == "" {
-		t.Error("tronOverview embed is empty")
-	}
+	assert.NotEmpty(t, tronOverview, "tronOverview embed is empty")
 	for slug, topic := range topics {
-		if topic.content == "" {
-			t.Errorf("topic %q content is empty", slug)
-		}
-		if topic.name == "" {
-			t.Errorf("topic %q name is empty", slug)
-		}
-		if topic.desc == "" {
-			t.Errorf("topic %q desc is empty", slug)
-		}
+		assert.NotEmpty(t, topic.content, "topic %q content is empty", slug)
+		assert.NotEmpty(t, topic.name, "topic %q name is empty", slug)
+		assert.NotEmpty(t, topic.desc, "topic %q desc is empty", slug)
 	}
 }
 
 func TestTopics_AllExpected(t *testing.T) {
 	expected := []string{"accounts", "tokens", "transfers", "staking", "contracts", "governance", "blocks", "sdk"}
 	for _, slug := range expected {
-		if _, ok := topics[slug]; !ok {
-			t.Errorf("expected topic %q not found", slug)
-		}
+		_, ok := topics[slug]
+		assert.True(t, ok, "expected topic %q not found", slug)
 	}
-	if len(topics) != len(expected) {
-		t.Errorf("expected %d topics, got %d", len(expected), len(topics))
-	}
+	assert.Len(t, topics, len(expected))
 }
 
 func TestTopicLookup_Valid(t *testing.T) {
@@ -51,9 +42,7 @@ func TestTopicLookup_Valid(t *testing.T) {
 	// We can't call the template handler directly, but we can verify
 	// the lookup logic works by testing the topics map
 	for slug, topic := range topics {
-		if topic.content == "" {
-			t.Errorf("topic %q has empty content", slug)
-		}
+		assert.NotEmpty(t, topic.content, "topic %q has empty content", slug)
 	}
 }
 
@@ -61,9 +50,7 @@ func TestTopicLookup_Unknown(t *testing.T) {
 	// Test the slug extraction and lookup logic
 	slug := "nonexistent"
 	_, ok := topics[slug]
-	if ok {
-		t.Error("expected unknown topic to not be found")
-	}
+	assert.False(t, ok, "expected unknown topic to not be found")
 }
 
 func TestOverviewResource_Handler(t *testing.T) {
@@ -79,16 +66,10 @@ func TestOverviewResource_Handler(t *testing.T) {
 		},
 	}
 
-	if len(contents) != 1 {
-		t.Fatalf("expected 1 content, got %d", len(contents))
-	}
+	require.Len(t, contents, 1)
 	tc, ok := contents[0].(mcp.TextResourceContents)
-	if !ok {
-		t.Fatal("expected TextResourceContents")
-	}
-	if tc.Text == "" {
-		t.Error("overview text is empty")
-	}
+	require.True(t, ok, "expected TextResourceContents")
+	assert.NotEmpty(t, tc.Text, "overview text is empty")
 }
 
 func TestTopicResource_Handler(t *testing.T) {
@@ -103,12 +84,8 @@ func TestTopicResource_Handler(t *testing.T) {
 				},
 			}
 			tc := contents[0].(mcp.TextResourceContents)
-			if tc.Text == "" {
-				t.Errorf("topic %q text is empty", slug)
-			}
-			if tc.URI != uri {
-				t.Errorf("URI = %q, want %q", tc.URI, uri)
-			}
+			assert.NotEmpty(t, tc.Text, "topic %q text is empty", slug)
+			assert.Equal(t, uri, tc.URI)
 		})
 	}
 }
@@ -127,16 +104,10 @@ func TestTopicTemplateLookup_SlugExtraction(t *testing.T) {
 			// Mirror production logic: extract slug after last '/'
 			uri := tt.uri
 			extracted := uri[strings.LastIndex(uri, "/")+1:]
-			if extracted != tt.slug {
-				t.Errorf("extracted %q, want %q", extracted, tt.slug)
-			}
+			assert.Equal(t, tt.slug, extracted)
 			topic, ok := topics[extracted]
-			if !ok {
-				t.Fatalf("topic %q not found", extracted)
-			}
-			if topic.content == "" {
-				t.Error("content is empty")
-			}
+			require.True(t, ok, "topic %q not found", extracted)
+			assert.NotEmpty(t, topic.content, "content is empty")
 		})
 	}
 }
@@ -148,18 +119,14 @@ func TestTopicTemplateLookup_InvalidSlug(t *testing.T) {
 	// Simulate the template handler with an invalid topic
 	slug := "invalid_topic"
 	_, ok := topics[slug]
-	if ok {
-		t.Error("should not find invalid topic")
-	}
+	assert.False(t, ok, "should not find invalid topic")
 
 	// Verify error message would contain available topics
 	available := make([]string, 0, len(topics))
 	for k := range topics {
 		available = append(available, k)
 	}
-	if len(available) != 8 {
-		t.Errorf("expected 8 available topics, got %d", len(available))
-	}
+	assert.Len(t, available, 8, "expected 8 available topics")
 }
 
 // Verify that RegisterResources works with a real MCP server context
@@ -186,19 +153,11 @@ func TestOverviewHandler_Direct(t *testing.T) {
 	}
 
 	contents, err := handler(context.Background(), mcp.ReadResourceRequest{})
-	if err != nil {
-		t.Fatalf("handler error: %v", err)
-	}
-	if len(contents) != 1 {
-		t.Fatalf("expected 1 content, got %d", len(contents))
-	}
+	require.NoError(t, err, "handler error")
+	require.Len(t, contents, 1)
 	tc := contents[0].(mcp.TextResourceContents)
-	if tc.Text == "" {
-		t.Error("text should not be empty")
-	}
-	if tc.MIMEType != "text/markdown" {
-		t.Errorf("MIME = %q, want text/markdown", tc.MIMEType)
-	}
+	assert.NotEmpty(t, tc.Text, "text should not be empty")
+	assert.Equal(t, "text/markdown", tc.MIMEType)
 }
 
 // TestTopicHandler_Direct tests each topic resource handler closure directly.
@@ -221,19 +180,11 @@ func TestTopicHandler_Direct(t *testing.T) {
 			req := mcp.ReadResourceRequest{}
 			req.Params.URI = uri
 			contents, err := handler(context.Background(), req)
-			if err != nil {
-				t.Fatalf("handler error: %v", err)
-			}
-			if len(contents) != 1 {
-				t.Fatalf("expected 1 content, got %d", len(contents))
-			}
+			require.NoError(t, err, "handler error")
+			require.Len(t, contents, 1)
 			tc := contents[0].(mcp.TextResourceContents)
-			if tc.Text == "" {
-				t.Errorf("text should not be empty")
-			}
-			if tc.URI != uri {
-				t.Errorf("URI = %q, want %q", tc.URI, uri)
-			}
+			assert.NotEmpty(t, tc.Text, "text should not be empty")
+			assert.Equal(t, uri, tc.URI)
 		})
 	}
 }
@@ -266,20 +217,12 @@ func TestTemplateHandler_Direct(t *testing.T) {
 	req := mcp.ReadResourceRequest{}
 	req.Params.URI = "gotron://knowledge/topics/accounts"
 	contents, err := handler(context.Background(), req)
-	if err != nil {
-		t.Fatalf("handler error: %v", err)
-	}
-	if len(contents) != 1 {
-		t.Fatalf("expected 1 content, got %d", len(contents))
-	}
+	require.NoError(t, err, "handler error")
+	require.Len(t, contents, 1)
 
 	// Test invalid topic
 	req.Params.URI = "gotron://knowledge/topics/nonexistent"
 	_, err = handler(context.Background(), req)
-	if err == nil {
-		t.Error("expected error for unknown topic")
-	}
-	if !strings.Contains(err.Error(), "unknown topic") {
-		t.Errorf("error = %v, want 'unknown topic' message", err)
-	}
+	require.Error(t, err, "expected error for unknown topic")
+	assert.Contains(t, err.Error(), "unknown topic")
 }

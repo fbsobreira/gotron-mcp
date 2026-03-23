@@ -13,15 +13,15 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
 
 func newTestSignSetup(t *testing.T, mock *mockWalletServer) (*wallet.Manager, *nodepool.Pool) {
 	t.Helper()
 	wm, err := wallet.NewManager(t.TempDir(), "test-pass")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	wm.SetKeystoreFactory(keystore.ForPathLight)
 	t.Cleanup(func() { wm.Close() })
 	pool := newMockPool(t, mock)
@@ -36,9 +36,7 @@ func buildTestTxHex(t *testing.T) string {
 		},
 	}
 	txBytes, err := proto.Marshal(tx)
-	if err != nil {
-		t.Fatalf("failed to marshal test tx: %v", err)
-	}
+	require.NoError(t, err, "failed to marshal test tx")
 	return hex.EncodeToString(txBytes)
 }
 
@@ -50,9 +48,7 @@ func TestSignTransaction_EmptyHex(t *testing.T) {
 		"transaction_hex": "",
 		"wallet":          "test",
 	})
-	if !result.IsError {
-		t.Error("expected error for empty transaction_hex")
-	}
+	assert.True(t, result.IsError, "expected error for empty transaction_hex")
 }
 
 func TestSignTransaction_TooLong(t *testing.T) {
@@ -61,9 +57,7 @@ func TestSignTransaction_TooLong(t *testing.T) {
 		"transaction_hex": strings.Repeat("aa", maxHexInputLen+1),
 		"wallet":          "test",
 	})
-	if !result.IsError {
-		t.Error("expected error for too-long transaction_hex")
-	}
+	assert.True(t, result.IsError, "expected error for too-long transaction_hex")
 }
 
 func TestSignTransaction_EmptyWallet(t *testing.T) {
@@ -72,9 +66,7 @@ func TestSignTransaction_EmptyWallet(t *testing.T) {
 		"transaction_hex": "0a0208",
 		"wallet":          "",
 	})
-	if !result.IsError {
-		t.Error("expected error for empty wallet")
-	}
+	assert.True(t, result.IsError, "expected error for empty wallet")
 }
 
 func TestSignTransaction_WalletNotFound(t *testing.T) {
@@ -84,9 +76,7 @@ func TestSignTransaction_WalletNotFound(t *testing.T) {
 		"transaction_hex": txHex,
 		"wallet":          "nonexistent",
 	})
-	if !result.IsError {
-		t.Error("expected error for wallet not found")
-	}
+	assert.True(t, result.IsError, "expected error for wallet not found")
 	found := false
 	for _, c := range result.Content {
 		if tc, ok := c.(mcp.TextContent); ok {
@@ -96,9 +86,7 @@ func TestSignTransaction_WalletNotFound(t *testing.T) {
 			}
 		}
 	}
-	if !found {
-		t.Errorf("expected error text containing 'sign_transaction:', got: %+v", result.Content)
-	}
+	assert.True(t, found, "expected error text containing 'sign_transaction:', got: %+v", result.Content)
 }
 
 func TestSignTransaction_InvalidHex(t *testing.T) {
@@ -107,9 +95,7 @@ func TestSignTransaction_InvalidHex(t *testing.T) {
 		"transaction_hex": "not-hex",
 		"wallet":          "test",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid hex")
-	}
+	assert.True(t, result.IsError, "expected error for invalid hex")
 }
 
 func TestSignTransaction_Success(t *testing.T) {
@@ -118,27 +104,19 @@ func TestSignTransaction_Success(t *testing.T) {
 
 		// Create a wallet
 		_, err := wm.CreateWallet("test-signer")
-		if err != nil {
-			t.Fatalf("CreateWallet: %v", err)
-		}
+		require.NoError(t, err, "CreateWallet")
 
 		txHex := buildTestTxHex(t)
 		result := callTool(t, handleSignTransaction(wm), map[string]any{
 			"transaction_hex": txHex,
 			"wallet":          "test-signer",
 		})
-		if result.IsError {
-			t.Fatalf("expected success, got error: %v", result.Content)
-		}
+		require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 		data := parseJSONResult(t, result)
 		signedHex, ok := data["signed_transaction_hex"].(string)
-		if !ok || signedHex == "" {
-			t.Errorf("signed_transaction_hex should be a non-empty string, got %v", data["signed_transaction_hex"])
-		}
-		if data["wallet"] != "test-signer" {
-			t.Errorf("wallet = %v, want test-signer", data["wallet"])
-		}
+		assert.True(t, ok && signedHex != "", "signed_transaction_hex should be a non-empty string, got %v", data["signed_transaction_hex"])
+		assert.Equal(t, "test-signer", data["wallet"])
 	})
 
 	t.Run("by address", func(t *testing.T) {
@@ -146,27 +124,19 @@ func TestSignTransaction_Success(t *testing.T) {
 
 		// Create a wallet and use the returned address to sign
 		addr, err := wm.CreateWallet("addr-signer")
-		if err != nil {
-			t.Fatalf("CreateWallet: %v", err)
-		}
+		require.NoError(t, err, "CreateWallet")
 
 		txHex := buildTestTxHex(t)
 		result := callTool(t, handleSignTransaction(wm), map[string]any{
 			"transaction_hex": txHex,
 			"wallet":          addr,
 		})
-		if result.IsError {
-			t.Fatalf("expected success, got error: %v", result.Content)
-		}
+		require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 		data := parseJSONResult(t, result)
 		signedHex, ok := data["signed_transaction_hex"].(string)
-		if !ok || signedHex == "" {
-			t.Errorf("signed_transaction_hex should be a non-empty string, got %v", data["signed_transaction_hex"])
-		}
-		if data["wallet"] != addr {
-			t.Errorf("wallet = %v, want %s", data["wallet"], addr)
-		}
+		assert.True(t, ok && signedHex != "", "signed_transaction_hex should be a non-empty string, got %v", data["signed_transaction_hex"])
+		assert.Equal(t, addr, data["wallet"])
 	})
 }
 
@@ -178,9 +148,7 @@ func TestSignAndBroadcast_InvalidHex(t *testing.T) {
 		"transaction_hex": "not-hex",
 		"wallet":          "test",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid hex")
-	}
+	assert.True(t, result.IsError, "expected error for invalid hex")
 }
 
 func TestSignAndBroadcast_WalletNotFound(t *testing.T) {
@@ -190,9 +158,7 @@ func TestSignAndBroadcast_WalletNotFound(t *testing.T) {
 		"transaction_hex": txHex,
 		"wallet":          "nonexistent",
 	})
-	if !result.IsError {
-		t.Error("expected error for wallet not found")
-	}
+	assert.True(t, result.IsError, "expected error for wallet not found")
 }
 
 func TestSignAndBroadcast_Success(t *testing.T) {
@@ -208,27 +174,19 @@ func TestSignAndBroadcast_Success(t *testing.T) {
 	wm, pool := newTestSignSetup(t, mock)
 
 	_, err := wm.CreateWallet("broadcast-signer")
-	if err != nil {
-		t.Fatalf("CreateWallet: %v", err)
-	}
+	require.NoError(t, err, "CreateWallet")
 
 	txHex := buildTestTxHex(t)
 	result := callTool(t, handleSignAndBroadcast(pool, wm), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "broadcast-signer",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
-	if data["success"] != true {
-		t.Errorf("success = %v, want true", data["success"])
-	}
+	assert.Equal(t, true, data["success"])
 	txid, ok := data["txid"].(string)
-	if !ok || txid == "" {
-		t.Error("txid should be a non-empty string")
-	}
+	assert.True(t, ok && txid != "", "txid should be a non-empty string")
 }
 
 // --- sign_and_confirm tests ---
@@ -257,33 +215,21 @@ func TestSignAndConfirm_Success(t *testing.T) {
 	wm, pool := newTestSignSetup(t, mock)
 
 	_, err := wm.CreateWallet("confirm-signer")
-	if err != nil {
-		t.Fatalf("CreateWallet: %v", err)
-	}
+	require.NoError(t, err, "CreateWallet")
 
 	txHex := buildTestTxHex(t)
 	result := callTool(t, handleSignAndConfirm(pool, wm), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "confirm-signer",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
-	if data["success"] != true {
-		t.Errorf("success = %v, want true", data["success"])
-	}
-	if data["confirmed"] != true {
-		t.Errorf("confirmed = %v, want true", data["confirmed"])
-	}
-	if data["block_number"].(float64) != 12345678 {
-		t.Errorf("block_number = %v, want 12345678", data["block_number"])
-	}
+	assert.Equal(t, true, data["success"])
+	assert.Equal(t, true, data["confirmed"])
+	assert.Equal(t, float64(12345678), data["block_number"].(float64))
 	txid, ok := data["txid"].(string)
-	if !ok || txid == "" {
-		t.Error("txid should be a non-empty string")
-	}
+	assert.True(t, ok && txid != "", "txid should be a non-empty string")
 }
 
 // --- broadcast_transaction tests (kept as-is) ---
@@ -293,9 +239,7 @@ func TestBroadcastTransaction_EmptyHex(t *testing.T) {
 	result := callTool(t, handleBroadcastTransaction(pool), map[string]any{
 		"signed_transaction_hex": "",
 	})
-	if !result.IsError {
-		t.Error("expected error for empty hex")
-	}
+	assert.True(t, result.IsError, "expected error for empty hex")
 }
 
 func TestBroadcastTransaction_TooLong(t *testing.T) {
@@ -303,9 +247,7 @@ func TestBroadcastTransaction_TooLong(t *testing.T) {
 	result := callTool(t, handleBroadcastTransaction(pool), map[string]any{
 		"signed_transaction_hex": strings.Repeat("aa", maxHexInputLen+1),
 	})
-	if !result.IsError {
-		t.Error("expected error for too-long hex")
-	}
+	assert.True(t, result.IsError, "expected error for too-long hex")
 }
 
 func TestBroadcastTransaction_InvalidHex(t *testing.T) {
@@ -313,9 +255,7 @@ func TestBroadcastTransaction_InvalidHex(t *testing.T) {
 	result := callTool(t, handleBroadcastTransaction(pool), map[string]any{
 		"signed_transaction_hex": "zzzz",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid hex")
-	}
+	assert.True(t, result.IsError, "expected error for invalid hex")
 }
 
 func TestBroadcastTransaction_InvalidProto(t *testing.T) {
@@ -323,9 +263,7 @@ func TestBroadcastTransaction_InvalidProto(t *testing.T) {
 	result := callTool(t, handleBroadcastTransaction(pool), map[string]any{
 		"signed_transaction_hex": "0f",
 	})
-	if !result.IsError {
-		t.Fatal("expected error for invalid protobuf payload")
-	}
+	require.True(t, result.IsError, "expected error for invalid protobuf payload")
 	// Verify the error is from proto parse or broadcast — either way it's an error
 	found := false
 	for _, c := range result.Content {
@@ -336,9 +274,7 @@ func TestBroadcastTransaction_InvalidProto(t *testing.T) {
 			}
 		}
 	}
-	if !found {
-		t.Errorf("expected parse or broadcast error, got: %+v", result.Content)
-	}
+	assert.True(t, found, "expected parse or broadcast error, got: %+v", result.Content)
 }
 
 func TestSignAndBroadcast_BroadcastFails(t *testing.T) {
@@ -348,17 +284,14 @@ func TestSignAndBroadcast_BroadcastFails(t *testing.T) {
 		},
 	}
 	wm, pool := newTestSignSetup(t, mock)
-	if _, err := wm.CreateWallet("test-wallet"); err != nil {
-		t.Fatalf("CreateWallet: %v", err)
-	}
+	_, err := wm.CreateWallet("test-wallet")
+	require.NoError(t, err, "CreateWallet")
 	txHex := buildTestTxHex(t)
 	result := callTool(t, handleSignAndBroadcast(pool, wm), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "test-wallet",
 	})
-	if !result.IsError {
-		t.Error("expected error when broadcast fails")
-	}
+	assert.True(t, result.IsError, "expected error when broadcast fails")
 }
 
 func TestSignAndBroadcast_BroadcastRejected(t *testing.T) {
@@ -372,18 +305,15 @@ func TestSignAndBroadcast_BroadcastRejected(t *testing.T) {
 		},
 	}
 	wm, pool := newTestSignSetup(t, mock)
-	if _, err := wm.CreateWallet("test-wallet"); err != nil {
-		t.Fatalf("CreateWallet: %v", err)
-	}
+	_, err := wm.CreateWallet("test-wallet")
+	require.NoError(t, err, "CreateWallet")
 	txHex := buildTestTxHex(t)
 	result := callTool(t, handleSignAndBroadcast(pool, wm), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "test-wallet",
 	})
 	// SDK BroadcastCtx returns error when Result is false
-	if !result.IsError {
-		t.Error("expected error when broadcast is rejected")
-	}
+	assert.True(t, result.IsError, "expected error when broadcast is rejected")
 }
 
 func TestSignAndConfirm_ContextCancelled(t *testing.T) {
@@ -396,9 +326,8 @@ func TestSignAndConfirm_ContextCancelled(t *testing.T) {
 		},
 	}
 	wm, pool := newTestSignSetup(t, mock)
-	if _, err := wm.CreateWallet("test-wallet"); err != nil {
-		t.Fatalf("CreateWallet: %v", err)
-	}
+	_, err := wm.CreateWallet("test-wallet")
+	require.NoError(t, err, "CreateWallet")
 	txHex := buildTestTxHex(t)
 
 	// Use a cancelled context
@@ -411,13 +340,9 @@ func TestSignAndConfirm_ContextCancelled(t *testing.T) {
 		"wallet":          "test-wallet",
 	}
 	handler := handleSignAndConfirm(pool, wm)
-	result, err := handler(ctx, req)
-	if err != nil {
-		t.Fatalf("handler returned Go error: %v", err)
-	}
-	if !result.IsError {
-		t.Error("expected error for cancelled context")
-	}
+	result, goErr := handler(ctx, req)
+	require.NoError(t, goErr, "handler returned Go error")
+	assert.True(t, result.IsError, "expected error for cancelled context")
 }
 
 func TestSignAndConfirm_RPCError(t *testing.T) {
@@ -430,17 +355,14 @@ func TestSignAndConfirm_RPCError(t *testing.T) {
 		},
 	}
 	wm, pool := newTestSignSetup(t, mock)
-	if _, err := wm.CreateWallet("test-wallet"); err != nil {
-		t.Fatalf("CreateWallet: %v", err)
-	}
+	_, err := wm.CreateWallet("test-wallet")
+	require.NoError(t, err, "CreateWallet")
 	txHex := buildTestTxHex(t)
 	result := callTool(t, handleSignAndConfirm(pool, wm), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "test-wallet",
 	})
-	if !result.IsError {
-		t.Error("expected error for RPC failure")
-	}
+	assert.True(t, result.IsError, "expected error for RPC failure")
 }
 
 func TestBroadcastTransaction_Success(t *testing.T) {
@@ -461,22 +383,14 @@ func TestBroadcastTransaction_Success(t *testing.T) {
 		},
 	}
 	txBytes, err := proto.Marshal(tx)
-	if err != nil {
-		t.Fatalf("failed to marshal tx: %v", err)
-	}
+	require.NoError(t, err, "failed to marshal tx")
 
 	result := callTool(t, handleBroadcastTransaction(pool), map[string]any{
 		"signed_transaction_hex": hex.EncodeToString(txBytes),
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
-	if data["success"] != true {
-		t.Errorf("success = %v, want true", data["success"])
-	}
-	if data["transaction_id"] == nil || data["transaction_id"] == "" {
-		t.Error("transaction_id should not be empty")
-	}
+	assert.Equal(t, true, data["success"])
+	assert.NotEmpty(t, data["transaction_id"], "transaction_id should not be empty")
 }

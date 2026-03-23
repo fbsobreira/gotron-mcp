@@ -5,6 +5,7 @@ import (
 
 	"github.com/fbsobreira/gotron-mcp/internal/trongrid"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRegisterAllTools(t *testing.T) {
@@ -40,9 +41,7 @@ func TestRegisterAllTools(t *testing.T) {
 	// 2 wallet (create_wallet, list_wallets) +
 	// 3 token + 2 transfer + 1 witness read + 1 witness write + 3 history (TronGrid REST) = 41
 	const expectedToolCount = 41
-	if len(tools) != expectedToolCount {
-		t.Errorf("registered tool count = %d, want %d", len(tools), expectedToolCount)
-	}
+	assert.Len(t, tools, expectedToolCount, "registered tool count")
 
 	representative := []string{
 		"get_account",
@@ -78,8 +77,6 @@ func TestRegisterAllTools(t *testing.T) {
 		"withdraw_expire_unfreeze",
 	}
 	for _, name := range representative {
-		if tools[name] == nil {
-			t.Errorf("expected tool %q to be registered", name)
-		}
+		assert.NotNil(t, tools[name], "expected tool %q to be registered", name)
 	}
 }

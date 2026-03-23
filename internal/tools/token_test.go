@@ -10,6 +10,8 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // abiEncodeUint256 returns a 32-byte ABI-encoded big.Int.
@@ -120,16 +122,10 @@ func TestEstimateTRC20Energy_Success(t *testing.T) {
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"amount":           "100",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 	data := parseJSONResult(t, result)
-	if data["estimated_energy"] != float64(29000) {
-		t.Errorf("estimated_energy = %v, want 29000", data["estimated_energy"])
-	}
-	if data["from"] != "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF" {
-		t.Errorf("from = %v, want TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", data["from"])
-	}
+	assert.Equal(t, float64(29000), data["estimated_energy"])
+	assert.Equal(t, "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", data["from"])
 }
 
 func TestEstimateTRC20Energy_InvalidTo(t *testing.T) {
@@ -140,9 +136,7 @@ func TestEstimateTRC20Energy_InvalidTo(t *testing.T) {
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"amount":           "100",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid to address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid to address")
 }
 
 func TestEstimateTRC20Energy_InvalidContract(t *testing.T) {
@@ -153,9 +147,7 @@ func TestEstimateTRC20Energy_InvalidContract(t *testing.T) {
 		"contract_address": "bad",
 		"amount":           "100",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid contract address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid contract address")
 }
 
 func TestEstimateTRC20Energy_InvalidFrom(t *testing.T) {
@@ -166,9 +158,7 @@ func TestEstimateTRC20Energy_InvalidFrom(t *testing.T) {
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"amount":           "100",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid from address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid from address")
 }
 
 func TestEstimateTRC20Energy_InvalidAmount(t *testing.T) {
@@ -180,9 +170,7 @@ func TestEstimateTRC20Energy_InvalidAmount(t *testing.T) {
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"amount":           "not-a-number",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid amount")
-	}
+	assert.True(t, result.IsError, "expected error for invalid amount")
 }
 
 func TestEstimateTRC20Energy_ZeroAmount(t *testing.T) {
@@ -194,9 +182,7 @@ func TestEstimateTRC20Energy_ZeroAmount(t *testing.T) {
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"amount":           "0",
 	})
-	if !result.IsError {
-		t.Error("expected error for zero amount")
-	}
+	assert.True(t, result.IsError, "expected error for zero amount")
 }
 
 func TestGetTRC20Balance_InvalidAddress(t *testing.T) {
@@ -205,9 +191,7 @@ func TestGetTRC20Balance_InvalidAddress(t *testing.T) {
 		"address":          "",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 	})
-	if !result.IsError {
-		t.Error("expected error for empty address")
-	}
+	assert.True(t, result.IsError, "expected error for empty address")
 }
 
 func TestGetTRC20Balance_InvalidContract(t *testing.T) {
@@ -216,9 +200,7 @@ func TestGetTRC20Balance_InvalidContract(t *testing.T) {
 		"address":          "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"contract_address": "invalid",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid contract address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid contract address")
 }
 
 func TestGetTRC20Balance_Success(t *testing.T) {
@@ -230,21 +212,13 @@ func TestGetTRC20Balance_Success(t *testing.T) {
 		"address":          "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
-	if data["decimals"] != float64(6) {
-		t.Errorf("decimals = %v, want 6", data["decimals"])
-	}
-	if data["balance_raw"] != "1000000" {
-		t.Errorf("balance_raw = %v, want 1000000", data["balance_raw"])
-	}
+	assert.Equal(t, float64(6), data["decimals"])
+	assert.Equal(t, "1000000", data["balance_raw"])
 	// 1_000_000 raw with 6 decimals = "1" (SDK trims trailing zeros)
-	if data["balance"] != "1" {
-		t.Errorf("balance = %v, want 1", data["balance"])
-	}
+	assert.Equal(t, "1", data["balance"])
 }
 
 func TestGetTRC20TokenInfo_InvalidAddress(t *testing.T) {
@@ -252,9 +226,7 @@ func TestGetTRC20TokenInfo_InvalidAddress(t *testing.T) {
 	result := callTool(t, handleGetTRC20TokenInfo(pool, nil), map[string]any{
 		"contract_address": "bad",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid contract address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid contract address")
 }
 
 func TestGetTRC20TokenInfo_Success(t *testing.T) {
@@ -264,23 +236,13 @@ func TestGetTRC20TokenInfo_Success(t *testing.T) {
 	result := callTool(t, handleGetTRC20TokenInfo(pool, nil), map[string]any{
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
-	if data["name"] != "TestToken" {
-		t.Errorf("name = %v, want TestToken", data["name"])
-	}
-	if data["symbol"] != "TTK" {
-		t.Errorf("symbol = %v, want TTK", data["symbol"])
-	}
-	if data["decimals"] != float64(18) {
-		t.Errorf("decimals = %v, want 18", data["decimals"])
-	}
-	if data["total_supply"] != "100000000000000000000000000" {
-		t.Errorf("total_supply = %v, want 100000000000000000000000000", data["total_supply"])
-	}
+	assert.Equal(t, "TestToken", data["name"])
+	assert.Equal(t, "TTK", data["symbol"])
+	assert.Equal(t, float64(18), data["decimals"])
+	assert.Equal(t, "100000000000000000000000000", data["total_supply"])
 }
 
 func TestGetTRC20TokenInfo_NameError(t *testing.T) {
@@ -295,9 +257,7 @@ func TestGetTRC20TokenInfo_NameError(t *testing.T) {
 	result := callTool(t, handleGetTRC20TokenInfo(pool, nil), map[string]any{
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 	})
-	if !result.IsError {
-		t.Error("expected error when name() call fails")
-	}
+	assert.True(t, result.IsError, "expected error when name() call fails")
 	// Verify it's a tool error (not a Go error) with non-empty text
 	found := false
 	for _, c := range result.Content {
@@ -306,11 +266,7 @@ func TestGetTRC20TokenInfo_NameError(t *testing.T) {
 			continue
 		}
 		found = true
-		if tc.Text == "" {
-			t.Error("error message should not be empty")
-		}
+		assert.NotEmpty(t, tc.Text, "error message should not be empty")
 	}
-	if !found {
-		t.Fatal("expected at least one mcp.TextContent in error result")
-	}
+	require.True(t, found, "expected at least one mcp.TextContent in error result")
 }

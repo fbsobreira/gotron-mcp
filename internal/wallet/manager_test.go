@@ -9,15 +9,15 @@ import (
 	"testing"
 
 	"github.com/fbsobreira/gotron-sdk/pkg/keystore"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newTestManager(t *testing.T) *Manager {
 	t.Helper()
 	dir := t.TempDir()
 	m, err := NewManager(dir, "test-passphrase")
-	if err != nil {
-		t.Fatalf("NewManager: %v", err)
-	}
+	require.NoError(t, err, "NewManager")
 	m.SetKeystoreFactory(keystore.ForPathLight)
 	t.Cleanup(func() { m.Close() })
 	return m
@@ -26,42 +26,27 @@ func newTestManager(t *testing.T) *Manager {
 func TestNewManager_CreatesDir(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "wallets")
 	// Verify dir does not exist yet
-	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Fatal("expected dir to not exist before NewManager")
-	}
+	_, err := os.Stat(dir)
+	require.True(t, os.IsNotExist(err), "expected dir to not exist before NewManager")
 	m, err := NewManager(dir, "test-pass")
-	if err != nil {
-		t.Fatalf("NewManager: %v", err)
-	}
+	require.NoError(t, err, "NewManager")
 	defer m.Close()
 	// Verify dir was created
 	info, err := os.Stat(dir)
-	if err != nil {
-		t.Fatalf("dir not created: %v", err)
-	}
-	if !info.IsDir() {
-		t.Fatal("expected dir to be a directory")
-	}
+	require.NoError(t, err, "dir not created")
+	require.True(t, info.IsDir(), "expected dir to be a directory")
 }
 
 func TestCreateWallet(t *testing.T) {
 	m := newTestManager(t)
 
 	addr, err := m.CreateWallet("test-wallet")
-	if err != nil {
-		t.Fatalf("CreateWallet: %v", err)
-	}
-	if addr == "" {
-		t.Fatal("expected non-empty address")
-	}
-	if !strings.HasPrefix(addr, "T") {
-		t.Fatalf("expected address starting with T, got %s", addr)
-	}
+	require.NoError(t, err, "CreateWallet")
+	require.NotEmpty(t, addr, "expected non-empty address")
+	require.True(t, strings.HasPrefix(addr, "T"), "expected address starting with T, got %s", addr)
 
 	wallets, err := m.ListWallets()
-	if err != nil {
-		t.Fatalf("ListWallets: %v", err)
-	}
+	require.NoError(t, err, "ListWallets")
 	found := false
 	for _, w := range wallets {
 		if w.Name == "test-wallet" && w.Address == addr {
@@ -69,25 +54,18 @@ func TestCreateWallet(t *testing.T) {
 			break
 		}
 	}
-	if !found {
-		t.Fatalf("created wallet not found in ListWallets; got %v", wallets)
-	}
+	require.True(t, found, "created wallet not found in ListWallets; got %v", wallets)
 }
 
 func TestCreateWallet_DuplicateName(t *testing.T) {
 	m := newTestManager(t)
 
-	if _, err := m.CreateWallet("dup"); err != nil {
-		t.Fatalf("first create: %v", err)
-	}
-
 	_, err := m.CreateWallet("dup")
-	if err == nil {
-		t.Fatal("expected error for duplicate name")
-	}
-	if !strings.Contains(err.Error(), "already exists") {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err, "first create")
+
+	_, err = m.CreateWallet("dup")
+	require.Error(t, err, "expected error for duplicate name")
+	assert.Contains(t, err.Error(), "already exists")
 }
 
 func TestCreateWallet_InvalidName(t *testing.T) {
@@ -107,9 +85,7 @@ func TestCreateWallet_InvalidName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			_, err := m.CreateWallet(tt.name)
-			if err == nil {
-				t.Fatalf("expected error for %s", tt.desc)
-			}
+			require.Error(t, err, "expected error for %s", tt.desc)
 		})
 	}
 }
@@ -118,78 +94,50 @@ func TestListWallets_Empty(t *testing.T) {
 	m := newTestManager(t)
 
 	wallets, err := m.ListWallets()
-	if err != nil {
-		t.Fatalf("ListWallets: %v", err)
-	}
-	if len(wallets) != 0 {
-		t.Fatalf("expected empty list, got %v", wallets)
-	}
+	require.NoError(t, err, "ListWallets")
+	require.Empty(t, wallets, "expected empty list")
 }
 
 func TestListWallets(t *testing.T) {
 	m := newTestManager(t)
 
 	addr1, err := m.CreateWallet("wallet-one")
-	if err != nil {
-		t.Fatalf("CreateWallet wallet-one: %v", err)
-	}
+	require.NoError(t, err, "CreateWallet wallet-one")
 	addr2, err := m.CreateWallet("wallet-two")
-	if err != nil {
-		t.Fatalf("CreateWallet wallet-two: %v", err)
-	}
+	require.NoError(t, err, "CreateWallet wallet-two")
 
 	wallets, err := m.ListWallets()
-	if err != nil {
-		t.Fatalf("ListWallets: %v", err)
-	}
-	if len(wallets) != 2 {
-		t.Fatalf("expected 2 wallets, got %d", len(wallets))
-	}
+	require.NoError(t, err, "ListWallets")
+	require.Len(t, wallets, 2)
 
 	addrMap := make(map[string]string)
 	for _, w := range wallets {
 		addrMap[w.Name] = w.Address
 	}
-	if addrMap["wallet-one"] != addr1 {
-		t.Fatalf("wallet-one address mismatch: got %s, want %s", addrMap["wallet-one"], addr1)
-	}
-	if addrMap["wallet-two"] != addr2 {
-		t.Fatalf("wallet-two address mismatch: got %s, want %s", addrMap["wallet-two"], addr2)
-	}
+	require.Equal(t, addr1, addrMap["wallet-one"], "wallet-one address mismatch")
+	require.Equal(t, addr2, addrMap["wallet-two"], "wallet-two address mismatch")
 }
 
 func TestGetSigner(t *testing.T) {
 	m := newTestManager(t)
 
 	addr, err := m.CreateWallet("signer-test")
-	if err != nil {
-		t.Fatalf("CreateWallet: %v", err)
-	}
+	require.NoError(t, err, "CreateWallet")
 
 	s, err := m.GetSigner("signer-test")
-	if err != nil {
-		t.Fatalf("GetSigner: %v", err)
-	}
+	require.NoError(t, err, "GetSigner")
 
 	signerAddr := s.Address().String()
-	if signerAddr != addr {
-		t.Fatalf("signer address mismatch: got %s, want %s", signerAddr, addr)
-	}
+	require.Equal(t, addr, signerAddr, "signer address mismatch")
 }
 
 func TestGetSigner_ByAddress(t *testing.T) {
 	m := newTestManager(t)
 	addr, err := m.CreateWallet("addr-test")
-	if err != nil {
-		t.Fatalf("CreateWallet: %v", err)
-	}
+	require.NoError(t, err, "CreateWallet")
 	s, err := m.GetSigner(addr) // use address instead of name
-	if err != nil {
-		t.Fatalf("GetSigner by address: %v", err)
-	}
-	if s.Address().String() != addr {
-		t.Errorf("signer address = %s, want %s", s.Address().String(), addr)
-	}
+	require.NoError(t, err, "GetSigner by address")
+	assert.Equal(t, addr, s.Address().String())
 }
 
 func TestCreateWallet_Concurrent(t *testing.T) {
@@ -209,25 +157,17 @@ func TestCreateWallet_Concurrent(t *testing.T) {
 	wg.Wait()
 	close(errors)
 	for err := range errors {
-		t.Errorf("concurrent CreateWallet failed: %v", err)
+		assert.NoError(t, err, "concurrent CreateWallet failed")
 	}
 	wallets, err := m.ListWallets()
-	if err != nil {
-		t.Fatalf("ListWallets: %v", err)
-	}
-	if len(wallets) != 5 {
-		t.Errorf("expected 5 wallets, got %d", len(wallets))
-	}
+	require.NoError(t, err, "ListWallets")
+	assert.Len(t, wallets, 5)
 }
 
 func TestGetSigner_NotFound(t *testing.T) {
 	m := newTestManager(t)
 
 	_, err := m.GetSigner("nonexistent")
-	if err == nil {
-		t.Fatal("expected error for unknown wallet")
-	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.Error(t, err, "expected error for unknown wallet")
+	assert.Contains(t, err.Error(), "not found")
 }

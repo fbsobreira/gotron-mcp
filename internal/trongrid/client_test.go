@@ -4,17 +4,17 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetTransactionsByAddress(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/accounts/TAddr123/transactions" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		if r.URL.Query().Get("limit") != "5" {
-			t.Errorf("expected limit=5, got %s", r.URL.Query().Get("limit"))
-		}
+		assert.Equal(t, "/v1/accounts/TAddr123/transactions", r.URL.Path)
+		assert.Equal(t, "5", r.URL.Query().Get("limit"))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{
 			"data": [{"txID": "abc123", "blockNumber": 100, "block_timestamp": 1700000000}],
@@ -26,25 +26,15 @@ func TestGetTransactionsByAddress(t *testing.T) {
 
 	c := &Client{baseURL: srv.URL, httpClient: srv.Client()}
 	resp, err := c.GetTransactionsByAddress(context.Background(), "TAddr123", QueryOpts{Limit: 5})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(resp.Data) != 1 {
-		t.Fatalf("expected 1 transaction, got %d", len(resp.Data))
-	}
-	if resp.Data[0].TransactionID != "abc123" {
-		t.Errorf("expected txID abc123, got %s", resp.Data[0].TransactionID)
-	}
-	if resp.Meta.Fingerprint != "next123" {
-		t.Errorf("expected fingerprint next123, got %s", resp.Meta.Fingerprint)
-	}
+	require.NoError(t, err)
+	require.Len(t, resp.Data, 1)
+	assert.Equal(t, "abc123", resp.Data[0].TransactionID)
+	assert.Equal(t, "next123", resp.Meta.Fingerprint)
 }
 
 func TestGetTRC20Transfers(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/accounts/TAddr123/transactions/trc20" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
+		assert.Equal(t, "/v1/accounts/TAddr123/transactions/trc20", r.URL.Path)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{
 			"data": [{
@@ -64,22 +54,14 @@ func TestGetTRC20Transfers(t *testing.T) {
 
 	c := &Client{baseURL: srv.URL, httpClient: srv.Client()}
 	resp, err := c.GetTRC20Transfers(context.Background(), "TAddr123", QueryOpts{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(resp.Data) != 1 {
-		t.Fatalf("expected 1 transfer, got %d", len(resp.Data))
-	}
-	if resp.Data[0].TokenInfo.Symbol != "USDT" {
-		t.Errorf("expected symbol USDT, got %s", resp.Data[0].TokenInfo.Symbol)
-	}
+	require.NoError(t, err)
+	require.Len(t, resp.Data, 1)
+	assert.Equal(t, "USDT", resp.Data[0].TokenInfo.Symbol)
 }
 
 func TestGetContractEvents(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/contracts/TContract/events" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
+		assert.Equal(t, "/v1/contracts/TContract/events", r.URL.Path)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{
 			"data": [{
@@ -99,22 +81,14 @@ func TestGetContractEvents(t *testing.T) {
 
 	c := &Client{baseURL: srv.URL, httpClient: srv.Client()}
 	resp, err := c.GetContractEvents(context.Background(), "TContract", QueryOpts{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(resp.Data) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(resp.Data))
-	}
-	if resp.Data[0].EventName != "Transfer" {
-		t.Errorf("expected event Transfer, got %s", resp.Data[0].EventName)
-	}
+	require.NoError(t, err)
+	require.Len(t, resp.Data, 1)
+	assert.Equal(t, "Transfer", resp.Data[0].EventName)
 }
 
 func TestGetContractEventsByName(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("event_name") != "Approval" {
-			t.Errorf("expected event_name=Approval, got %s", r.URL.Query().Get("event_name"))
-		}
+		assert.Equal(t, "Approval", r.URL.Query().Get("event_name"))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"data": [], "success": true, "meta": {"page_size": 0}}`))
 	}))
@@ -122,20 +96,13 @@ func TestGetContractEventsByName(t *testing.T) {
 
 	c := &Client{baseURL: srv.URL, httpClient: srv.Client()}
 	resp, err := c.GetContractEventsByName(context.Background(), "TContract", "Approval", QueryOpts{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(resp.Data) != 0 {
-		t.Fatalf("expected 0 events, got %d", len(resp.Data))
-	}
+	require.NoError(t, err)
+	assert.Empty(t, resp.Data)
 }
 
 func TestAPIKeyHeader(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		key := r.Header.Get("TRON-PRO-API-KEY")
-		if key != "test-key" {
-			t.Errorf("expected API key test-key, got %q", key)
-		}
+		assert.Equal(t, "test-key", r.Header.Get("TRON-PRO-API-KEY"))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"data": [], "success": true, "meta": {}}`))
 	}))
@@ -143,9 +110,7 @@ func TestAPIKeyHeader(t *testing.T) {
 
 	c := &Client{baseURL: srv.URL, apiKey: "test-key", httpClient: srv.Client()}
 	_, err := c.GetTransactionsByAddress(context.Background(), "TAddr", QueryOpts{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestHTTPError429(t *testing.T) {
@@ -156,9 +121,7 @@ func TestHTTPError429(t *testing.T) {
 
 	c := &Client{baseURL: srv.URL, httpClient: srv.Client()}
 	_, err := c.GetTransactionsByAddress(context.Background(), "TAddr", QueryOpts{})
-	if err == nil {
-		t.Fatal("expected error for 429")
-	}
+	require.Error(t, err, "expected error for 429")
 }
 
 func TestHTTPError500(t *testing.T) {
@@ -170,9 +133,7 @@ func TestHTTPError500(t *testing.T) {
 
 	c := &Client{baseURL: srv.URL, httpClient: srv.Client()}
 	_, err := c.GetTransactionsByAddress(context.Background(), "TAddr", QueryOpts{})
-	if err == nil {
-		t.Fatal("expected error for 500")
-	}
+	require.Error(t, err, "expected error for 500")
 }
 
 func TestInvalidJSON(t *testing.T) {
@@ -184,17 +145,12 @@ func TestInvalidJSON(t *testing.T) {
 
 	c := &Client{baseURL: srv.URL, httpClient: srv.Client()}
 	_, err := c.GetTransactionsByAddress(context.Background(), "TAddr", QueryOpts{})
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
+	require.Error(t, err, "expected error for invalid JSON")
 }
 
 func TestPaginationPassthrough(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fp := r.URL.Query().Get("fingerprint")
-		if fp != "cursor123" {
-			t.Errorf("expected fingerprint=cursor123, got %s", fp)
-		}
+		assert.Equal(t, "cursor123", r.URL.Query().Get("fingerprint"))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"data": [], "success": true, "meta": {"fingerprint": "cursor456"}}`))
 	}))
@@ -202,12 +158,8 @@ func TestPaginationPassthrough(t *testing.T) {
 
 	c := &Client{baseURL: srv.URL, httpClient: srv.Client()}
 	resp, err := c.GetTransactionsByAddress(context.Background(), "TAddr", QueryOpts{Fingerprint: "cursor123"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if resp.Meta.Fingerprint != "cursor456" {
-		t.Errorf("expected fingerprint cursor456, got %s", resp.Meta.Fingerprint)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "cursor456", resp.Meta.Fingerprint)
 }
 
 func TestBuildParams(t *testing.T) {
@@ -235,13 +187,9 @@ func TestBuildParams(t *testing.T) {
 		{"order_by", "block_timestamp,asc"},
 	}
 	for _, tt := range tests {
-		if got := params.Get(tt.key); got != tt.want {
-			t.Errorf("params[%s] = %q, want %q", tt.key, got, tt.want)
-		}
+		assert.Equal(t, tt.want, params.Get(tt.key), "params[%s]", tt.key)
 	}
-	if params.Get("only_from") != "" {
-		t.Errorf("expected only_from to be empty, got %s", params.Get("only_from"))
-	}
+	assert.Empty(t, params.Get("only_from"), "expected only_from to be empty")
 }
 
 func TestSuccessFalse(t *testing.T) {
@@ -254,46 +202,32 @@ func TestSuccessFalse(t *testing.T) {
 	c := &Client{baseURL: srv.URL, httpClient: srv.Client()}
 
 	_, err := c.GetTransactionsByAddress(context.Background(), "TAddr", QueryOpts{})
-	if err == nil {
-		t.Fatal("expected error for success=false")
-	}
+	require.Error(t, err, "expected error for success=false")
 
 	_, err = c.GetTRC20Transfers(context.Background(), "TAddr", QueryOpts{})
-	if err == nil {
-		t.Fatal("expected error for success=false")
-	}
+	require.Error(t, err, "expected error for success=false")
 
 	_, err = c.GetContractEvents(context.Background(), "TAddr", QueryOpts{})
-	if err == nil {
-		t.Fatal("expected error for success=false")
-	}
+	require.Error(t, err, "expected error for success=false")
 }
 
 func TestTruncateBody(t *testing.T) {
 	short := []byte("short error")
-	if got := truncateBody(short); got != "short error" {
-		t.Errorf("truncateBody(short) = %q, want %q", got, "short error")
-	}
+	assert.Equal(t, "short error", truncateBody(short))
 
 	long := make([]byte, 1024)
 	for i := range long {
 		long[i] = 'x'
 	}
 	got := truncateBody(long)
-	if len(got) != 512+len("...(truncated)") {
-		t.Errorf("truncateBody(1024 bytes) length = %d, want %d", len(got), 512+len("...(truncated)"))
-	}
-	if got[len(got)-len("...(truncated)"):] != "...(truncated)" {
-		t.Error("truncateBody should end with ...(truncated)")
-	}
+	assert.Len(t, got, 512+len("...(truncated)"))
+	assert.True(t, strings.HasSuffix(got, "...(truncated)"), "truncateBody should end with ...(truncated)")
 }
 
 func TestBuildParamsOnlyFrom(t *testing.T) {
 	opts := QueryOpts{OnlyFrom: true}
 	params := buildParams(opts)
-	if params.Get("only_from") != "true" {
-		t.Errorf("only_from = %q, want true", params.Get("only_from"))
-	}
+	assert.Equal(t, "true", params.Get("only_from"))
 }
 
 func TestHTTPError4xx(t *testing.T) {
@@ -305,9 +239,7 @@ func TestHTTPError4xx(t *testing.T) {
 
 	c := &Client{baseURL: srv.URL, httpClient: srv.Client()}
 	_, err := c.GetTransactionsByAddress(context.Background(), "TAddr", QueryOpts{})
-	if err == nil {
-		t.Fatal("expected error for 400")
-	}
+	require.Error(t, err, "expected error for 400")
 }
 
 func TestNewClientNetworks(t *testing.T) {
@@ -322,8 +254,6 @@ func TestNewClientNetworks(t *testing.T) {
 	}
 	for _, tt := range tests {
 		c := NewClient(tt.network, "")
-		if c.baseURL != tt.wantURL {
-			t.Errorf("NewClient(%q).baseURL = %q, want %q", tt.network, c.baseURL, tt.wantURL)
-		}
+		assert.Equal(t, tt.wantURL, c.baseURL, "NewClient(%q).baseURL", tt.network)
 	}
 }

@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRateLimiterAllowsWithinLimit(t *testing.T) {
@@ -21,9 +24,7 @@ func TestRateLimiterAllowsWithinLimit(t *testing.T) {
 		req.RemoteAddr = "1.2.3.4:12345"
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("request %d: got status %d, want 200", i, rec.Code)
-		}
+		require.Equal(t, http.StatusOK, rec.Code, "request %d", i)
 	}
 }
 
@@ -41,9 +42,7 @@ func TestRateLimiterBlocks(t *testing.T) {
 		req.RemoteAddr = "10.0.0.1:9999"
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("request %d: got status %d, want 200", i, rec.Code)
-		}
+		require.Equal(t, http.StatusOK, rec.Code, "request %d", i)
 	}
 
 	// Next request should be rate limited.
@@ -52,23 +51,13 @@ func TestRateLimiterBlocks(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("got status %d, want 429", rec.Code)
-	}
-	if rec.Header().Get("Retry-After") == "" {
-		t.Error("missing Retry-After header")
-	}
-	if rec.Header().Get("Content-Type") != "application/json" {
-		t.Errorf("Content-Type = %q, want application/json", rec.Header().Get("Content-Type"))
-	}
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+	assert.NotEmpty(t, rec.Header().Get("Retry-After"), "missing Retry-After header")
+	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
 	var body map[string]string
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if body["error"] != "rate limit exceeded" {
-		t.Errorf("error = %q, want %q", body["error"], "rate limit exceeded")
-	}
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&body), "decode body")
+	assert.Equal(t, "rate limit exceeded", body["error"])
 }
 
 func TestRateLimiterPerIP(t *testing.T) {
@@ -92,18 +81,14 @@ func TestRateLimiterPerIP(t *testing.T) {
 	req.RemoteAddr = "1.1.1.1:1111"
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("IP A: got status %d, want 429", rec.Code)
-	}
+	require.Equal(t, http.StatusTooManyRequests, rec.Code, "IP A")
 
 	// IP B should still be allowed.
 	req = httptest.NewRequest(http.MethodGet, "/mcp", nil)
 	req.RemoteAddr = "2.2.2.2:2222"
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("IP B: got status %d, want 200", rec.Code)
-	}
+	require.Equal(t, http.StatusOK, rec.Code, "IP B")
 }
 
 func TestRateLimiterStopIdempotent(t *testing.T) {
@@ -133,9 +118,7 @@ func TestRateLimiterVisitorCap(t *testing.T) {
 	count := len(rl.visitors)
 	rl.mu.Unlock()
 
-	if count > 3 {
-		t.Errorf("visitor count = %d, want <= 3", count)
-	}
+	assert.LessOrEqual(t, count, 3, "visitor count")
 }
 
 func TestRateLimiterUsesClientIP(t *testing.T) {
@@ -152,9 +135,7 @@ func TestRateLimiterUsesClientIP(t *testing.T) {
 	req.Header.Set("X-Real-IP", "5.5.5.5")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("first request: got status %d, want 200", rec.Code)
-	}
+	require.Equal(t, http.StatusOK, rec.Code, "first request")
 
 	// Second request with same X-Real-IP should be blocked.
 	req = httptest.NewRequest(http.MethodGet, "/mcp", nil)
@@ -162,7 +143,5 @@ func TestRateLimiterUsesClientIP(t *testing.T) {
 	req.Header.Set("X-Real-IP", "5.5.5.5")
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("second request: got status %d, want 429", rec.Code)
-	}
+	require.Equal(t, http.StatusTooManyRequests, rec.Code, "second request")
 }
