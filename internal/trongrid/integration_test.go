@@ -5,6 +5,9 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Integration tests against nile testnet. Skipped unless TRONGRID_INTEGRATION=1.
@@ -30,23 +33,13 @@ func TestIntegrationGetTransactionsByAddress(t *testing.T) {
 	defer cancel()
 
 	resp, err := c.GetTransactionsByAddress(ctx, nileTestAddress, QueryOpts{Limit: 3})
-	if err != nil {
-		t.Fatalf("GetTransactionsByAddress: %v", err)
-	}
-	if !resp.Success {
-		t.Fatal("expected success=true")
-	}
-	if len(resp.Data) == 0 {
-		t.Fatal("expected at least 1 transaction")
-	}
+	require.NoError(t, err, "GetTransactionsByAddress")
+	require.True(t, resp.Success, "expected success=true")
+	require.NotEmpty(t, resp.Data, "expected at least 1 transaction")
 
 	tx := resp.Data[0]
-	if tx.TransactionID == "" {
-		t.Error("expected non-empty transaction ID")
-	}
-	if tx.BlockNumber == 0 {
-		t.Error("expected non-zero block number")
-	}
+	assert.NotEmpty(t, tx.TransactionID, "expected non-empty transaction ID")
+	assert.NotZero(t, tx.BlockNumber, "expected non-zero block number")
 	t.Logf("got %d transactions, first txid=%s block=%d", len(resp.Data), tx.TransactionID, tx.BlockNumber)
 
 	// Test pagination metadata
@@ -61,26 +54,15 @@ func TestIntegrationGetTRC20Transfers(t *testing.T) {
 	defer cancel()
 
 	resp, err := c.GetTRC20Transfers(ctx, nileTestAddress, QueryOpts{Limit: 3})
-	if err != nil {
-		t.Fatalf("GetTRC20Transfers: %v", err)
-	}
-	if !resp.Success {
-		t.Fatal("expected success=true")
-	}
-	if len(resp.Data) == 0 {
-		t.Fatal("expected at least 1 TRC20 transfer")
-	}
+	require.NoError(t, err, "GetTRC20Transfers")
+	require.True(t, resp.Success, "expected success=true")
+	require.NotEmpty(t, resp.Data, "expected at least 1 TRC20 transfer")
 
 	tr := resp.Data[0]
-	if tr.TransactionID == "" {
-		t.Error("expected non-empty transaction ID")
-	}
-	if tr.TokenInfo.Symbol == "" {
-		t.Error("expected non-empty token symbol")
-	}
-	if tr.From == "" || tr.To == "" {
-		t.Error("expected non-empty from/to addresses")
-	}
+	assert.NotEmpty(t, tr.TransactionID, "expected non-empty transaction ID")
+	assert.NotEmpty(t, tr.TokenInfo.Symbol, "expected non-empty token symbol")
+	assert.NotEmpty(t, tr.From, "expected non-empty from address")
+	assert.NotEmpty(t, tr.To, "expected non-empty to address")
 	t.Logf("got %d transfers, first: %s %s from=%s to=%s", len(resp.Data), tr.TokenInfo.Symbol, tr.Value, tr.From, tr.To)
 }
 
@@ -92,23 +74,13 @@ func TestIntegrationGetContractEvents(t *testing.T) {
 	defer cancel()
 
 	resp, err := c.GetContractEvents(ctx, nileTestContract, QueryOpts{Limit: 3})
-	if err != nil {
-		t.Fatalf("GetContractEvents: %v", err)
-	}
-	if !resp.Success {
-		t.Fatal("expected success=true")
-	}
-	if len(resp.Data) == 0 {
-		t.Fatal("expected at least 1 event")
-	}
+	require.NoError(t, err, "GetContractEvents")
+	require.True(t, resp.Success, "expected success=true")
+	require.NotEmpty(t, resp.Data, "expected at least 1 event")
 
 	ev := resp.Data[0]
-	if ev.EventName == "" {
-		t.Error("expected non-empty event name")
-	}
-	if ev.TransactionID == "" {
-		t.Error("expected non-empty transaction ID")
-	}
+	assert.NotEmpty(t, ev.EventName, "expected non-empty event name")
+	assert.NotEmpty(t, ev.TransactionID, "expected non-empty transaction ID")
 	t.Logf("got %d events, first: %s txid=%s", len(resp.Data), ev.EventName, ev.TransactionID)
 }
 
@@ -120,19 +92,11 @@ func TestIntegrationGetContractEventsByName(t *testing.T) {
 	defer cancel()
 
 	resp, err := c.GetContractEventsByName(ctx, nileTestContract, "Transfer", QueryOpts{Limit: 2})
-	if err != nil {
-		t.Fatalf("GetContractEventsByName: %v", err)
-	}
-	if !resp.Success {
-		t.Fatal("expected success=true")
-	}
-	if len(resp.Data) == 0 {
-		t.Fatal("expected at least 1 Transfer event")
-	}
+	require.NoError(t, err, "GetContractEventsByName")
+	require.True(t, resp.Success, "expected success=true")
+	require.NotEmpty(t, resp.Data, "expected at least 1 Transfer event")
 	for _, ev := range resp.Data {
-		if ev.EventName != "Transfer" {
-			t.Errorf("expected event_name=Transfer, got %s", ev.EventName)
-		}
+		assert.Equal(t, "Transfer", ev.EventName)
 	}
 	t.Logf("got %d Transfer events", len(resp.Data))
 }
@@ -146,37 +110,23 @@ func TestIntegrationPagination(t *testing.T) {
 
 	// Page 1
 	resp1, err := c.GetTransactionsByAddress(ctx, nileTestAddress, QueryOpts{Limit: 2})
-	if err != nil {
-		t.Fatalf("page 1: %v", err)
-	}
-	if !resp1.Success {
-		t.Fatal("expected success=true on page 1")
-	}
+	require.NoError(t, err, "page 1")
+	require.True(t, resp1.Success, "expected success=true on page 1")
 	if resp1.Meta.Fingerprint == "" {
 		t.Skip("address has <= 2 transactions, cannot test pagination")
 	}
-	if len(resp1.Data) == 0 {
-		t.Fatal("expected data on page 1")
-	}
+	require.NotEmpty(t, resp1.Data, "expected data on page 1")
 
 	// Page 2
 	resp2, err := c.GetTransactionsByAddress(ctx, nileTestAddress, QueryOpts{
 		Limit:       2,
 		Fingerprint: resp1.Meta.Fingerprint,
 	})
-	if err != nil {
-		t.Fatalf("page 2: %v", err)
-	}
-	if !resp2.Success {
-		t.Fatal("expected success=true on page 2")
-	}
-	if len(resp2.Data) == 0 {
-		t.Fatal("expected data on page 2")
-	}
+	require.NoError(t, err, "page 2")
+	require.True(t, resp2.Success, "expected success=true on page 2")
+	require.NotEmpty(t, resp2.Data, "expected data on page 2")
 
 	// Verify different transactions
-	if resp1.Data[0].TransactionID == resp2.Data[0].TransactionID {
-		t.Error("page 1 and page 2 returned the same first transaction")
-	}
+	assert.NotEqual(t, resp1.Data[0].TransactionID, resp2.Data[0].TransactionID, "page 1 and page 2 returned the same first transaction")
 	t.Logf("page 1: %d txs (fp=%s), page 2: %d txs", len(resp1.Data), resp1.Meta.Fingerprint, len(resp2.Data))
 }

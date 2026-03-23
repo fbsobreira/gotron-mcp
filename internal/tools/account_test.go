@@ -7,15 +7,15 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 func TestGetAccount_Success(t *testing.T) {
 	addr, err := address.Base58ToAddress("TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF")
-	if err != nil {
-		t.Fatalf("failed to decode address: %v", err)
-	}
+	require.NoError(t, err, "failed to decode address")
 	mock := &mockWalletServer{
 		GetAccountFunc: func(_ context.Context, _ *core.Account) (*core.Account, error) {
 			return &core.Account{
@@ -31,9 +31,7 @@ func TestGetAccount_Success(t *testing.T) {
 	result := callTool(t, handleGetAccount(pool), map[string]any{
 		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 }
 
 func TestGetAccount_InvalidAddress(t *testing.T) {
@@ -41,9 +39,7 @@ func TestGetAccount_InvalidAddress(t *testing.T) {
 	result := callTool(t, handleGetAccount(pool), map[string]any{
 		"address": "invalid",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid address")
 }
 
 func TestGetAccount_GRPCError(t *testing.T) {
@@ -56,9 +52,7 @@ func TestGetAccount_GRPCError(t *testing.T) {
 	result := callTool(t, handleGetAccount(pool), map[string]any{
 		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 	})
-	if !result.IsError {
-		t.Error("expected error for gRPC failure")
-	}
+	assert.True(t, result.IsError, "expected error for gRPC failure")
 }
 
 func TestGetAccountResources_Success(t *testing.T) {
@@ -76,9 +70,7 @@ func TestGetAccountResources_Success(t *testing.T) {
 	result := callTool(t, handleGetAccountResources(pool), map[string]any{
 		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 }
 
 func TestGetAccountResources_InvalidAddress(t *testing.T) {
@@ -86,7 +78,5 @@ func TestGetAccountResources_InvalidAddress(t *testing.T) {
 	result := callTool(t, handleGetAccountResources(pool), map[string]any{
 		"address": "",
 	})
-	if !result.IsError {
-		t.Error("expected error for empty address")
-	}
+	assert.True(t, result.IsError, "expected error for empty address")
 }

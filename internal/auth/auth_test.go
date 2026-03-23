@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var okHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -87,21 +90,13 @@ func TestBearerAuth(t *testing.T) {
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 
-			if rec.Code != tt.wantStatus {
-				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
-			}
-			if tt.wantBody != "" && rec.Body.String() != tt.wantBody {
-				t.Errorf("body = %q, want %q", rec.Body.String(), tt.wantBody)
+			assert.Equal(t, tt.wantStatus, rec.Code, "status code")
+			if tt.wantBody != "" {
+				assert.Equal(t, tt.wantBody, rec.Body.String(), "body")
 			}
 			if tt.wantStatus == http.StatusUnauthorized {
-				ct := rec.Header().Get("Content-Type")
-				if ct != "application/json" {
-					t.Errorf("Content-Type = %q, want application/json", ct)
-				}
-				wa := rec.Header().Get("WWW-Authenticate")
-				if wa != "Bearer" {
-					t.Errorf("WWW-Authenticate = %q, want Bearer", wa)
-				}
+				assert.Equal(t, "application/json", rec.Header().Get("Content-Type"), "Content-Type")
+				assert.Equal(t, "Bearer", rec.Header().Get("WWW-Authenticate"), "WWW-Authenticate")
 			}
 		})
 	}
@@ -110,9 +105,7 @@ func TestBearerAuth(t *testing.T) {
 func writeTokenFile(t *testing.T, dir, content string) string {
 	t.Helper()
 	path := filepath.Join(dir, "tokens.txt")
-	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(content), 0600))
 	return path
 }
 
@@ -154,9 +147,7 @@ func TestTokenStore_Load(t *testing.T) {
 			dir := t.TempDir()
 			path := writeTokenFile(t, dir, tt.fileContent)
 			store, err := NewTokenStore(path)
-			if err != nil {
-				t.Fatalf("NewTokenStore() error: %v", err)
-			}
+			require.NoError(t, err, "NewTokenStore()")
 
 			handler := store.Middleware(okHandler)
 
@@ -165,9 +156,7 @@ func TestTokenStore_Load(t *testing.T) {
 				req.Header.Set("Authorization", "Bearer "+token)
 				rec := httptest.NewRecorder()
 				handler.ServeHTTP(rec, req)
-				if rec.Code != http.StatusOK {
-					t.Errorf("token %q: status = %d, want %d", token, rec.Code, http.StatusOK)
-				}
+				assert.Equal(t, http.StatusOK, rec.Code, "token %q", token)
 			}
 
 			for _, token := range tt.invalidTokens {
@@ -177,9 +166,7 @@ func TestTokenStore_Load(t *testing.T) {
 				}
 				rec := httptest.NewRecorder()
 				handler.ServeHTTP(rec, req)
-				if rec.Code != http.StatusUnauthorized {
-					t.Errorf("token %q: status = %d, want %d", token, rec.Code, http.StatusUnauthorized)
-				}
+				assert.Equal(t, http.StatusUnauthorized, rec.Code, "token %q", token)
 			}
 		})
 	}
@@ -187,9 +174,7 @@ func TestTokenStore_Load(t *testing.T) {
 
 func TestTokenStore_FileNotFound(t *testing.T) {
 	_, err := NewTokenStore("/nonexistent/path/tokens.txt")
-	if err == nil {
-		t.Fatal("expected error for nonexistent file")
-	}
+	require.Error(t, err, "expected error for nonexistent file")
 }
 
 func TestTokenStore_HotReload(t *testing.T) {
@@ -197,12 +182,8 @@ func TestTokenStore_HotReload(t *testing.T) {
 	path := writeTokenFile(t, dir, "initial-token\n")
 
 	store, err := NewTokenStore(path)
-	if err != nil {
-		t.Fatalf("NewTokenStore() error: %v", err)
-	}
-	if err := store.Watch(); err != nil {
-		t.Fatalf("Watch() error: %v", err)
-	}
+	require.NoError(t, err, "NewTokenStore()")
+	require.NoError(t, store.Watch(), "Watch()")
 	defer store.Stop()
 
 	handler := store.Middleware(okHandler)
@@ -212,14 +193,10 @@ func TestTokenStore_HotReload(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer initial-token")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("initial token: status = %d, want %d", rec.Code, http.StatusOK)
-	}
+	require.Equal(t, http.StatusOK, rec.Code, "initial token")
 
 	// Overwrite file with new token
-	if err := os.WriteFile(path, []byte("new-token\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte("new-token\n"), 0600))
 
 	// Poll until the reload is picked up instead of a fixed sleep
 	deadline := time.After(2 * time.Second)
@@ -228,7 +205,7 @@ func TestTokenStore_HotReload(t *testing.T) {
 	for {
 		select {
 		case <-deadline:
-			t.Fatal("hot-reload did not complete within 2s")
+			require.Fail(t, "hot-reload did not complete within 2s")
 		case <-ticker.C:
 			if store.valid("new-token") {
 				goto reloaded
@@ -242,18 +219,14 @@ reloaded:
 	req.Header.Set("Authorization", "Bearer new-token")
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Errorf("new token after reload: status = %d, want %d", rec.Code, http.StatusOK)
-	}
+	assert.Equal(t, http.StatusOK, rec.Code, "new token after reload")
 
 	// Old token should be rejected
 	req = httptest.NewRequest(http.MethodGet, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer initial-token")
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("old token after reload: status = %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
+	assert.Equal(t, http.StatusUnauthorized, rec.Code, "old token after reload")
 }
 
 func TestTokenStore_HotReloadFileDeleted(t *testing.T) {
@@ -261,26 +234,18 @@ func TestTokenStore_HotReloadFileDeleted(t *testing.T) {
 	path := writeTokenFile(t, dir, "keep-me\n")
 
 	store, err := NewTokenStore(path)
-	if err != nil {
-		t.Fatalf("NewTokenStore() error: %v", err)
-	}
-	if err := store.Watch(); err != nil {
-		t.Fatalf("Watch() error: %v", err)
-	}
+	require.NoError(t, err, "NewTokenStore()")
+	require.NoError(t, store.Watch(), "Watch()")
 	defer store.Stop()
 
 	// Delete the token file
-	if err := os.Remove(path); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Remove(path))
 
 	// Give fsnotify time to process the Remove event
 	time.Sleep(200 * time.Millisecond)
 
 	// Last-good tokens should still be active (fail-open on delete)
-	if !store.valid("keep-me") {
-		t.Error("token should remain valid after file deletion (keep last-good)")
-	}
+	assert.True(t, store.valid("keep-me"), "token should remain valid after file deletion (keep last-good)")
 }
 
 func TestTokenStore_StopIdempotent(t *testing.T) {
@@ -288,12 +253,8 @@ func TestTokenStore_StopIdempotent(t *testing.T) {
 	path := writeTokenFile(t, dir, "token-a\n")
 
 	store, err := NewTokenStore(path)
-	if err != nil {
-		t.Fatalf("NewTokenStore() error: %v", err)
-	}
-	if err := store.Watch(); err != nil {
-		t.Fatalf("Watch() error: %v", err)
-	}
+	require.NoError(t, err, "NewTokenStore()")
+	require.NoError(t, store.Watch(), "Watch()")
 
 	// Calling Stop twice should not panic
 	store.Stop()
@@ -305,9 +266,7 @@ func TestTokenStore_StopWithoutWatch(t *testing.T) {
 	path := writeTokenFile(t, dir, "token-a\n")
 
 	store, err := NewTokenStore(path)
-	if err != nil {
-		t.Fatalf("NewTokenStore() error: %v", err)
-	}
+	require.NoError(t, err, "NewTokenStore()")
 
 	// Stop without Watch should not panic
 	store.Stop()
@@ -318,9 +277,7 @@ func TestTokenStore_EmptyFile(t *testing.T) {
 	path := writeTokenFile(t, dir, "# only comments\n\n# no real tokens\n")
 
 	store, err := NewTokenStore(path)
-	if err != nil {
-		t.Fatalf("NewTokenStore() error: %v", err)
-	}
+	require.NoError(t, err, "NewTokenStore()")
 
 	// All requests should be rejected
 	handler := store.Middleware(okHandler)
@@ -328,9 +285,7 @@ func TestTokenStore_EmptyFile(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer anything")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
 func TestTokenStore_WatchAlreadyWatching(t *testing.T) {
@@ -338,18 +293,12 @@ func TestTokenStore_WatchAlreadyWatching(t *testing.T) {
 	path := writeTokenFile(t, dir, "token-a\n")
 
 	store, err := NewTokenStore(path)
-	if err != nil {
-		t.Fatalf("NewTokenStore() error: %v", err)
-	}
-	if err := store.Watch(); err != nil {
-		t.Fatalf("Watch() error: %v", err)
-	}
+	require.NoError(t, err, "NewTokenStore()")
+	require.NoError(t, store.Watch(), "Watch()")
 	defer store.Stop()
 
 	// Second Watch should return nil (already watching)
-	if err := store.Watch(); err != nil {
-		t.Errorf("second Watch() = %v, want nil", err)
-	}
+	assert.NoError(t, store.Watch(), "second Watch()")
 }
 
 func TestTokenStore_WatchAfterStop(t *testing.T) {
@@ -357,16 +306,12 @@ func TestTokenStore_WatchAfterStop(t *testing.T) {
 	path := writeTokenFile(t, dir, "token-a\n")
 
 	store, err := NewTokenStore(path)
-	if err != nil {
-		t.Fatalf("NewTokenStore() error: %v", err)
-	}
+	require.NoError(t, err, "NewTokenStore()")
 
 	store.Stop()
 
 	// Watch after Stop should return nil (done channel closed)
-	if err := store.Watch(); err != nil {
-		t.Errorf("Watch() after Stop() = %v, want nil", err)
-	}
+	assert.NoError(t, store.Watch(), "Watch() after Stop()")
 }
 
 func TestTokenStore_HotReloadIgnoresOtherFiles(t *testing.T) {
@@ -374,27 +319,19 @@ func TestTokenStore_HotReloadIgnoresOtherFiles(t *testing.T) {
 	path := writeTokenFile(t, dir, "token-a\n")
 
 	store, err := NewTokenStore(path)
-	if err != nil {
-		t.Fatalf("NewTokenStore() error: %v", err)
-	}
-	if err := store.Watch(); err != nil {
-		t.Fatalf("Watch() error: %v", err)
-	}
+	require.NoError(t, err, "NewTokenStore()")
+	require.NoError(t, store.Watch(), "Watch()")
 	defer store.Stop()
 
 	// Write a different file in the same directory — should not affect tokens
 	otherPath := filepath.Join(dir, "other.txt")
-	if err := os.WriteFile(otherPath, []byte("unrelated"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(otherPath, []byte("unrelated"), 0600))
 
 	// Give fsnotify time to process the event
 	time.Sleep(100 * time.Millisecond)
 
 	// Original token should still work
-	if !store.valid("token-a") {
-		t.Error("token-a should still be valid after unrelated file change")
-	}
+	assert.True(t, store.valid("token-a"), "token-a should still be valid after unrelated file change")
 }
 
 func TestTokenStore_HotReloadAtomicRename(t *testing.T) {
@@ -402,22 +339,14 @@ func TestTokenStore_HotReloadAtomicRename(t *testing.T) {
 	path := writeTokenFile(t, dir, "original-token\n")
 
 	store, err := NewTokenStore(path)
-	if err != nil {
-		t.Fatalf("NewTokenStore() error: %v", err)
-	}
-	if err := store.Watch(); err != nil {
-		t.Fatalf("Watch() error: %v", err)
-	}
+	require.NoError(t, err, "NewTokenStore()")
+	require.NoError(t, store.Watch(), "Watch()")
 	defer store.Stop()
 
 	// Simulate atomic rename: write to temp file, rename over original
 	tmpPath := filepath.Join(dir, "tokens.tmp")
-	if err := os.WriteFile(tmpPath, []byte("renamed-token\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(tmpPath, []byte("renamed-token\n"), 0600))
+	require.NoError(t, os.Rename(tmpPath, path))
 
 	// Poll until reload
 	deadline := time.After(2 * time.Second)
@@ -426,7 +355,7 @@ func TestTokenStore_HotReloadAtomicRename(t *testing.T) {
 	for {
 		select {
 		case <-deadline:
-			t.Fatal("hot-reload via rename did not complete within 2s")
+			require.Fail(t, "hot-reload via rename did not complete within 2s")
 		case <-ticker.C:
 			if store.valid("renamed-token") {
 				goto done
@@ -435,9 +364,7 @@ func TestTokenStore_HotReloadAtomicRename(t *testing.T) {
 	}
 done:
 
-	if store.valid("original-token") {
-		t.Error("original-token should be rejected after rename reload")
-	}
+	assert.False(t, store.valid("original-token"), "original-token should be rejected after rename reload")
 }
 
 func TestTokenStore_Middleware_MissingHeader(t *testing.T) {
@@ -445,9 +372,7 @@ func TestTokenStore_Middleware_MissingHeader(t *testing.T) {
 	path := writeTokenFile(t, dir, "token-a\n")
 
 	store, err := NewTokenStore(path)
-	if err != nil {
-		t.Fatalf("NewTokenStore() error: %v", err)
-	}
+	require.NoError(t, err, "NewTokenStore()")
 
 	handler := store.Middleware(okHandler)
 
@@ -455,15 +380,7 @@ func TestTokenStore_Middleware_MissingHeader(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-	ct := rec.Header().Get("Content-Type")
-	if ct != "application/json" {
-		t.Errorf("Content-Type = %q, want application/json", ct)
-	}
-	wa := rec.Header().Get("WWW-Authenticate")
-	if wa != "Bearer" {
-		t.Errorf("WWW-Authenticate = %q, want Bearer", wa)
-	}
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+	assert.Equal(t, "Bearer", rec.Header().Get("WWW-Authenticate"))
 }

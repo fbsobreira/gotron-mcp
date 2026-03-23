@@ -6,6 +6,8 @@ import (
 
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestListProposals_Success(t *testing.T) {
@@ -23,19 +25,13 @@ func TestListProposals_Success(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleListProposals(pool), map[string]any{})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
 	ps := data["proposals"].([]any)
-	if len(ps) == 0 {
-		t.Fatal("expected at least one proposal")
-	}
+	require.NotEmpty(t, ps, "expected at least one proposal")
 	p := ps[0].(map[string]any)
-	if p["approval_count"] == nil {
-		t.Error("expected approval_count field")
-	}
+	assert.NotNil(t, p["approval_count"], "expected approval_count field")
 }
 
 // makeProposals creates n Proposal protos with distinct IDs.
@@ -119,34 +115,22 @@ func TestListProposals(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			pool := newMockPool(t, mockProposalServer(proposals))
 			result := callTool(t, handleListProposals(pool), tt.args)
-			if result.IsError {
-				t.Fatalf("expected success, got error: %v", result.Content)
-			}
+			require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 			data := parseJSONResult(t, result)
 
-			if got := int(data["total"].(float64)); got != tt.wantTotal {
-				t.Errorf("total = %d, want %d", got, tt.wantTotal)
-			}
-			if got := int(data["returned"].(float64)); got != tt.wantReturned {
-				t.Errorf("returned = %d, want %d", got, tt.wantReturned)
-			}
+			assert.Equal(t, tt.wantTotal, int(data["total"].(float64)))
+			assert.Equal(t, tt.wantReturned, int(data["returned"].(float64)))
 
 			ps := data["proposals"].([]any)
-			if len(ps) != tt.wantReturned {
-				t.Errorf("proposals length = %d, want %d", len(ps), tt.wantReturned)
-			}
+			assert.Len(t, ps, tt.wantReturned)
 
 			hasMore, ok := data["has_more"]
 			if tt.wantHasMore {
-				if !ok || hasMore != true {
-					t.Errorf("has_more = %v, want true", hasMore)
-				}
-				if got := int(data["next_offset"].(float64)); got != tt.wantNextOff {
-					t.Errorf("next_offset = %d, want %d", got, tt.wantNextOff)
-				}
-			} else if ok {
-				t.Errorf("has_more should not be present, got %v", hasMore)
+				assert.True(t, ok && hasMore == true, "has_more = %v, want true", hasMore)
+				assert.Equal(t, tt.wantNextOff, int(data["next_offset"].(float64)))
+			} else {
+				assert.False(t, ok, "has_more should not be present, got %v", hasMore)
 			}
 		})
 	}
@@ -155,77 +139,55 @@ func TestListProposals(t *testing.T) {
 func TestListProposals_InvalidOrder(t *testing.T) {
 	pool := newMockPool(t, mockProposalServer(makeProposals(3)))
 	result := callTool(t, handleListProposals(pool), map[string]any{"order": "invalid"})
-	if !result.IsError {
-		t.Fatal("expected error for invalid order, got success")
-	}
+	require.True(t, result.IsError, "expected error for invalid order, got success")
 }
 
 func TestListProposals_NegativeParams(t *testing.T) {
 	proposals := makeProposals(5)
 	pool := newMockPool(t, mockProposalServer(proposals))
 	result := callTool(t, handleListProposals(pool), map[string]any{"limit": float64(-1), "offset": float64(-5)})
-	if result.IsError {
-		t.Fatalf("expected success with clamped values, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success with clamped values, got error: %v", result.Content)
 	data := parseJSONResult(t, result)
-	if got := int(data["total"].(float64)); got != 5 {
-		t.Errorf("total = %d, want 5", got)
-	}
+	assert.Equal(t, 5, int(data["total"].(float64)))
 	// Negative limit should clamp to default 5, negative offset to 0
-	if got := int(data["returned"].(float64)); got != 5 {
-		t.Errorf("returned = %d, want 5", got)
-	}
+	assert.Equal(t, 5, int(data["returned"].(float64)))
 }
 
 func TestListProposals_Empty(t *testing.T) {
 	pool := newMockPool(t, mockProposalServer(nil))
 	result := callTool(t, handleListProposals(pool), map[string]any{})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
-	if got := int(data["total"].(float64)); got != 0 {
-		t.Errorf("total = %d, want 0", got)
-	}
-	if got := int(data["returned"].(float64)); got != 0 {
-		t.Errorf("returned = %d, want 0", got)
-	}
+	assert.Equal(t, 0, int(data["total"].(float64)))
+	assert.Equal(t, 0, int(data["returned"].(float64)))
 }
 
 func TestListProposals_OrderDesc(t *testing.T) {
 	proposals := makeProposals(5) // IDs 1..5
 	pool := newMockPool(t, mockProposalServer(proposals))
 	result := callTool(t, handleListProposals(pool), map[string]any{"limit": float64(5)})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
 	ps := data["proposals"].([]any)
 	// Default order is desc — first item should have highest proposal_id
 	firstID := int(ps[0].(map[string]any)["proposal_id"].(float64))
 	lastID := int(ps[len(ps)-1].(map[string]any)["proposal_id"].(float64))
-	if firstID <= lastID {
-		t.Errorf("expected descending order, got first_id=%d last_id=%d", firstID, lastID)
-	}
+	assert.Greater(t, firstID, lastID, "expected descending order")
 }
 
 func TestListProposals_OrderAsc(t *testing.T) {
 	proposals := makeProposals(5) // IDs 1..5
 	pool := newMockPool(t, mockProposalServer(proposals))
 	result := callTool(t, handleListProposals(pool), map[string]any{"limit": float64(5), "order": "asc"})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
 	ps := data["proposals"].([]any)
 	firstID := int(ps[0].(map[string]any)["proposal_id"].(float64))
 	lastID := int(ps[len(ps)-1].(map[string]any)["proposal_id"].(float64))
-	if firstID >= lastID {
-		t.Errorf("expected ascending order, got first_id=%d last_id=%d", firstID, lastID)
-	}
+	assert.Less(t, firstID, lastID, "expected ascending order")
 }
 
 // Verify proposal fields are correctly mapped.
@@ -247,24 +209,14 @@ func TestListProposals_Fields(t *testing.T) {
 
 	pool := newMockPool(t, mockProposalServer(proposals))
 	result := callTool(t, handleListProposals(pool), map[string]any{"limit": float64(10)})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
 	ps := data["proposals"].([]any)
-	if len(ps) != 1 {
-		t.Fatalf("expected 1 proposal, got %d", len(ps))
-	}
+	require.Len(t, ps, 1)
 
 	p := ps[0].(map[string]any)
-	if got := int(p["proposal_id"].(float64)); got != 42 {
-		t.Errorf("proposal_id = %d, want 42", got)
-	}
-	if got := p["state"].(string); got != "APPROVED" {
-		t.Errorf("state = %s, want APPROVED", got)
-	}
-	if _, ok := p["expiration_time"]; !ok {
-		t.Error("expiration_time field missing")
-	}
+	assert.Equal(t, 42, int(p["proposal_id"].(float64)))
+	assert.Equal(t, "APPROVED", p["state"].(string))
+	assert.Contains(t, p, "expiration_time", "expiration_time field missing")
 }

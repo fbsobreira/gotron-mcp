@@ -1,6 +1,10 @@
 package version
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestFull(t *testing.T) {
 	tests := []struct {
@@ -22,9 +26,7 @@ func TestFull(t *testing.T) {
 			})
 			Version = tt.version
 			Commit = tt.commit
-			if got := Full(); got != tt.want {
-				t.Errorf("Full() = %q, want %q", got, tt.want)
-			}
+			assert.Equal(t, tt.want, Full(), "Full()")
 		})
 	}
 }

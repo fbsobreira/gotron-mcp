@@ -9,6 +9,8 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestListWitnesses_Success(t *testing.T) {
@@ -29,9 +31,7 @@ func TestListWitnesses_Success(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleListWitnesses(pool), map[string]any{})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 }
 
 func TestListWitnesses_Error(t *testing.T) {
@@ -42,9 +42,7 @@ func TestListWitnesses_Error(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleListWitnesses(pool), map[string]any{})
-	if !result.IsError {
-		t.Error("expected error when ListWitnesses fails")
-	}
+	assert.True(t, result.IsError, "expected error when ListWitnesses fails")
 }
 
 // makeWitnesses creates n Witness protos with distinct addresses.
@@ -138,34 +136,22 @@ func TestListWitnesses(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			pool := newMockPool(t, mockWitnessServer(witnesses))
 			result := callTool(t, handleListWitnesses(pool), tt.args)
-			if result.IsError {
-				t.Fatalf("expected success, got error: %v", result.Content)
-			}
+			require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 			data := parseJSONResult(t, result)
 
-			if got := int(data["total"].(float64)); got != tt.wantTotal {
-				t.Errorf("total = %d, want %d", got, tt.wantTotal)
-			}
-			if got := int(data["returned"].(float64)); got != tt.wantReturned {
-				t.Errorf("returned = %d, want %d", got, tt.wantReturned)
-			}
+			assert.Equal(t, tt.wantTotal, int(data["total"].(float64)))
+			assert.Equal(t, tt.wantReturned, int(data["returned"].(float64)))
 
 			ws := data["witnesses"].([]any)
-			if len(ws) != tt.wantReturned {
-				t.Errorf("witnesses length = %d, want %d", len(ws), tt.wantReturned)
-			}
+			assert.Len(t, ws, tt.wantReturned)
 
 			hasMore, ok := data["has_more"]
 			if tt.wantHasMore {
-				if !ok || hasMore != true {
-					t.Errorf("has_more = %v, want true", hasMore)
-				}
-				if got := int(data["next_offset"].(float64)); got != tt.wantNextOff {
-					t.Errorf("next_offset = %d, want %d", got, tt.wantNextOff)
-				}
-			} else if ok {
-				t.Errorf("has_more should not be present, got %v", hasMore)
+				assert.True(t, ok && hasMore == true, "has_more = %v, want true", hasMore)
+				assert.Equal(t, tt.wantNextOff, int(data["next_offset"].(float64)))
+			} else {
+				assert.False(t, ok, "has_more should not be present, got %v", hasMore)
 			}
 		})
 	}
@@ -175,32 +161,20 @@ func TestListWitnesses_NegativeParams(t *testing.T) {
 	witnesses := makeWitnesses(5)
 	pool := newMockPool(t, mockWitnessServer(witnesses))
 	result := callTool(t, handleListWitnesses(pool), map[string]any{"limit": float64(-1), "offset": float64(-5)})
-	if result.IsError {
-		t.Fatalf("expected success with clamped values, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success with clamped values, got error: %v", result.Content)
 	data := parseJSONResult(t, result)
-	if got := int(data["total"].(float64)); got != 5 {
-		t.Errorf("total = %d, want 5", got)
-	}
-	if got := int(data["returned"].(float64)); got != 5 {
-		t.Errorf("returned = %d, want 5", got)
-	}
+	assert.Equal(t, 5, int(data["total"].(float64)))
+	assert.Equal(t, 5, int(data["returned"].(float64)))
 }
 
 func TestListWitnesses_Empty(t *testing.T) {
 	pool := newMockPool(t, mockWitnessServer(nil))
 	result := callTool(t, handleListWitnesses(pool), map[string]any{})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
-	if got := int(data["total"].(float64)); got != 0 {
-		t.Errorf("total = %d, want 0", got)
-	}
-	if got := int(data["returned"].(float64)); got != 0 {
-		t.Errorf("returned = %d, want 0", got)
-	}
+	assert.Equal(t, 0, int(data["total"].(float64)))
+	assert.Equal(t, 0, int(data["returned"].(float64)))
 }
 
 func TestVoteWitness_InvalidFrom(t *testing.T) {
@@ -209,9 +183,7 @@ func TestVoteWitness_InvalidFrom(t *testing.T) {
 		"from":  "invalid",
 		"votes": map[string]any{"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF": float64(100)},
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid from address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid from address")
 }
 
 func TestVoteWitness_MissingVotes(t *testing.T) {
@@ -219,9 +191,7 @@ func TestVoteWitness_MissingVotes(t *testing.T) {
 	result := callTool(t, handleVoteWitness(pool), map[string]any{
 		"from": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 	})
-	if !result.IsError {
-		t.Error("expected error for missing votes")
-	}
+	assert.True(t, result.IsError, "expected error for missing votes")
 }
 
 func TestVoteWitness_InvalidVotesType(t *testing.T) {
@@ -230,9 +200,7 @@ func TestVoteWitness_InvalidVotesType(t *testing.T) {
 		"from":  "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"votes": "not-a-map",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid votes type")
-	}
+	assert.True(t, result.IsError, "expected error for invalid votes type")
 }
 
 func TestVoteWitness_InvalidWitnessAddr(t *testing.T) {
@@ -241,9 +209,7 @@ func TestVoteWitness_InvalidWitnessAddr(t *testing.T) {
 		"from":  "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"votes": map[string]any{"bad-address": float64(100)},
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid witness address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid witness address")
 }
 
 func TestVoteWitness_InvalidVoteCount(t *testing.T) {
@@ -252,9 +218,7 @@ func TestVoteWitness_InvalidVoteCount(t *testing.T) {
 		"from":  "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"votes": map[string]any{"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF": float64(-5)},
 	})
-	if !result.IsError {
-		t.Error("expected error for negative vote count")
-	}
+	assert.True(t, result.IsError, "expected error for negative vote count")
 }
 
 func TestVoteWitness_NonNumberVote(t *testing.T) {
@@ -263,9 +227,7 @@ func TestVoteWitness_NonNumberVote(t *testing.T) {
 		"from":  "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"votes": map[string]any{"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF": "not-a-number"},
 	})
-	if !result.IsError {
-		t.Error("expected error for non-number vote count")
-	}
+	assert.True(t, result.IsError, "expected error for non-number vote count")
 }
 
 func TestVoteWitness_Success(t *testing.T) {
@@ -284,32 +246,20 @@ func TestVoteWitness_Success(t *testing.T) {
 		"from":  "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"votes": map[string]any{"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t": float64(100)},
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
-	if data["type"] != "VoteWitnessContract" {
-		t.Errorf("type = %v, want VoteWitnessContract", data["type"])
-	}
-	if data["transaction_hex"] == nil || data["transaction_hex"] == "" {
-		t.Error("transaction_hex should not be empty")
-	}
+	assert.Equal(t, "VoteWitnessContract", data["type"])
+	assert.NotEmpty(t, data["transaction_hex"], "transaction_hex should not be empty")
 }
 
 // parseJSONResult extracts the JSON map from a tool result.
 func parseJSONResult(t *testing.T, result *mcp.CallToolResult) map[string]any {
 	t.Helper()
-	if len(result.Content) == 0 {
-		t.Fatal("empty result content")
-	}
+	require.NotEmpty(t, result.Content, "empty result content")
 	text, ok := result.Content[0].(mcp.TextContent)
-	if !ok {
-		t.Fatalf("expected TextContent, got %T", result.Content[0])
-	}
+	require.True(t, ok, "expected TextContent, got %T", result.Content[0])
 	var data map[string]any
-	if err := json.Unmarshal([]byte(text.Text), &data); err != nil {
-		t.Fatalf("failed to parse JSON: %v", err)
-	}
+	require.NoError(t, json.Unmarshal([]byte(text.Text), &data), "failed to parse JSON")
 	return data
 }

@@ -3,6 +3,9 @@ package config
 import (
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsHostedMode(t *testing.T) {
@@ -18,9 +21,7 @@ func TestIsHostedMode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &Config{Transport: tt.transport}
-			if got := cfg.IsHostedMode(); got != tt.want {
-				t.Errorf("IsHostedMode() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, cfg.IsHostedMode(), "IsHostedMode()")
 		})
 	}
 }
@@ -46,9 +47,7 @@ func TestEnvOrDefault(t *testing.T) {
 				_ = os.Unsetenv(tt.key)
 			}
 			got := envOrDefault(tt.key, tt.fallback)
-			if got != tt.want {
-				t.Errorf("envOrDefault(%q, %q) = %q, want %q", tt.key, tt.fallback, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "envOrDefault(%q, %q)", tt.key, tt.fallback)
 		})
 	}
 }
@@ -66,12 +65,8 @@ func TestNetworkNodes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, ok := networkNodes[tt.network]
-			if !ok {
-				t.Fatalf("network %q not found in networkNodes", tt.network)
-			}
-			if got != tt.want {
-				t.Errorf("networkNodes[%q] = %q, want %q", tt.network, got, tt.want)
-			}
+			require.True(t, ok, "network %q not found in networkNodes", tt.network)
+			assert.Equal(t, tt.want, got, "networkNodes[%q]", tt.network)
 		})
 	}
 }
@@ -91,9 +86,7 @@ func TestResolveNode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := resolveNode(tt.network)
-			if got != tt.want {
-				t.Errorf("resolveNode(%q) = %q, want %q", tt.network, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "resolveNode(%q)", tt.network)
 		})
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"math"
 	"math/big"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestTRXToSun(t *testing.T) {
@@ -27,13 +29,12 @@ func TestTRXToSun(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := TRXToSun(tt.trx)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("TRXToSun(%q) error = %v, wantErr %v", tt.trx, err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err, "TRXToSun(%q)", tt.trx)
 				return
 			}
-			if got != tt.want {
-				t.Errorf("TRXToSun(%q) = %d, want %d", tt.trx, got, tt.want)
-			}
+			assert.NoError(t, err, "TRXToSun(%q)", tt.trx)
+			assert.Equal(t, tt.want, got, "TRXToSun(%q)", tt.trx)
 		})
 	}
 }
@@ -56,9 +57,7 @@ func TestSunToTRX(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := SunToTRX(tt.sun)
-			if got != tt.want {
-				t.Errorf("SunToTRX(%d) = %q, want %q", tt.sun, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "SunToTRX(%d)", tt.sun)
 		})
 	}
 }
@@ -80,9 +79,7 @@ func TestFormatTRC20Amount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := FormatTRC20Amount(tt.raw, tt.decimals)
-			if got != tt.want {
-				t.Errorf("FormatTRC20Amount() = %q, want %q", got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "FormatTRC20Amount()")
 		})
 	}
 }
@@ -106,13 +103,12 @@ func TestParseTRC20Amount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ParseTRC20Amount(tt.amount, tt.decimals)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseTRC20Amount(%q, %d) error = %v, wantErr %v", tt.amount, tt.decimals, err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err, "ParseTRC20Amount(%q, %d)", tt.amount, tt.decimals)
 				return
 			}
-			if err == nil && got.String() != tt.want {
-				t.Errorf("ParseTRC20Amount(%q, %d) = %s, want %s", tt.amount, tt.decimals, got.String(), tt.want)
-			}
+			assert.NoError(t, err, "ParseTRC20Amount(%q, %d)", tt.amount, tt.decimals)
+			assert.Equal(t, tt.want, got.String(), "ParseTRC20Amount(%q, %d)", tt.amount, tt.decimals)
 		})
 	}
 }

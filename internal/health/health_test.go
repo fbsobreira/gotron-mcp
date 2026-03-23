@@ -12,6 +12,8 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/client"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -48,9 +50,7 @@ func newMockPool(t *testing.T, mock *mockWalletServer) *nodepool.Pool {
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
-	if err != nil {
-		t.Fatalf("failed to create mock client: %v", err)
-	}
+	require.NoError(t, err, "failed to create mock client")
 	t.Cleanup(func() { _ = conn.Close() })
 
 	c := client.NewGrpcClient("bufconn")
@@ -62,12 +62,8 @@ func newMockPool(t *testing.T, mock *mockWalletServer) *nodepool.Pool {
 func TestNewHandler(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
 	h := NewHandler(pool, "mainnet")
-	if h == nil {
-		t.Fatal("NewHandler returned nil")
-	}
-	if h.network != "mainnet" {
-		t.Errorf("network = %q, want mainnet", h.network)
-	}
+	require.NotNil(t, h, "NewHandler returned nil")
+	assert.Equal(t, "mainnet", h.network)
 }
 
 func TestServeHTTP_Success(t *testing.T) {
@@ -90,20 +86,12 @@ func TestServeHTTP_Success(t *testing.T) {
 	req := httptest.NewRequest("GET", "/health", nil)
 	h.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", rec.Code)
-	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
-		t.Errorf("Content-Type = %q, want application/json", ct)
-	}
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
 	var body map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("failed to parse response: %v", err)
-	}
-	if body["status"] != "ok" {
-		t.Errorf("status = %v, want ok", body["status"])
-	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body), "failed to parse response")
+	assert.Equal(t, "ok", body["status"])
 }
 
 func TestServeHTTP_Degraded(t *testing.T) {
@@ -117,17 +105,11 @@ func TestServeHTTP_Degraded(t *testing.T) {
 	req := httptest.NewRequest("GET", "/health", nil)
 	h.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("status = %d, want 503", rec.Code)
-	}
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 
 	var body map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("failed to parse response: %v", err)
-	}
-	if body["status"] != "degraded" {
-		t.Errorf("status = %v, want degraded", body["status"])
-	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body), "failed to parse response")
+	assert.Equal(t, "degraded", body["status"])
 }
 
 func TestServeHTTP_CacheHit(t *testing.T) {
@@ -150,31 +132,21 @@ func TestServeHTTP_CacheHit(t *testing.T) {
 	// First request — cache miss
 	rec1 := httptest.NewRecorder()
 	h.ServeHTTP(rec1, httptest.NewRequest("GET", "/health", nil))
-	if rec1.Code != http.StatusOK {
-		t.Fatalf("first request: status = %d", rec1.Code)
-	}
+	require.Equal(t, http.StatusOK, rec1.Code, "first request")
 
 	// Second request — should be cache hit (same body)
 	rec2 := httptest.NewRecorder()
 	h.ServeHTTP(rec2, httptest.NewRequest("GET", "/health", nil))
-	if rec2.Code != http.StatusOK {
-		t.Fatalf("second request: status = %d", rec2.Code)
-	}
+	require.Equal(t, http.StatusOK, rec2.Code, "second request")
 
-	if rec1.Body.String() != rec2.Body.String() {
-		t.Error("second request should return cached response")
-	}
+	assert.Equal(t, rec1.Body.String(), rec2.Body.String(), "second request should return cached response")
 
 	// First request calls GetNowBlock twice (CheckHealth + GetNowBlockCtx).
 	// Second request should serve from cache with no additional calls.
 	firstCallCount := calls
-	if calls < 1 {
-		t.Errorf("expected at least 1 gRPC call on first request, got %d", calls)
-	}
+	assert.GreaterOrEqual(t, calls, 1, "expected at least 1 gRPC call on first request")
 	// Third request — verify no new calls (still cached)
 	rec3 := httptest.NewRecorder()
 	h.ServeHTTP(rec3, httptest.NewRequest("GET", "/health", nil))
-	if calls != firstCallCount {
-		t.Errorf("cache miss: gRPC calls went from %d to %d", firstCallCount, calls)
-	}
+	assert.Equal(t, firstCallCount, calls, "cache miss: gRPC calls should not increase")
 }

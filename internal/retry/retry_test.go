@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -16,15 +18,9 @@ func TestDo_SuccessFirstAttempt(t *testing.T) {
 		calls++
 		return "ok", nil
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "ok" {
-		t.Errorf("got %q, want %q", result, "ok")
-	}
-	if calls != 1 {
-		t.Errorf("expected 1 call, got %d", calls)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "ok", result)
+	assert.Equal(t, 1, calls)
 }
 
 func TestDo_SuccessAfterRetries(t *testing.T) {
@@ -36,15 +32,9 @@ func TestDo_SuccessAfterRetries(t *testing.T) {
 		}
 		return 42, nil
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != 42 {
-		t.Errorf("got %d, want 42", result)
-	}
-	if calls != 3 {
-		t.Errorf("expected 3 calls, got %d", calls)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 42, result)
+	assert.Equal(t, 3, calls)
 }
 
 func TestDo_ExhaustedRetries(t *testing.T) {
@@ -53,12 +43,8 @@ func TestDo_ExhaustedRetries(t *testing.T) {
 		calls++
 		return "", status.Error(codes.Unavailable, "always down")
 	})
-	if err == nil {
-		t.Fatal("expected error after exhausted retries")
-	}
-	if calls != maxRetries {
-		t.Errorf("expected %d calls, got %d", maxRetries, calls)
-	}
+	require.Error(t, err, "expected error after exhausted retries")
+	assert.Equal(t, maxRetries, calls)
 }
 
 func TestDo_NonRetryableError(t *testing.T) {
@@ -67,12 +53,8 @@ func TestDo_NonRetryableError(t *testing.T) {
 		calls++
 		return "", status.Error(codes.InvalidArgument, "bad input")
 	})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if calls != 1 {
-		t.Errorf("non-retryable error should not retry, got %d calls", calls)
-	}
+	require.Error(t, err)
+	assert.Equal(t, 1, calls, "non-retryable error should not retry")
 }
 
 func TestIsRetryable(t *testing.T) {
@@ -93,9 +75,7 @@ func TestIsRetryable(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := isRetryable(tt.err)
-			if got != tt.want {
-				t.Errorf("isRetryable(%v) = %v, want %v", tt.err, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "isRetryable(%v)", tt.err)
 		})
 	}
 }
@@ -117,12 +97,8 @@ func TestDo_BackoffTiming(t *testing.T) {
 	// Sleep 1: 500ms base + up to 250ms jitter
 	// Sleep 2: 1000ms base + up to 500ms jitter
 	// Lower bound ~500ms (base delays only), upper bound ~4.75s (max jitter)
-	if elapsed < 500*time.Millisecond {
-		t.Errorf("retries completed too fast: %v (expected backoff delays)", elapsed)
-	}
-	if elapsed > 10*time.Second {
-		t.Errorf("retries took too long: %v", elapsed)
-	}
+	assert.GreaterOrEqual(t, elapsed, 500*time.Millisecond, "retries completed too fast (expected backoff delays)")
+	assert.LessOrEqual(t, elapsed, 10*time.Second, "retries took too long")
 }
 
 func TestDoCtx_CancelledContext(t *testing.T) {
@@ -134,12 +110,8 @@ func TestDoCtx_CancelledContext(t *testing.T) {
 		calls++
 		return "", status.Error(codes.Unavailable, "down")
 	})
-	if err != context.Canceled {
-		t.Errorf("expected context.Canceled, got %v", err)
-	}
-	if calls != 1 {
-		t.Errorf("expected 1 call before cancel detected, got %d", calls)
-	}
+	assert.Equal(t, context.Canceled, err)
+	assert.Equal(t, 1, calls, "expected 1 call before cancel detected")
 }
 
 func TestDoCtx_CancelDuringBackoff(t *testing.T) {
@@ -154,13 +126,9 @@ func TestDoCtx_CancelDuringBackoff(t *testing.T) {
 	})
 	elapsed := time.Since(start)
 
-	if err == nil {
-		t.Fatal("expected error")
-	}
+	require.Error(t, err)
 	// Should abort during first backoff sleep (~500ms), not complete all retries (~2s)
-	if elapsed > 1*time.Second {
-		t.Errorf("should have aborted during backoff, took %v", elapsed)
-	}
+	assert.LessOrEqual(t, elapsed, 1*time.Second, "should have aborted during backoff")
 }
 
 // mockFailoverer implements Failoverer for testing.
@@ -179,15 +147,9 @@ func TestDoWithFailover_SuccessNoFailover(t *testing.T) {
 	result, err := DoWithFailover(context.Background(), f, func(_ context.Context) (string, error) {
 		return "ok", nil
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "ok" {
-		t.Errorf("got %q, want %q", result, "ok")
-	}
-	if f.called != 0 {
-		t.Errorf("failover should not be called on success, got %d calls", f.called)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "ok", result)
+	assert.Equal(t, 0, f.called, "failover should not be called on success")
 }
 
 func TestDoWithFailover_FailoverAndRecover(t *testing.T) {
@@ -205,18 +167,10 @@ func TestDoWithFailover_FailoverAndRecover(t *testing.T) {
 		}
 		return 42, nil
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != 42 {
-		t.Errorf("got %d, want 42", result)
-	}
-	if f.called != 1 {
-		t.Errorf("expected 1 failover call, got %d", f.called)
-	}
-	if calls != maxRetries+1 {
-		t.Errorf("expected %d total calls, got %d", maxRetries+1, calls)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 42, result)
+	assert.Equal(t, 1, f.called, "expected 1 failover call")
+	assert.Equal(t, maxRetries+1, calls, "expected %d total calls", maxRetries+1)
 }
 
 func TestDoWithFailover_NoFallbackAvailable(t *testing.T) {
@@ -230,15 +184,9 @@ func TestDoWithFailover_NoFallbackAvailable(t *testing.T) {
 		calls++
 		return "", status.Error(codes.Unavailable, "down")
 	})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if f.called != 1 {
-		t.Errorf("expected 1 failover attempt, got %d", f.called)
-	}
-	if calls != maxRetries {
-		t.Errorf("expected %d calls (no second round), got %d", maxRetries, calls)
-	}
+	require.Error(t, err)
+	assert.Equal(t, 1, f.called, "expected 1 failover attempt")
+	assert.Equal(t, maxRetries, calls, "expected %d calls (no second round)", maxRetries)
 }
 
 func TestDoWithFailover_NonRetryableSkipsFailover(t *testing.T) {
@@ -246,10 +194,6 @@ func TestDoWithFailover_NonRetryableSkipsFailover(t *testing.T) {
 	_, err := DoWithFailover(context.Background(), f, func(_ context.Context) (string, error) {
 		return "", status.Error(codes.InvalidArgument, "bad input")
 	})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if f.called != 0 {
-		t.Errorf("failover should not be called for non-retryable errors, got %d", f.called)
-	}
+	require.Error(t, err)
+	assert.Equal(t, 0, f.called, "failover should not be called for non-retryable errors")
 }
