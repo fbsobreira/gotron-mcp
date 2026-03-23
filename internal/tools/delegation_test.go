@@ -99,6 +99,46 @@ func TestGetAccountPermissions_Success(t *testing.T) {
 	}
 }
 
+func TestGetAccountPermissions_WithWitness(t *testing.T) {
+	witnessAddr := []byte{0x41, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14}
+	mock := &mockWalletServer{
+		GetAccountFunc: func(_ context.Context, in *core.Account) (*core.Account, error) {
+			return &core.Account{
+				Address: in.Address,
+				OwnerPermission: &core.Permission{
+					Id:        0,
+					Threshold: 1,
+					Type:      core.Permission_Owner,
+					Keys:      []*core.Key{{Address: witnessAddr, Weight: 1}},
+				},
+				WitnessPermission: &core.Permission{
+					Id:             1,
+					PermissionName: "witness",
+					Threshold:      1,
+					Type:           core.Permission_Witness,
+					Keys:           []*core.Key{{Address: witnessAddr, Weight: 1}},
+				},
+			}, nil
+		},
+	}
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleGetAccountPermissions(pool), map[string]any{
+		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+	})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", result.Content)
+	}
+
+	data := parseJSONResult(t, result)
+	witness, ok := data["witness"].(map[string]any)
+	if !ok {
+		t.Fatal("expected witness permission")
+	}
+	if witness["name"] != "witness" {
+		t.Errorf("witness name = %v, want witness", witness["name"])
+	}
+}
+
 func TestGetAccountPermissions_NoPermissions(t *testing.T) {
 	mock := &mockWalletServer{
 		GetAccountFunc: func(_ context.Context, in *core.Account) (*core.Account, error) {
@@ -144,9 +184,12 @@ func TestGetDelegatedResources_Success(t *testing.T) {
 			return &api.DelegatedResourceList{
 				DelegatedResource: []*core.DelegatedResource{
 					{
-						From:                   fromAddr,
-						To:                     toAddr,
-						FrozenBalanceForEnergy: 5000000,
+						From:                      fromAddr,
+						To:                        toAddr,
+						FrozenBalanceForEnergy:     5000000,
+						FrozenBalanceForBandwidth:  2000000,
+						ExpireTimeForEnergy:        1710864000,
+						ExpireTimeForBandwidth:     1710950400,
 					},
 				},
 			}, nil
@@ -171,6 +214,15 @@ func TestGetDelegatedResources_Success(t *testing.T) {
 	}
 	if d["energy_trx"] != "5.000000" {
 		t.Errorf("energy_trx = %v, want 5.000000", d["energy_trx"])
+	}
+	if d["bandwidth_sun"] != float64(2000000) {
+		t.Errorf("bandwidth_sun = %v, want 2000000", d["bandwidth_sun"])
+	}
+	if d["expire_time_energy"] != float64(1710864000) {
+		t.Errorf("expire_time_energy = %v, want 1710864000", d["expire_time_energy"])
+	}
+	if d["expire_time_bandwidth"] != float64(1710950400) {
+		t.Errorf("expire_time_bandwidth = %v, want 1710950400", d["expire_time_bandwidth"])
 	}
 }
 
