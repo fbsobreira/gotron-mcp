@@ -166,8 +166,54 @@ func TestGetDelegatedResources_Success(t *testing.T) {
 		t.Fatalf("expected 1 delegation, got %d", len(delegated))
 	}
 	d := delegated[0].(map[string]any)
-	if d["energy"] != float64(5000000) {
-		t.Errorf("energy = %v, want 5000000", d["energy"])
+	if d["energy_sun"] != float64(5000000) {
+		t.Errorf("energy_sun = %v, want 5000000", d["energy_sun"])
+	}
+	if d["energy_trx"] != "5.000000" {
+		t.Errorf("energy_trx = %v, want 5.000000", d["energy_trx"])
+	}
+}
+
+func TestGetDelegatedResources_IndexError(t *testing.T) {
+	mock := &mockWalletServer{
+		GetDelegatedResourceAccountIndexV2Func: func(_ context.Context, _ *api.BytesMessage) (*core.DelegatedResourceAccountIndex, error) {
+			return nil, fmt.Errorf("node unavailable")
+		},
+	}
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleGetDelegatedResources(pool), map[string]any{
+		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+	})
+	if !result.IsError {
+		t.Error("expected error when GetDelegatedResourceAccountIndexV2 fails")
+	}
+}
+
+func TestGetDelegatedResources_ResourceError(t *testing.T) {
+	toAddr := []byte{0x41, 0x14, 0x13, 0x12, 0x11, 0x10, 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01}
+	callCount := 0
+	mock := &mockWalletServer{
+		GetDelegatedResourceAccountIndexV2Func: func(_ context.Context, in *api.BytesMessage) (*core.DelegatedResourceAccountIndex, error) {
+			callCount++
+			if callCount == 1 {
+				// First call (delegated-to) returns empty so it succeeds
+				return &core.DelegatedResourceAccountIndex{}, nil
+			}
+			// Second call (received-from) returns an account with FromAccounts to trigger GetDelegatedResourceV2
+			return &core.DelegatedResourceAccountIndex{
+				FromAccounts: [][]byte{toAddr},
+			}, nil
+		},
+		GetDelegatedResourceV2Func: func(_ context.Context, _ *api.DelegatedResourceMessage) (*api.DelegatedResourceList, error) {
+			return nil, fmt.Errorf("rpc error")
+		},
+	}
+	pool := newMockPool(t, mock)
+	result := callTool(t, handleGetDelegatedResources(pool), map[string]any{
+		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+	})
+	if !result.IsError {
+		t.Error("expected error when GetDelegatedResourceV2 fails")
 	}
 }
 

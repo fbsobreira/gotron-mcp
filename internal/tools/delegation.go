@@ -144,16 +144,12 @@ func formatDelegatedResourceLists(lists []*api.DelegatedResourceList) []map[stri
 	for _, list := range lists {
 		for _, dr := range list.DelegatedResource {
 			entry := map[string]any{
-				"from":      address.BytesToAddress(dr.From).String(),
-				"to":        address.BytesToAddress(dr.To).String(),
-				"energy":    dr.FrozenBalanceForEnergy,
-				"bandwidth": dr.FrozenBalanceForBandwidth,
-			}
-			if dr.FrozenBalanceForEnergy > 0 {
-				entry["energy_trx"] = util.SunToTRX(dr.FrozenBalanceForEnergy)
-			}
-			if dr.FrozenBalanceForBandwidth > 0 {
-				entry["bandwidth_trx"] = util.SunToTRX(dr.FrozenBalanceForBandwidth)
+				"from":          address.BytesToAddress(dr.From).String(),
+				"to":            address.BytesToAddress(dr.To).String(),
+				"energy_sun":    dr.FrozenBalanceForEnergy,
+				"energy_trx":    util.SunToTRX(dr.FrozenBalanceForEnergy),
+				"bandwidth_sun": dr.FrozenBalanceForBandwidth,
+				"bandwidth_trx": util.SunToTRX(dr.FrozenBalanceForBandwidth),
 			}
 			if dr.ExpireTimeForEnergy > 0 {
 				entry["expire_time_energy"] = dr.ExpireTimeForEnergy
@@ -191,8 +187,8 @@ func handleGetDelegatableAmount(pool *nodepool.Pool) server.ToolHandlerFunc {
 		}
 
 		result := map[string]any{
-			"address":            addr,
-			"resource":           resourceStr,
+			"address":             addr,
+			"resource":            resourceStr,
 			"max_delegatable_sun": resp.MaxSize,
 			"max_delegatable_trx": util.SunToTRX(resp.MaxSize),
 		}
