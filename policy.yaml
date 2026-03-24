@@ -8,6 +8,15 @@
 
 enabled: false
 
+# Approval backend — sends approval requests to human when thresholds are exceeded.
+# approval:
+#   method: telegram
+#   telegram:
+#     bot_token_env: GOTRON_MCP_TELEGRAM_BOT_TOKEN  # env var with bot token from @BotFather
+#     chat_id: 123456789                             # Telegram chat ID for approval messages
+#     authorized_users: [123456789]                  # Telegram user IDs allowed to approve
+#     timeout_seconds: 300                           # 5 minutes
+
 wallets:
   # "savings" — high-value wallet with strict limits
   # savings:
@@ -28,14 +37,10 @@ wallets:
   #       per_tx_limit_units: 500        # max 500 USDT per TX
   #       daily_limit_units: 2000        # 2,000 USDT/day
   #       approval_required_above_units: 1000  # require approval above 1,000 USDT
-  #       # per_tx_limit_usd: 500        # requires price service (#85)
-  #       # daily_limit_usd: 2000        # requires price service (#85)
   #     TAFjULxiVgT4qWk6UZwjqwZXTSaGaqnVp4:  # BTT
   #       per_tx_limit_units: 100000000  # 100M BTT per TX
   #       daily_limit_units: 500000000   # 500M BTT/day
   #       approval_required_above_units: 200000000  # require approval above 200M BTT
-  #       # per_tx_limit_usd: 50         # requires price service (#85)
-  #       # daily_limit_usd: 100         # requires price service (#85)
   #
   #   # Only these addresses can receive funds
   #   whitelist:

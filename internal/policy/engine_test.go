@@ -1,9 +1,12 @@
 package policy
 
 import (
+	"context"
 	"math"
 	"testing"
+	"time"
 
+	"github.com/fbsobreira/gotron-mcp/internal/approval"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -442,4 +445,152 @@ func TestReleaseReserve_TokenLimits(t *testing.T) {
 	result, err = e.Check(intent3)
 	require.NoError(t, err)
 	assert.True(t, result.Allowed, "budget should be restored after ReleaseReserve for token limits")
+}
+
+// --- Approval and notification tests ---
+
+type mockApprover struct {
+	approved bool
+	err      error
+}
+
+func (m *mockApprover) RequestApproval(_ context.Context, _ approval.Request) (approval.Result, error) {
+	if m.err != nil {
+		return approval.Result{}, m.err
+	}
+	return approval.Result{Approved: m.approved, ApprovedBy: "test", Timestamp: time.Now()}, nil
+}
+
+type mockNotifier struct {
+	mockApprover
+	notified bool
+	txid     string
+	success  bool
+}
+
+func (m *mockNotifier) NotifyBroadcast(_ context.Context, txid string, success bool) error {
+	m.notified = true
+	m.txid = txid
+	m.success = success
+	return nil
+}
+
+func TestRequestApproval_NilEngine(t *testing.T) {
+	var e *Engine
+	approved, err := e.RequestApproval(context.Background(), &Intent{WalletName: "any"})
+	assert.False(t, approved)
+	assert.Nil(t, err)
+}
+
+func TestRequestApproval_NoApprover(t *testing.T) {
+	e := newTestEngine(t, &Config{})
+	approved, err := e.RequestApproval(context.Background(), &Intent{WalletName: "any"})
+	assert.False(t, approved)
+	assert.Nil(t, err)
+}
+
+func TestRequestApproval_Approved(t *testing.T) {
+	e := newTestEngine(t, &Config{})
+	e.SetApprover(&mockApprover{approved: true})
+
+	approved, err := e.RequestApproval(context.Background(), &Intent{WalletName: "wallet"})
+	require.NoError(t, err)
+	assert.True(t, approved)
+}
+
+func TestRequestApproval_Rejected(t *testing.T) {
+	e := newTestEngine(t, &Config{})
+	e.SetApprover(&mockApprover{approved: false})
+
+	approved, err := e.RequestApproval(context.Background(), &Intent{WalletName: "wallet"})
+	require.NoError(t, err)
+	assert.False(t, approved)
+}
+
+func TestRequestApproval_UsesConfigTimeout(t *testing.T) {
+	cfg := &Config{
+		Approval: &ApprovalConfig{
+			Telegram: &TelegramYAMLConfig{TimeoutSeconds: 60},
+		},
+	}
+	e := newTestEngine(t, cfg)
+	e.SetApprover(&mockApprover{approved: true})
+
+	intent := &Intent{WalletName: "wallet"}
+	approved, err := e.RequestApproval(context.Background(), intent)
+	require.NoError(t, err)
+	assert.True(t, approved)
+}
+
+func TestBuildApprovalSummary(t *testing.T) {
+	t.Run("TransferContract", func(t *testing.T) {
+		intent := &Intent{
+			Action:    "TransferContract",
+			AmountSUN: 100_000_000,
+			ToAddr:    "TRecipient",
+			TokenID:   "TRX",
+		}
+		summary := buildApprovalSummary(intent)
+		assert.Contains(t, summary, "Transfer")
+		assert.Contains(t, summary, "TRX")
+		assert.Contains(t, summary, "TRecipient")
+	})
+
+	t.Run("TriggerSmartContract_TRC20", func(t *testing.T) {
+		intent := &Intent{
+			Action:  "TriggerSmartContract",
+			ToAddr:  "TContract",
+			TokenID: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		}
+		summary := buildApprovalSummary(intent)
+		assert.Contains(t, summary, "Token transfer")
+		assert.Contains(t, summary, "TContract")
+		assert.Contains(t, summary, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+	})
+
+	t.Run("TriggerSmartContract_NativeCall", func(t *testing.T) {
+		intent := &Intent{
+			Action:  "TriggerSmartContract",
+			ToAddr:  "TContract",
+			TokenID: "TRX",
+		}
+		summary := buildApprovalSummary(intent)
+		assert.Contains(t, summary, "Contract call")
+		assert.Contains(t, summary, "TContract")
+	})
+
+	t.Run("UnknownType", func(t *testing.T) {
+		intent := &Intent{
+			Action:     "FreezeBalanceV2Contract",
+			WalletName: "mywallet",
+		}
+		summary := buildApprovalSummary(intent)
+		assert.Contains(t, summary, "FreezeBalanceV2Contract")
+		assert.Contains(t, summary, "mywallet")
+	})
+}
+
+func TestNotifyBroadcast_NilEngine(t *testing.T) {
+	var e *Engine
+	assert.NotPanics(t, func() {
+		e.NotifyBroadcast(context.Background(), "txid", true)
+	})
+}
+
+func TestNotifyBroadcast_WithMockNotifier(t *testing.T) {
+	e := newTestEngine(t, &Config{})
+	mn := &mockNotifier{mockApprover: mockApprover{approved: true}}
+	e.SetApprover(mn)
+
+	e.NotifyBroadcast(context.Background(), "abc123", true)
+	assert.True(t, mn.notified)
+	assert.Equal(t, "abc123", mn.txid)
+	assert.True(t, mn.success)
+
+	// Test failure notification
+	mn.notified = false
+	e.NotifyBroadcast(context.Background(), "fail456", false)
+	assert.True(t, mn.notified)
+	assert.Equal(t, "fail456", mn.txid)
+	assert.False(t, mn.success)
 }

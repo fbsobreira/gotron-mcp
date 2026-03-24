@@ -97,10 +97,25 @@ type WalletPolicy struct {
 	Whitelist []string `yaml:"whitelist"`
 }
 
+// ApprovalConfig holds configuration for the transaction approval backend.
+type ApprovalConfig struct {
+	Method   string              `yaml:"method"` // "telegram", "webhook" (future)
+	Telegram *TelegramYAMLConfig `yaml:"telegram"`
+}
+
+// TelegramYAMLConfig holds Telegram-specific approval configuration.
+type TelegramYAMLConfig struct {
+	BotTokenEnv     string  `yaml:"bot_token_env"`    // env var name for bot token
+	AuthorizedUsers []int64 `yaml:"authorized_users"` // Telegram user IDs
+	ChatID          int64   `yaml:"chat_id"`          // Chat to send approvals to
+	TimeoutSeconds  int     `yaml:"timeout_seconds"`  // default 300
+}
+
 // Config holds the per-wallet policy configuration.
 type Config struct {
-	Enabled bool                     `yaml:"enabled"`
-	Wallets map[string]*WalletPolicy `yaml:"wallets"`
+	Enabled  bool                     `yaml:"enabled"`
+	Wallets  map[string]*WalletPolicy `yaml:"wallets"`
+	Approval *ApprovalConfig          `yaml:"approval"`
 }
 
 // LoadConfig reads and parses a policy YAML file.
