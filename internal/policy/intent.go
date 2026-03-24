@@ -20,7 +20,7 @@ type Intent struct {
 	ToAddr      string
 	AmountSUN   int64     // TRX amount in SUN (for TRX transfers)
 	TokenID     string    // "TRX" for native transfers, contract address for TRC20
-	TokenAmount float64   // amount in human-readable token units (TRX for TRX, token units for TRC20)
+	TokenAmount float64   // raw on-chain amount (SUN for TRX, raw uint256 for TRC20 before decimals)
 	RawTokenAmt *big.Int  // raw uint256 token amount (before decimals, for overflow-safe checks)
 	CheckTime   time.Time // set by Engine.Check — used by ReleaseReserve for consistent day bucket
 }
@@ -158,6 +158,9 @@ func extractAmount(intent *Intent, fields map[string]any, key string) error {
 	}
 	switch a := v.(type) {
 	case float64:
+		if math.IsNaN(a) || math.IsInf(a, 0) || a > float64(math.MaxInt64) || a < float64(math.MinInt64) {
+			return fmt.Errorf("amount %v for %s is out of int64 range", a, key)
+		}
 		intent.AmountSUN = int64(a)
 	case int64:
 		intent.AmountSUN = a

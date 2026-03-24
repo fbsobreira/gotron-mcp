@@ -63,7 +63,7 @@ func main() {
 		defer wm.Close()
 	}
 	if pe != nil {
-		defer pe.Close()
+		defer func() { _ = pe.Close() }()
 	}
 
 	switch cfg.Transport {

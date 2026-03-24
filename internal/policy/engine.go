@@ -20,7 +20,11 @@ type Engine struct {
 }
 
 // NewEngine creates a policy engine with the given config and persistent store.
+// A nil config is treated as an empty config (no restrictions).
 func NewEngine(cfg *Config, store *Store) *Engine {
+	if cfg == nil {
+		cfg = &Config{}
+	}
 	return &Engine{cfg: cfg, store: store}
 }
 

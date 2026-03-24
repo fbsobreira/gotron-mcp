@@ -14,7 +14,7 @@ func newTestStore(t *testing.T) *Store {
 	path := filepath.Join(t.TempDir(), "test-state.db")
 	s, err := NewStore(path)
 	require.NoError(t, err)
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	return s
 }
 

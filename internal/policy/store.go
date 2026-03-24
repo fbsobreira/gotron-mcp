@@ -46,7 +46,7 @@ func NewStore(path string) (*Store, error) {
 		return err
 	})
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("creating policy store buckets: %w", err)
 	}
 
@@ -72,7 +72,7 @@ func (s *Store) GetDailySpend(wallet string, date time.Time) (int64, error) {
 	err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketDailySpend)
 		v := b.Get(dailySpendKey(wallet, date))
-		if v != nil && len(v) == 8 {
+		if len(v) == 8 {
 			total = int64(binary.BigEndian.Uint64(v))
 		}
 		return nil
@@ -87,7 +87,7 @@ func (s *Store) AddDailySpend(wallet string, date time.Time, amountSUN int64) er
 		key := dailySpendKey(wallet, date)
 
 		var current int64
-		if v := b.Get(key); v != nil && len(v) == 8 {
+		if v := b.Get(key); len(v) == 8 {
 			current = int64(binary.BigEndian.Uint64(v))
 		}
 
@@ -108,7 +108,7 @@ func (s *Store) CheckAndReserve(wallet string, date time.Time, amountSUN, limitS
 		b := tx.Bucket(bucketDailySpend)
 		key := dailySpendKey(wallet, date)
 
-		if v := b.Get(key); v != nil && len(v) == 8 {
+		if v := b.Get(key); len(v) == 8 {
 			current = int64(binary.BigEndian.Uint64(v))
 		}
 

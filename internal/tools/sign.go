@@ -492,6 +492,9 @@ func handleGetWalletPolicy(pe *policy.Engine) server.ToolHandlerFunc {
 				if tl.DailyLimitUSD > 0 {
 					entry["daily_limit_usd"] = tl.DailyLimitUSD
 				}
+				if tl.ApprovalRequiredAboveUnits > 0 {
+					entry["approval_required_above_units"] = tl.ApprovalRequiredAboveUnits
+				}
 				tokenLimits[token] = entry
 			}
 			result["token_limits"] = tokenLimits
