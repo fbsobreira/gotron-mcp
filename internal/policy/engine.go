@@ -276,10 +276,12 @@ func (e *Engine) Check(intent *Intent) (*CheckResult, error) {
 		}
 	}
 
-	// 4. Legacy TRX approval threshold — flag but don't return yet
+	// 4. Legacy TRX approval threshold — only if token_limits["TRX"] doesn't exist
 	if !approvalNeeded && intent.TokenID == "TRX" && wp.ApprovalRequiredAboveTRX > 0 && intent.AmountTRX() > wp.ApprovalRequiredAboveTRX {
-		approvalNeeded = true
-		approvalReason = fmt.Sprintf("transaction amount %.6f TRX exceeds approval threshold of %.0f TRX for wallet %q — approval required", intent.AmountTRX(), wp.ApprovalRequiredAboveTRX, intent.WalletName)
+		if _, exists := wp.TokenLimits["TRX"]; !exists {
+			approvalNeeded = true
+			approvalReason = fmt.Sprintf("transaction amount %.6f TRX exceeds approval threshold of %.0f TRX for wallet %q — approval required", intent.AmountTRX(), wp.ApprovalRequiredAboveTRX, intent.WalletName)
+		}
 	}
 	// TODO: approval_required_above_usd (requires price service #85)
 

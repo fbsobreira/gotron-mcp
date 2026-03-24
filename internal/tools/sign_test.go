@@ -687,7 +687,12 @@ func buildTransferTxExt(t *testing.T) *api.TransactionExtention {
 
 func TestSignAndBroadcast_ApprovalFlow_Approved(t *testing.T) {
 	mock := &mockWalletServer{
-		CreateTransaction2Func: func(_ context.Context, _ *core.TransferContract) (*api.TransactionExtention, error) {
+		CreateTransaction2Func: func(_ context.Context, tc *core.TransferContract) (*api.TransactionExtention, error) {
+			// Verify rebuilt TX has correct fields from intent
+			require.NotNil(t, tc)
+			assert.Equal(t, int64(10_000_000), tc.Amount, "rebuilt TX should preserve original amount")
+			assert.NotEmpty(t, tc.OwnerAddress, "rebuilt TX should have from address")
+			assert.NotEmpty(t, tc.ToAddress, "rebuilt TX should have to address")
 			return buildTransferTxExt(t), nil
 		},
 		BroadcastTransactionFunc: func(_ context.Context, _ *core.Transaction) (*api.Return, error) {
