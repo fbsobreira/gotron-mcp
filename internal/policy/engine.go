@@ -189,7 +189,10 @@ func (e *Engine) GetRemainingBudget(wallet string) map[string]any {
 
 	// Legacy TRX daily limit
 	if wp.DailyLimitTRX > 0 {
-		spent, _ := e.store.GetDailySpend(wallet+"/TRX", now)
+		spent, err := e.store.GetDailySpend(wallet+"/TRX", now)
+		if err != nil {
+			log.Printf("warning: failed to read daily TRX spend for budget: %v", err)
+		}
 		spentTRX := float64(spent) / 1_000_000
 		remaining["trx_spent_today"] = spentTRX
 		remaining["trx_remaining_today"] = wp.DailyLimitTRX - spentTRX
@@ -199,7 +202,10 @@ func (e *Engine) GetRemainingBudget(wallet string) map[string]any {
 	for token, tl := range wp.TokenLimits {
 		if tl.DailyLimitUnits > 0 {
 			spendKey := fmt.Sprintf("%s/%s", wallet, token)
-			spentRaw, _ := e.store.GetDailySpend(spendKey, now)
+			spentRaw, err := e.store.GetDailySpend(spendKey, now)
+			if err != nil {
+				log.Printf("warning: failed to read daily spend for %s: %v", spendKey, err)
+			}
 			mult := decimalMultiplier(tl.Decimals)
 			spentHuman := float64(spentRaw) / mult
 			remaining[token+"_spent_today"] = spentHuman
