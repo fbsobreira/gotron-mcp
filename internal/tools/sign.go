@@ -492,18 +492,21 @@ func handleBroadcastTransaction(pool *nodepool.Pool) server.ToolHandlerFunc {
 // rebuildTransaction creates a fresh transaction from the intent after approval.
 // This ensures the TX has a valid on-chain expiry (TRON TXs expire ~60s).
 func rebuildTransaction(ctx context.Context, pool *nodepool.Pool, intent *policy.Intent) (*core.Transaction, error) {
-	conn := pool.Client()
-
-	switch intent.Action {
-	case "TransferContract":
-		ext, err := conn.TransferCtx(ctx, intent.FromAddr, intent.ToAddr, intent.AmountSUN)
-		if err != nil {
-			return nil, fmt.Errorf("rebuilding transfer: %w", err)
-		}
-		return ext.Transaction, nil
-	default:
+	if intent.Action != "TransferContract" {
 		return nil, fmt.Errorf("cannot rebuild %s transactions — approval only supported for TransferContract", intent.Action)
 	}
+	if err := validateAddress(intent.FromAddr); err != nil {
+		return nil, fmt.Errorf("invalid from address for rebuild: %w", err)
+	}
+	if err := validateAddress(intent.ToAddr); err != nil {
+		return nil, fmt.Errorf("invalid to address for rebuild: %w", err)
+	}
+
+	ext, err := pool.Client().TransferCtx(ctx, intent.FromAddr, intent.ToAddr, intent.AmountSUN)
+	if err != nil {
+		return nil, fmt.Errorf("rebuilding transfer: %w", err)
+	}
+	return ext.Transaction, nil
 }
 
 func handleRequestLimitOverride(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.Engine) server.ToolHandlerFunc {
@@ -593,10 +596,8 @@ func handleRequestLimitOverride(pool *nodepool.Pool, wm *wallet.Manager, pe *pol
 			return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: broadcast rejected: %s %s", ret.Code.String(), string(ret.Message))), nil
 		}
 
-		// Record spend + audit with override flag
-		// Run Check to reserve daily spend (even though limits are overridden,
-		// the spend still needs to be tracked for accurate budget reporting)
-		_, _ = pe.Check(intent) // best-effort spend tracking
+		// Record override spend (tracks daily budget without enforcing limits)
+		pe.RecordOverrideSpend(intent)
 		if err := pe.RecordAudit(intent, txid); err != nil {
 			log.Printf("ERROR: failed to record override audit: %v", err)
 		}

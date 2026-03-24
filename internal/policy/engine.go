@@ -106,18 +106,26 @@ func (e *Engine) buildSpendContext(intent *Intent) string {
 	// Token-specific daily spend
 	if tl := wp.TokenLimits[intent.TokenID]; tl != nil && tl.DailyLimitUnits > 0 {
 		spendKey := fmt.Sprintf("%s/%s", intent.WalletName, intent.TokenID)
-		spentRaw, _ := e.store.GetDailySpend(spendKey, now)
-		mult := decimalMultiplier(tl.Decimals)
-		spentHuman := float64(spentRaw) / mult
-		parts = append(parts, fmt.Sprintf("Daily %s: %.0f / %.0f", intent.TokenID, spentHuman, tl.DailyLimitUnits))
+		spentRaw, err := e.store.GetDailySpend(spendKey, now)
+		if err != nil {
+			log.Printf("warning: failed to read daily spend for %s: %v", spendKey, err)
+		} else {
+			mult := decimalMultiplier(tl.Decimals)
+			spentHuman := float64(spentRaw) / mult
+			parts = append(parts, fmt.Sprintf("Daily %s: %.0f / %.0f", intent.TokenID, spentHuman, tl.DailyLimitUnits))
+		}
 	}
 
 	// Legacy TRX daily spend
 	if intent.TokenID == "TRX" && wp.DailyLimitTRX > 0 {
 		if _, exists := wp.TokenLimits["TRX"]; !exists {
-			spent, _ := e.store.GetDailySpend(intent.WalletName+"/TRX", now)
-			spentTRX := float64(spent) / 1_000_000
-			parts = append(parts, fmt.Sprintf("Daily TRX: %.2f / %.0f", spentTRX, wp.DailyLimitTRX))
+			spent, err := e.store.GetDailySpend(intent.WalletName+"/TRX", now)
+			if err != nil {
+				log.Printf("warning: failed to read daily TRX spend: %v", err)
+			} else {
+				spentTRX := float64(spent) / 1_000_000
+				parts = append(parts, fmt.Sprintf("Daily TRX: %.2f / %.0f", spentTRX, wp.DailyLimitTRX))
+			}
 		}
 	}
 
@@ -387,6 +395,36 @@ func (e *Engine) NotifyBroadcast(ctx context.Context, txid string, success bool)
 	if notifier, ok := e.approver.(approval.Notifier); ok {
 		if err := notifier.NotifyBroadcast(ctx, txid, success); err != nil {
 			log.Printf("warning: failed to send broadcast notification: %v", err)
+		}
+	}
+}
+
+// RecordOverrideSpend tracks the spend from an override transaction without enforcing limits.
+// This ensures daily budget reporting stays accurate after overrides.
+func (e *Engine) RecordOverrideSpend(intent *Intent) {
+	if e == nil || e.store == nil || intent == nil {
+		return
+	}
+	now := time.Now().UTC()
+
+	// Record per-token spend
+	wp := e.cfg.GetPolicy(intent.WalletName)
+	if wp == nil {
+		return
+	}
+	if tl := wp.TokenLimits[intent.TokenID]; tl != nil && tl.DailyLimitUnits > 0 {
+		spendKey := fmt.Sprintf("%s/%s", intent.WalletName, intent.TokenID)
+		if err := e.store.AddDailySpend(spendKey, now, int64(intent.TokenAmount)); err != nil {
+			log.Printf("warning: failed to record override spend for %s: %v", spendKey, err)
+		}
+	}
+
+	// Record legacy TRX spend
+	if intent.TokenID == "TRX" && wp.DailyLimitTRX > 0 {
+		if _, exists := wp.TokenLimits["TRX"]; !exists {
+			if err := e.store.AddDailySpend(intent.WalletName+"/TRX", now, intent.AmountSUN); err != nil {
+				log.Printf("warning: failed to record override TRX spend: %v", err)
+			}
 		}
 	}
 }

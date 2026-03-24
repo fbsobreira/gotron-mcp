@@ -153,24 +153,24 @@ func initPolicyEngine(cfg *config.Config, pool *nodepool.Pool) *policy.Engine {
 	// Configure approval backend
 	if policyCfg.Approval != nil && policyCfg.Approval.Method == "telegram" {
 		tgCfg := policyCfg.Approval.Telegram
-		if tgCfg != nil {
-			botToken := os.Getenv(tgCfg.BotTokenEnv)
-			log.Printf("Telegram: looking for env var %q (found: %v)", tgCfg.BotTokenEnv, botToken != "")
-			if botToken != "" {
-				ta, tErr := approval.NewTelegramApprover(approval.TelegramConfig{
-					BotToken:        botToken,
-					AuthorizedUsers: tgCfg.AuthorizedUsers,
-					ChatID:          tgCfg.ChatID,
-					TimeoutSeconds:  tgCfg.TimeoutSeconds,
-				})
-				if tErr != nil {
-					log.Printf("warning: failed to create Telegram approver: %v", tErr)
-				} else {
-					pe.SetApprover(ta)
-					log.Printf("Telegram approval bot configured (chat: %d)", tgCfg.ChatID)
-				}
+		if tgCfg == nil {
+			log.Printf("warning: approval method 'telegram' but no telegram config section")
+		} else if tgCfg.BotTokenEnv == "" {
+			log.Printf("warning: telegram.bot_token_env not configured — Telegram approval disabled")
+		} else if botToken := os.Getenv(tgCfg.BotTokenEnv); botToken == "" {
+			log.Printf("warning: env var %s not set — Telegram approval disabled", tgCfg.BotTokenEnv)
+		} else {
+			ta, tErr := approval.NewTelegramApprover(approval.TelegramConfig{
+				BotToken:        botToken,
+				AuthorizedUsers: tgCfg.AuthorizedUsers,
+				ChatID:          tgCfg.ChatID,
+				TimeoutSeconds:  tgCfg.TimeoutSeconds,
+			})
+			if tErr != nil {
+				log.Printf("warning: failed to create Telegram approver: %v", tErr)
 			} else {
-				log.Printf("warning: %s env var not set — Telegram approval disabled", tgCfg.BotTokenEnv)
+				pe.SetApprover(ta)
+				log.Printf("Telegram approval bot configured (chat: %d)", tgCfg.ChatID)
 			}
 		}
 	}

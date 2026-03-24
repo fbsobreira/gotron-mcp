@@ -410,15 +410,15 @@ func parseCallbackData(cbQuery map[string]any) (action, approvalID string, ok bo
 func (t *TelegramApprover) isFromConfiguredChat(cbQuery map[string]any) bool {
 	msg, ok := cbQuery["message"].(map[string]any)
 	if !ok {
-		return true // no message context = allow (direct message to bot)
+		return false
 	}
 	chat, ok := msg["chat"].(map[string]any)
 	if !ok {
-		return true
+		return false
 	}
 	chatID, ok := chat["id"].(float64)
 	if !ok {
-		return true
+		return false
 	}
 	return int64(chatID) == t.cfg.ChatID
 }

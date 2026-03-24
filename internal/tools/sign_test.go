@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/fbsobreira/gotron-mcp/internal/approval"
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/policy"
 	"github.com/fbsobreira/gotron-mcp/internal/wallet"
@@ -18,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func newTestSignSetup(t *testing.T, mock *mockWalletServer) (*wallet.Manager, *nodepool.Pool) {
@@ -479,4 +482,183 @@ func TestGetWalletPolicy_WithPolicy(t *testing.T) {
 	require.True(t, ok, "expected USDT_CONTRACT entry in token_limits")
 	assert.Equal(t, float64(50), usdtLimit["per_tx_limit_units"])
 	assert.Equal(t, float64(500), usdtLimit["daily_limit_units"])
+}
+
+// --- Policy denied tests ---
+
+// buildTransferTxHex builds a valid TransferContract transaction hex for policy tests.
+func buildTransferTxHex(t *testing.T, from, to string, amountSUN int64) string {
+	t.Helper()
+	transfer := &core.TransferContract{
+		OwnerAddress: mustDecodeAddr(from),
+		ToAddress:    mustDecodeAddr(to),
+		Amount:       amountSUN,
+	}
+	paramAny, err := anypb.New(transfer)
+	require.NoError(t, err, "failed to create Any")
+	tx := &core.Transaction{
+		RawData: &core.TransactionRaw{
+			Contract: []*core.Transaction_Contract{
+				{
+					Type: core.Transaction_Contract_TransferContract,
+					Parameter: &anypb.Any{
+						TypeUrl: paramAny.TypeUrl,
+						Value:   paramAny.Value,
+					},
+				},
+			},
+			Expiration: time.Now().Add(time.Minute).UnixMilli(),
+		},
+	}
+	txBytes, err := proto.Marshal(tx)
+	require.NoError(t, err, "failed to marshal transfer tx")
+	return hex.EncodeToString(txBytes)
+}
+
+func newTestPolicyEngine(t *testing.T, cfg *policy.Config) *policy.Engine {
+	t.Helper()
+	store, err := policy.NewStore(filepath.Join(t.TempDir(), "state.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	return policy.NewEngine(cfg, store)
+}
+
+func TestSignAndBroadcast_PolicyDenied_ReturnsHint(t *testing.T) {
+	cfg := &policy.Config{
+		Enabled: true,
+		Wallets: map[string]*policy.WalletPolicy{
+			"hot-wallet": {
+				TokenLimits: map[string]*policy.TokenLimit{
+					"TRX": {Decimals: 6, PerTxLimitUnits: 1}, // 1 TRX per-tx limit
+				},
+			},
+		},
+	}
+	pe := newTestPolicyEngine(t, cfg)
+
+	mock := &mockWalletServer{}
+	wm, pool := newTestSignSetup(t, mock)
+	_, err := wm.CreateWallet("hot-wallet")
+	require.NoError(t, err)
+
+	// 5 TRX exceeds the 1 TRX per-tx limit
+	txHex := buildTransferTxHex(t,
+		"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		5_000_000,
+	)
+
+	result := callTool(t, handleSignAndBroadcast(pool, wm, pe), map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "hot-wallet",
+	})
+	require.False(t, result.IsError, "expected JSON result, not tool error: %v", result.Content)
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, "policy_denied", data["status"], "expected policy_denied status")
+	hint, ok := data["hint"].(string)
+	assert.True(t, ok, "expected hint field to be a string")
+	assert.Contains(t, hint, "request_limit_override", "hint should mention request_limit_override")
+}
+
+// mockApprover is a simple approval.Approver for testing.
+type mockApprover struct {
+	approved bool
+}
+
+func (m *mockApprover) RequestApproval(_ context.Context, _ approval.Request) (approval.Result, error) {
+	return approval.Result{Approved: m.approved}, nil
+}
+
+func TestGetWalletPolicy_ApproverConfigured(t *testing.T) {
+	cfg := &policy.Config{
+		Enabled: true,
+		Wallets: map[string]*policy.WalletPolicy{
+			"test-wallet": {
+				TokenLimits: map[string]*policy.TokenLimit{
+					"TRX": {Decimals: 6, PerTxLimitUnits: 10},
+				},
+			},
+		},
+	}
+	pe := newTestPolicyEngine(t, cfg)
+	pe.SetApprover(&mockApprover{approved: true})
+
+	handler := handleGetWalletPolicy(pe, nil)
+	result := callTool(t, handler, map[string]any{
+		"wallet": "test-wallet",
+	})
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, true, data["approver_configured"], "approver_configured should be true")
+}
+
+// --- request_limit_override tests ---
+
+func TestRequestLimitOverride_MissingReason(t *testing.T) {
+	cfg := &policy.Config{Enabled: true, Wallets: map[string]*policy.WalletPolicy{
+		"test": {TokenLimits: map[string]*policy.TokenLimit{
+			"TRX": {Decimals: 6, PerTxLimitUnits: 1},
+		}},
+	}}
+	pe := newTestPolicyEngine(t, cfg)
+
+	mock := &mockWalletServer{}
+	wm, pool := newTestSignSetup(t, mock)
+	_, err := wm.CreateWallet("test")
+	require.NoError(t, err)
+
+	txHex := buildTransferTxHex(t,
+		"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		5_000_000,
+	)
+
+	result := callTool(t, handleRequestLimitOverride(pool, wm, pe), map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "test",
+		"reason":          "",
+	})
+	assert.True(t, result.IsError, "expected error for missing reason")
+}
+
+func TestRequestLimitOverride_InvalidTx(t *testing.T) {
+	cfg := &policy.Config{Enabled: true, Wallets: map[string]*policy.WalletPolicy{
+		"test": {TokenLimits: map[string]*policy.TokenLimit{
+			"TRX": {Decimals: 6, PerTxLimitUnits: 1},
+		}},
+	}}
+	pe := newTestPolicyEngine(t, cfg)
+
+	mock := &mockWalletServer{}
+	wm, pool := newTestSignSetup(t, mock)
+	_, err := wm.CreateWallet("test")
+	require.NoError(t, err)
+
+	result := callTool(t, handleRequestLimitOverride(pool, wm, pe), map[string]any{
+		"transaction_hex": "not-valid-hex",
+		"wallet":          "test",
+		"reason":          "emergency payout",
+	})
+	assert.True(t, result.IsError, "expected error for invalid transaction hex")
+}
+
+func TestRequestLimitOverride_MissingWallet(t *testing.T) {
+	cfg := &policy.Config{Enabled: true, Wallets: map[string]*policy.WalletPolicy{
+		"test": {TokenLimits: map[string]*policy.TokenLimit{
+			"TRX": {Decimals: 6, PerTxLimitUnits: 1},
+		}},
+	}}
+	pe := newTestPolicyEngine(t, cfg)
+
+	mock := &mockWalletServer{}
+	wm, pool := newTestSignSetup(t, mock)
+
+	result := callTool(t, handleRequestLimitOverride(pool, wm, pe), map[string]any{
+		"transaction_hex": "aabb",
+		"wallet":          "",
+		"reason":          "emergency payout",
+	})
+	assert.True(t, result.IsError, "expected error for missing wallet")
 }

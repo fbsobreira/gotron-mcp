@@ -594,3 +594,143 @@ func TestNotifyBroadcast_WithMockNotifier(t *testing.T) {
 	assert.Equal(t, "fail456", mn.txid)
 	assert.False(t, mn.success)
 }
+
+// --- capturingApprover captures the Request passed to RequestApproval ---
+
+type capturingApprover struct {
+	lastReq approval.Request
+	result  bool
+}
+
+func (c *capturingApprover) RequestApproval(_ context.Context, req approval.Request) (approval.Result, error) {
+	c.lastReq = req
+	return approval.Result{Approved: c.result}, nil
+}
+
+func TestBuildSpendContext_WithTokenLimits(t *testing.T) {
+	cfg := &Config{Wallets: map[string]*WalletPolicy{
+		"wallet": {
+			DailyLimitTRX: 1000,
+			TokenLimits: map[string]*TokenLimit{
+				"USDT": {Decimals: 6, DailyLimitUnits: 500},
+			},
+		},
+	}}
+	e := newTestEngine(t, cfg)
+
+	// Record some USDT spend first
+	usdtIntent := &Intent{WalletName: "wallet", TokenID: "USDT", TokenAmount: 100_000_000, ToAddr: "TAnywhere"}
+	result, err := e.Check(usdtIntent)
+	require.NoError(t, err)
+	assert.True(t, result.Allowed)
+
+	// Now request approval for another USDT transfer — capture the Request
+	cap := &capturingApprover{result: true}
+	e.SetApprover(cap)
+
+	intent := &Intent{WalletName: "wallet", TokenID: "USDT", TokenAmount: 50_000_000, ToAddr: "TAnywhere"}
+	_, err = e.RequestApproval(context.Background(), intent)
+	require.NoError(t, err)
+	assert.NotEmpty(t, cap.lastReq.SpendContext)
+	assert.Contains(t, cap.lastReq.SpendContext, "Daily USDT:")
+	assert.Contains(t, cap.lastReq.SpendContext, "/ 500")
+}
+
+func TestBuildSpendContext_NoStore(t *testing.T) {
+	cfg := &Config{Wallets: map[string]*WalletPolicy{
+		"wallet": {DailyLimitTRX: 1000},
+	}}
+	e := NewEngine(cfg, nil) // nil store
+
+	cap := &capturingApprover{result: true}
+	e.SetApprover(cap)
+
+	intent := &Intent{WalletName: "wallet", TokenID: "TRX", AmountSUN: 100_000_000}
+	_, err := e.RequestApproval(context.Background(), intent)
+	require.NoError(t, err)
+	assert.Empty(t, cap.lastReq.SpendContext)
+}
+
+func TestBuildSpendContext_NoPolicy(t *testing.T) {
+	cfg := &Config{Wallets: map[string]*WalletPolicy{}}
+	e := newTestEngine(t, cfg)
+
+	cap := &capturingApprover{result: true}
+	e.SetApprover(cap)
+
+	intent := &Intent{WalletName: "unknown", TokenID: "TRX", AmountSUN: 100_000_000}
+	_, err := e.RequestApproval(context.Background(), intent)
+	require.NoError(t, err)
+	assert.Empty(t, cap.lastReq.SpendContext)
+}
+
+func TestBuildSpendContext_LegacyTRX(t *testing.T) {
+	cfg := &Config{Wallets: map[string]*WalletPolicy{
+		"wallet": {DailyLimitTRX: 500},
+	}}
+	e := newTestEngine(t, cfg)
+
+	// Spend some TRX first
+	trxIntent := &Intent{WalletName: "wallet", TokenID: "TRX", AmountSUN: 200_000_000, TokenAmount: 200_000_000}
+	result, err := e.Check(trxIntent)
+	require.NoError(t, err)
+	assert.True(t, result.Allowed)
+
+	cap := &capturingApprover{result: true}
+	e.SetApprover(cap)
+
+	intent := &Intent{WalletName: "wallet", TokenID: "TRX", AmountSUN: 50_000_000}
+	_, err = e.RequestApproval(context.Background(), intent)
+	require.NoError(t, err)
+	assert.NotEmpty(t, cap.lastReq.SpendContext)
+	assert.Contains(t, cap.lastReq.SpendContext, "Daily TRX:")
+	assert.Contains(t, cap.lastReq.SpendContext, "/ 500")
+}
+
+func TestHasApprover_True(t *testing.T) {
+	e := newTestEngine(t, &Config{})
+	e.SetApprover(&mockApprover{approved: true})
+	assert.True(t, e.HasApprover())
+}
+
+func TestHasApprover_False(t *testing.T) {
+	e := newTestEngine(t, &Config{})
+	assert.False(t, e.HasApprover())
+}
+
+func TestHasApprover_NilEngine(t *testing.T) {
+	var e *Engine
+	assert.False(t, e.HasApprover())
+}
+
+func TestNotifyBroadcast_NoNotifier(t *testing.T) {
+	e := newTestEngine(t, &Config{})
+	// Set a plain approver that does NOT implement Notifier
+	e.SetApprover(&mockApprover{approved: true})
+	assert.NotPanics(t, func() {
+		e.NotifyBroadcast(context.Background(), "txid123", true)
+	})
+}
+
+func TestCheck_ApprovalAfterDailyReserve(t *testing.T) {
+	cfg := &Config{Wallets: map[string]*WalletPolicy{
+		"wallet": {
+			DailyLimitTRX:            1000,
+			ApprovalRequiredAboveTRX: 100,
+		},
+	}}
+	e := newTestEngine(t, cfg)
+
+	// Send 200 TRX — above approval threshold, should trigger ApprovalRequired
+	intent := &Intent{WalletName: "wallet", AmountSUN: 200_000_000, TokenID: "TRX", TokenAmount: 200_000_000}
+	result, err := e.Check(intent)
+	require.NoError(t, err)
+	assert.False(t, result.Allowed)
+	assert.True(t, result.ApprovalRequired)
+
+	// Verify the daily spend WAS reserved even though approval is required
+	budget := e.GetRemainingBudget("wallet")
+	require.NotNil(t, budget)
+	assert.Equal(t, float64(200), budget["trx_spent_today"], "daily spend should be reserved before approval flag is returned")
+	assert.Equal(t, float64(800), budget["trx_remaining_today"])
+}

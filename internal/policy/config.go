@@ -138,6 +138,19 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Wallets = make(map[string]*WalletPolicy)
 	}
 
+	// Validate approval config
+	if cfg.Approval != nil && cfg.Approval.Method == "telegram" {
+		if cfg.Approval.Telegram == nil {
+			return nil, fmt.Errorf("approval method 'telegram' requires telegram config section")
+		}
+		if cfg.Approval.Telegram.BotTokenEnv == "" {
+			return nil, fmt.Errorf("telegram.bot_token_env is required")
+		}
+		if len(cfg.Approval.Telegram.AuthorizedUsers) == 0 {
+			return nil, fmt.Errorf("telegram.authorized_users requires at least one user ID")
+		}
+	}
+
 	// Validate, normalize, and promote legacy fields
 	for name, p := range cfg.Wallets {
 		if p == nil {
