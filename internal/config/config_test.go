@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -87,6 +88,128 @@ func TestResolveNode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := resolveNode(tt.network)
 			assert.Equal(t, tt.want, got, "resolveNode(%q)", tt.network)
+		})
+	}
+}
+
+func TestConfig_DefaultPolicyConfig(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err, "UserHomeDir must succeed")
+
+	tests := []struct {
+		name   string
+		envVal string
+		want   string
+	}{
+		{
+			"empty defaults to home-based path",
+			"",
+			filepath.Join(home, ".gotron-mcp", "policy.yaml"),
+		},
+		{
+			"env override is preserved",
+			"/custom/policy.yaml",
+			"/custom/policy.yaml",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{PolicyConfig: tt.envVal}
+			if cfg.PolicyConfig == "" && home != "" {
+				cfg.PolicyConfig = filepath.Join(home, ".gotron-mcp", "policy.yaml")
+			}
+			assert.Equal(t, tt.want, cfg.PolicyConfig)
+		})
+	}
+}
+
+func TestConfig_DefaultStateDir(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err, "UserHomeDir must succeed")
+
+	tests := []struct {
+		name   string
+		envVal string
+		want   string
+	}{
+		{
+			"empty defaults to home-based path",
+			"",
+			filepath.Join(home, ".gotron-mcp"),
+		},
+		{
+			"env override is preserved",
+			"/custom/state",
+			"/custom/state",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{StateDir: tt.envVal}
+			if cfg.StateDir == "" && home != "" {
+				cfg.StateDir = filepath.Join(home, ".gotron-mcp")
+			}
+			assert.Equal(t, tt.want, cfg.StateDir)
+		})
+	}
+}
+
+func TestConfig_DefaultKeystoreDir(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err, "UserHomeDir must succeed")
+
+	tests := []struct {
+		name   string
+		envVal string
+		want   string
+	}{
+		{
+			"empty defaults to home-based path",
+			"",
+			filepath.Join(home, ".gotron-mcp", "wallets"),
+		},
+		{
+			"env override is preserved",
+			"/custom/wallets",
+			"/custom/wallets",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{KeystoreDir: tt.envVal}
+			if cfg.KeystoreDir == "" && home != "" {
+				cfg.KeystoreDir = filepath.Join(home, ".gotron-mcp", "wallets")
+			}
+			assert.Equal(t, tt.want, cfg.KeystoreDir)
+		})
+	}
+}
+
+func TestEnvOrDefaultInt(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      string
+		envVal   string
+		setEnv   bool
+		fallback int
+		want     int
+	}{
+		{"env set valid", "TEST_INT_VAR", "42", true, 0, 42},
+		{"env unset uses fallback", "TEST_INT_UNSET_XYZ", "", false, 10, 10},
+		{"env empty uses fallback", "TEST_INT_EMPTY", "", true, 5, 5},
+		{"env invalid uses fallback", "TEST_INT_INVALID", "abc", true, 7, 7},
+		{"env negative uses fallback", "TEST_INT_NEG", "-1", true, 3, 3},
+		{"env zero", "TEST_INT_ZERO", "0", true, 99, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setEnv {
+				t.Setenv(tt.key, tt.envVal)
+			} else {
+				_ = os.Unsetenv(tt.key)
+			}
+			got := envOrDefaultInt(tt.key, tt.fallback)
+			assert.Equal(t, tt.want, got, "envOrDefaultInt(%q, %d)", tt.key, tt.fallback)
 		})
 	}
 }

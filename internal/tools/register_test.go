@@ -22,7 +22,7 @@ func TestRegisterAllTools(t *testing.T) {
 	RegisterResourceTools(s, pool)
 	wm := newTestWalletManager(t)
 	RegisterWalletTools(s, wm)
-	RegisterSignTools(s, pool, wm)
+	RegisterSignTools(s, pool, wm, nil)
 	trc20Cache := RegisterTokenTools(s, pool)
 	RegisterTransferTools(s, pool, trc20Cache)
 	RegisterWitnessReadTools(s, pool)
@@ -38,9 +38,10 @@ func TestRegisterAllTools(t *testing.T) {
 	// Expected: 2 account + 1 address + 1 block + 5 contract read + 1 contract write +
 	// 8 network (5 existing + 3 pending pool) + 2 proposal (list + get) + 5 resource +
 	// 4 sign (sign_transaction, sign_and_broadcast, sign_and_confirm, broadcast_transaction) +
+	// 1 policy (get_wallet_policy) +
 	// 2 wallet (create_wallet, list_wallets) +
-	// 3 token + 2 transfer + 1 witness read + 1 witness write + 3 history (TronGrid REST) = 41
-	const expectedToolCount = 41
+	// 3 token + 2 transfer + 1 witness read + 1 witness write + 3 history (TronGrid REST) = 42
+	const expectedToolCount = 42
 	assert.Len(t, tools, expectedToolCount, "registered tool count")
 
 	representative := []string{

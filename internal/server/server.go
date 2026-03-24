@@ -3,20 +3,27 @@ package server
 import (
 	"log"
 
+	"context"
+	"os"
+	"path/filepath"
+	"time"
+
 	"github.com/fbsobreira/gotron-mcp/internal/config"
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
+	"github.com/fbsobreira/gotron-mcp/internal/policy"
 	"github.com/fbsobreira/gotron-mcp/internal/resources"
 	"github.com/fbsobreira/gotron-mcp/internal/tools"
 	"github.com/fbsobreira/gotron-mcp/internal/trongrid"
 	"github.com/fbsobreira/gotron-mcp/internal/version"
 	"github.com/fbsobreira/gotron-mcp/internal/wallet"
+	"github.com/fbsobreira/gotron-sdk/pkg/standards/trc20"
 	"github.com/mark3labs/mcp-go/server"
 )
 
 // New creates a configured MCP server with tools registered based on mode.
-// It returns the MCP server and an optional wallet manager (nil when wallet is
-// not configured). The caller should defer wm.Close() when non-nil.
-func New(cfg *config.Config, pool *nodepool.Pool) (*server.MCPServer, *wallet.Manager) {
+// It returns the MCP server, an optional wallet manager, and an optional policy engine.
+// The caller should defer wm.Close() and pe.Close() when non-nil.
+func New(cfg *config.Config, pool *nodepool.Pool) (*server.MCPServer, *wallet.Manager, *policy.Engine) {
 	s := server.NewMCPServer(
 		"gotron-mcp",
 		version.Version,
@@ -83,6 +90,7 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 
 	// Sign/broadcast — local mode with wallet manager
 	var wm *wallet.Manager
+	var pe *policy.Engine
 	if !cfg.IsHostedMode() && cfg.KeystoreDir != "" && cfg.KeystorePass != "" {
 		var err error
 		wm, err = wallet.NewManager(cfg.KeystoreDir, cfg.KeystorePass)
@@ -91,11 +99,54 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 			wm = nil
 		} else {
 			tools.RegisterWalletTools(s, wm)
-			if !cfg.RequirePolicy {
-				tools.RegisterSignTools(s, pool, wm)
+
+			pe = initPolicyEngine(cfg, pool)
+
+			if cfg.RequirePolicy && pe == nil {
+				log.Printf("warning: --require-policy is set but no policy loaded — sign tools disabled")
+			} else {
+				tools.RegisterSignTools(s, pool, wm, pe)
 			}
 		}
 	}
 
-	return s, wm
+	return s, wm, pe
+}
+
+// initPolicyEngine loads the policy config, resolves token decimals, and creates
+// the bbolt-backed policy engine. Returns nil if policy is not configured or fails.
+func initPolicyEngine(cfg *config.Config, pool *nodepool.Pool) *policy.Engine {
+	policyCfg, err := policy.LoadConfig(cfg.PolicyConfig)
+	if err != nil {
+		log.Printf("warning: failed to load policy config: %v", err)
+		return nil
+	}
+	if !policyCfg.Enabled || len(policyCfg.Wallets) == 0 {
+		return nil
+	}
+
+	// Resolve token decimals from the network
+	policyCfg.ResolveDecimals(func(contractAddr string) (int, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		token := trc20.New(pool.Client(), contractAddr)
+		d, dErr := token.Decimals(ctx)
+		return int(d), dErr
+	})
+
+	// Create state directory
+	if err := os.MkdirAll(cfg.StateDir, 0700); err != nil {
+		log.Printf("warning: failed to create state dir: %v", err)
+		return nil
+	}
+
+	store, err := policy.NewStore(filepath.Join(cfg.StateDir, "state.db"))
+	if err != nil {
+		log.Printf("warning: failed to open policy store: %v", err)
+		return nil
+	}
+
+	pe := policy.NewEngine(policyCfg, store)
+	log.Printf("Policy engine loaded: %d wallet(s) configured", len(policyCfg.Wallets))
+	return pe
 }

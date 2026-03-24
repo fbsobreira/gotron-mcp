@@ -22,7 +22,7 @@ func TestNew_HostedMode(t *testing.T) {
 	}
 	pool := newTestPool()
 
-	s, wm := New(cfg, pool)
+	s, wm, _ := New(cfg, pool)
 	require.NotNil(t, s, "New() returned nil")
 	require.Nil(t, wm, "expected nil wallet manager in hosted mode")
 }
@@ -35,7 +35,7 @@ func TestNew_LocalMode(t *testing.T) {
 	}
 	pool := newTestPool()
 
-	s, wm := New(cfg, pool)
+	s, wm, _ := New(cfg, pool)
 	require.NotNil(t, s, "New() returned nil")
 	require.Nil(t, wm, "expected nil wallet manager without keystore config")
 }
@@ -50,7 +50,7 @@ func TestNew_LocalModeWithKeystore(t *testing.T) {
 	}
 	pool := newTestPool()
 
-	s, wm := New(cfg, pool)
+	s, wm, _ := New(cfg, pool)
 	require.NotNil(t, s, "New() returned nil")
 	require.NotNil(t, wm, "expected non-nil wallet manager with keystore config")
 	wm.Close()
@@ -66,7 +66,7 @@ func TestNew_HostedModeNoSignTools(t *testing.T) {
 	}
 	pool := newTestPool()
 
-	s, wm := New(cfg, pool)
+	s, wm, _ := New(cfg, pool)
 	require.NotNil(t, s, "New() returned nil")
 	if wm != nil {
 		wm.Close()

@@ -1,0 +1,52 @@
+# GoTRON MCP Policy Configuration
+#
+# This file defines spending limits and restrictions for AI-managed wallets.
+# Place it at ~/.gotron-mcp/policy.yaml or pass --policy-config <path>.
+#
+# Set enabled: true to activate policy enforcement.
+# When disabled, all wallets are unrestricted.
+
+enabled: false
+
+wallets:
+  # "savings" — high-value wallet with strict limits
+  # savings:
+  #   # Aggregate USD limits across all tokens (requires price service #85)
+  #   # daily_limit_usd: 150
+  #   # per_tx_limit_usd: 50
+  #   # approval_required_above_usd: 500
+  #
+  #   # Per-token limits (human-readable units)
+  #   # Token decimals are auto-resolved from the network at startup.
+  #   # Set decimals explicitly to skip the network call.
+  #   token_limits:
+  #     TRX:
+  #       per_tx_limit_units: 1000       # max 1,000 TRX per TX
+  #       daily_limit_units: 5000        # 5,000 TRX/day
+  #       approval_required_above_units: 500  # require approval above 500 TRX
+  #     TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t:  # USDT
+  #       per_tx_limit_units: 500        # max 500 USDT per TX
+  #       daily_limit_units: 2000        # 2,000 USDT/day
+  #       approval_required_above_units: 1000  # require approval above 1,000 USDT
+  #       # per_tx_limit_usd: 500        # requires price service (#85)
+  #       # daily_limit_usd: 2000        # requires price service (#85)
+  #     TAFjULxiVgT4qWk6UZwjqwZXTSaGaqnVp4:  # BTT
+  #       per_tx_limit_units: 100000000  # 100M BTT per TX
+  #       daily_limit_units: 500000000   # 500M BTT/day
+  #       approval_required_above_units: 200000000  # require approval above 200M BTT
+  #       # per_tx_limit_usd: 50         # requires price service (#85)
+  #       # daily_limit_usd: 100         # requires price service (#85)
+  #
+  #   # Only these addresses can receive funds
+  #   whitelist:
+  #     - "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF"
+  #     - "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+
+  # "petty-cash" — low-value wallet for small operations
+  # petty-cash:
+  #   token_limits:
+  #     TRX:
+  #       per_tx_limit_units: 100
+  #       daily_limit_units: 500
+
+  # Wallets not listed here have NO restrictions.
