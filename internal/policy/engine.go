@@ -406,6 +406,11 @@ func (e *Engine) RecordOverrideSpend(intent *Intent) {
 	if e == nil || e.store == nil || intent == nil {
 		return
 	}
+	// Guard against int64 overflow (same as Check)
+	if intent.TokenAmount > float64(math.MaxInt64) {
+		log.Printf("warning: override token amount too large to track for wallet %q", intent.WalletName)
+		return
+	}
 	now := time.Now().UTC()
 
 	// Record per-token spend

@@ -139,6 +139,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	// Validate approval config
+	if cfg.Approval != nil && cfg.Approval.Method != "" && cfg.Approval.Method != "telegram" {
+		return nil, fmt.Errorf("unsupported approval method %q — only 'telegram' is supported", cfg.Approval.Method)
+	}
 	if cfg.Approval != nil && cfg.Approval.Method == "telegram" {
 		if cfg.Approval.Telegram == nil {
 			return nil, fmt.Errorf("approval method 'telegram' requires telegram config section")

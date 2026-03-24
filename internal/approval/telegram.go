@@ -368,6 +368,9 @@ func (t *TelegramApprover) handleCallbackQuery(update map[string]any) {
 	if !ok {
 		return
 	}
+	if action != "approve" && action != "reject" {
+		return // ignore unknown actions
+	}
 
 	if !t.isFromConfiguredChat(cbQuery) {
 		return

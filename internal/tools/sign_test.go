@@ -662,3 +662,361 @@ func TestRequestLimitOverride_MissingWallet(t *testing.T) {
 	})
 	assert.True(t, result.IsError, "expected error for missing wallet")
 }
+
+// --- Approval flow tests ---
+
+// buildTransferTxExt creates a mock TransactionExtention for CreateTransaction2.
+func buildTransferTxExt(t *testing.T) *api.TransactionExtention {
+	t.Helper()
+	tx := &core.Transaction{
+		RawData: &core.TransactionRaw{
+			Contract: []*core.Transaction_Contract{
+				{
+					Type:      core.Transaction_Contract_TransferContract,
+					Parameter: &anypb.Any{},
+				},
+			},
+			Expiration: time.Now().Add(time.Minute).UnixMilli(),
+		},
+	}
+	return &api.TransactionExtention{
+		Transaction: tx,
+		Result:      &api.Return{Result: true, Code: api.Return_SUCCESS},
+	}
+}
+
+func TestSignAndBroadcast_ApprovalFlow_Approved(t *testing.T) {
+	mock := &mockWalletServer{
+		CreateTransaction2Func: func(_ context.Context, _ *core.TransferContract) (*api.TransactionExtention, error) {
+			return buildTransferTxExt(t), nil
+		},
+		BroadcastTransactionFunc: func(_ context.Context, _ *core.Transaction) (*api.Return, error) {
+			return &api.Return{Result: true, Code: api.Return_SUCCESS, Message: []byte("ok")}, nil
+		},
+	}
+	wm, pool := newTestSignSetup(t, mock)
+	_, err := wm.CreateWallet("hot-wallet")
+	require.NoError(t, err)
+
+	cfg := &policy.Config{
+		Enabled: true,
+		Wallets: map[string]*policy.WalletPolicy{
+			"hot-wallet": {
+				ApprovalRequiredAboveTRX: 5,
+			},
+		},
+	}
+	pe := newTestPolicyEngine(t, cfg)
+	pe.SetApprover(&mockApprover{approved: true})
+
+	// 10 TRX exceeds the 5 TRX approval threshold
+	txHex := buildTransferTxHex(t,
+		"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		10_000_000,
+	)
+
+	result := callTool(t, handleSignAndBroadcast(pool, wm, pe), map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "hot-wallet",
+		"reason":          "test approval flow",
+	})
+	// Should get past approval + rebuild + sign + broadcast
+	require.False(t, result.IsError, "expected success after approval, got error: %v", result.Content)
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, true, data["success"], "expected broadcast success")
+	txid, ok := data["txid"].(string)
+	assert.True(t, ok && txid != "", "expected non-empty txid")
+}
+
+func TestSignAndBroadcast_ApprovalFlow_Rejected(t *testing.T) {
+	mock := &mockWalletServer{}
+	wm, pool := newTestSignSetup(t, mock)
+	_, err := wm.CreateWallet("hot-wallet")
+	require.NoError(t, err)
+
+	cfg := &policy.Config{
+		Enabled: true,
+		Wallets: map[string]*policy.WalletPolicy{
+			"hot-wallet": {
+				ApprovalRequiredAboveTRX: 5,
+			},
+		},
+	}
+	pe := newTestPolicyEngine(t, cfg)
+	pe.SetApprover(&mockApprover{approved: false})
+
+	txHex := buildTransferTxHex(t,
+		"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		10_000_000,
+	)
+
+	result := callTool(t, handleSignAndBroadcast(pool, wm, pe), map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "hot-wallet",
+		"reason":          "test rejection",
+	})
+	require.False(t, result.IsError, "expected JSON result, not tool error")
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, "approval_rejected", data["status"], "expected approval_rejected status")
+}
+
+func TestSignAndBroadcast_NoApprover_ReturnsHint(t *testing.T) {
+	mock := &mockWalletServer{}
+	wm, pool := newTestSignSetup(t, mock)
+	_, err := wm.CreateWallet("hot-wallet")
+	require.NoError(t, err)
+
+	cfg := &policy.Config{
+		Enabled: true,
+		Wallets: map[string]*policy.WalletPolicy{
+			"hot-wallet": {
+				ApprovalRequiredAboveTRX: 5,
+			},
+		},
+	}
+	pe := newTestPolicyEngine(t, cfg)
+	// No approver set
+
+	txHex := buildTransferTxHex(t,
+		"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		10_000_000,
+	)
+
+	result := callTool(t, handleSignAndBroadcast(pool, wm, pe), map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "hot-wallet",
+	})
+	require.False(t, result.IsError, "expected JSON result, not tool error")
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, "approval_required", data["status"], "expected approval_required status")
+	hint, ok := data["hint"].(string)
+	assert.True(t, ok, "expected hint field to be a string")
+	assert.Contains(t, hint, "No approval backend configured")
+}
+
+func TestSignAndConfirm_PolicyDenied_ReturnsHint(t *testing.T) {
+	cfg := &policy.Config{
+		Enabled: true,
+		Wallets: map[string]*policy.WalletPolicy{
+			"hot-wallet": {
+				TokenLimits: map[string]*policy.TokenLimit{
+					"TRX": {Decimals: 6, PerTxLimitUnits: 1}, // 1 TRX per-tx limit
+				},
+			},
+		},
+	}
+	pe := newTestPolicyEngine(t, cfg)
+
+	mock := &mockWalletServer{}
+	wm, pool := newTestSignSetup(t, mock)
+	_, err := wm.CreateWallet("hot-wallet")
+	require.NoError(t, err)
+
+	// 5 TRX exceeds the 1 TRX per-tx limit
+	txHex := buildTransferTxHex(t,
+		"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		5_000_000,
+	)
+
+	result := callTool(t, handleSignAndConfirm(pool, wm, pe), map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "hot-wallet",
+	})
+	require.False(t, result.IsError, "expected JSON result, not tool error: %v", result.Content)
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, "policy_denied", data["status"], "expected policy_denied status")
+	hint, ok := data["hint"].(string)
+	assert.True(t, ok, "expected hint field to be a string")
+	assert.Contains(t, hint, "request_limit_override", "hint should mention request_limit_override")
+}
+
+func TestRequestLimitOverride_WhitelistDenied(t *testing.T) {
+	cfg := &policy.Config{
+		Enabled: true,
+		Wallets: map[string]*policy.WalletPolicy{
+			"hot-wallet": {
+				TokenLimits: map[string]*policy.TokenLimit{
+					"TRX": {Decimals: 6, PerTxLimitUnits: 1},
+				},
+				Whitelist: []string{"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF"}, // only this address whitelisted
+			},
+		},
+	}
+	pe := newTestPolicyEngine(t, cfg)
+	pe.SetApprover(&mockApprover{approved: true})
+
+	mock := &mockWalletServer{}
+	wm, pool := newTestSignSetup(t, mock)
+	_, err := wm.CreateWallet("hot-wallet")
+	require.NoError(t, err)
+
+	// Send to a non-whitelisted address
+	txHex := buildTransferTxHex(t,
+		"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", // not in whitelist
+		5_000_000,
+	)
+
+	result := callTool(t, handleRequestLimitOverride(pool, wm, pe), map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "hot-wallet",
+		"reason":          "emergency payout",
+	})
+	assert.True(t, result.IsError, "expected error for whitelist denial")
+	found := false
+	for _, c := range result.Content {
+		if tc, ok := c.(mcp.TextContent); ok {
+			if strings.Contains(tc.Text, "not in the whitelist") {
+				found = true
+				break
+			}
+		}
+	}
+	assert.True(t, found, "expected whitelist denial error, got: %+v", result.Content)
+}
+
+func TestRequestLimitOverride_NoApprover(t *testing.T) {
+	cfg := &policy.Config{
+		Enabled: true,
+		Wallets: map[string]*policy.WalletPolicy{
+			"hot-wallet": {
+				TokenLimits: map[string]*policy.TokenLimit{
+					"TRX": {Decimals: 6, PerTxLimitUnits: 1},
+				},
+			},
+		},
+	}
+	pe := newTestPolicyEngine(t, cfg)
+	// No approver set
+
+	mock := &mockWalletServer{}
+	wm, pool := newTestSignSetup(t, mock)
+	_, err := wm.CreateWallet("hot-wallet")
+	require.NoError(t, err)
+
+	txHex := buildTransferTxHex(t,
+		"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		5_000_000,
+	)
+
+	result := callTool(t, handleRequestLimitOverride(pool, wm, pe), map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "hot-wallet",
+		"reason":          "emergency payout",
+	})
+	assert.True(t, result.IsError, "expected error when no approver configured")
+	found := false
+	for _, c := range result.Content {
+		if tc, ok := c.(mcp.TextContent); ok {
+			if strings.Contains(tc.Text, "no approval backend configured") {
+				found = true
+				break
+			}
+		}
+	}
+	assert.True(t, found, "expected no-approver error, got: %+v", result.Content)
+}
+
+func TestGetWalletPolicy_WithRemainingBudget(t *testing.T) {
+	cfg := &policy.Config{
+		Enabled: true,
+		Wallets: map[string]*policy.WalletPolicy{
+			"hot-wallet": {
+				TokenLimits: map[string]*policy.TokenLimit{
+					"TRX": {Decimals: 6, PerTxLimitUnits: 100, DailyLimitUnits: 500},
+				},
+			},
+		},
+	}
+	pe := newTestPolicyEngine(t, cfg)
+
+	// Spend 50 TRX (50_000_000 SUN) via Check to reserve some budget
+	intent := &policy.Intent{
+		WalletName:  "hot-wallet",
+		Action:      "TransferContract",
+		FromAddr:    "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		ToAddr:      "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		AmountSUN:   50_000_000,
+		TokenID:     "TRX",
+		TokenAmount: 50_000_000,
+	}
+	result, err := pe.Check(intent)
+	require.NoError(t, err)
+	require.True(t, result.Allowed, "expected check to pass for 50 TRX within limits")
+
+	handler := handleGetWalletPolicy(pe, nil)
+	toolResult := callTool(t, handler, map[string]any{
+		"wallet": "hot-wallet",
+	})
+	require.False(t, toolResult.IsError, "expected success, got error: %v", toolResult.Content)
+
+	data := parseJSONResult(t, toolResult)
+	remaining, ok := data["remaining_today"].(map[string]any)
+	require.True(t, ok, "expected remaining_today to be a map, got %T", data["remaining_today"])
+
+	spentToday, ok := remaining["TRX_spent_today"].(float64)
+	require.True(t, ok, "expected TRX_spent_today to be a float64")
+	assert.InDelta(t, 50.0, spentToday, 0.01, "expected 50 TRX spent")
+
+	remainingToday, ok := remaining["TRX_remaining_today"].(float64)
+	require.True(t, ok, "expected TRX_remaining_today to be a float64")
+	assert.InDelta(t, 450.0, remainingToday, 0.01, "expected 450 TRX remaining")
+}
+
+func TestRebuildTransaction_ValidTransfer(t *testing.T) {
+	mock := &mockWalletServer{
+		CreateTransaction2Func: func(_ context.Context, tc *core.TransferContract) (*api.TransactionExtention, error) {
+			return buildTransferTxExt(t), nil
+		},
+	}
+	pool := newMockPool(t, mock)
+
+	intent := &policy.Intent{
+		Action:    "TransferContract",
+		FromAddr:  "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		ToAddr:    "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		AmountSUN: 1_000_000,
+	}
+
+	tx, err := rebuildTransaction(context.Background(), pool, intent)
+	require.NoError(t, err)
+	require.NotNil(t, tx, "expected a non-nil transaction")
+	require.NotNil(t, tx.RawData, "expected non-nil RawData")
+}
+
+func TestRebuildTransaction_UnsupportedAction(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+
+	intent := &policy.Intent{
+		Action:   "TriggerSmartContract",
+		FromAddr: "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		ToAddr:   "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+	}
+
+	_, err := rebuildTransaction(context.Background(), pool, intent)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot rebuild TriggerSmartContract")
+}
+
+func TestRebuildTransaction_InvalidAddress(t *testing.T) {
+	pool := newMockPool(t, &mockWalletServer{})
+
+	intent := &policy.Intent{
+		Action:   "TransferContract",
+		FromAddr: "not-a-valid-address",
+		ToAddr:   "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+	}
+
+	_, err := rebuildTransaction(context.Background(), pool, intent)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid from address")
+}

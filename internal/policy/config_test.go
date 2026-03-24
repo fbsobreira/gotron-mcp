@@ -346,6 +346,37 @@ wallets: {}
 		assert.Contains(t, err.Error(), "authorized_users requires at least one")
 	})
 
+	t.Run("TelegramMissingChatID", func(t *testing.T) {
+		yaml := `
+enabled: true
+approval:
+  method: telegram
+  telegram:
+    bot_token_env: MY_TOKEN
+    authorized_users: [456]
+wallets: {}
+`
+		path := filepath.Join(t.TempDir(), "policy.yaml")
+		require.NoError(t, os.WriteFile(path, []byte(yaml), 0600))
+		_, err := LoadConfig(path)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "chat_id is required")
+	})
+
+	t.Run("UnknownApprovalMethod", func(t *testing.T) {
+		yaml := `
+enabled: true
+approval:
+  method: webhook
+wallets: {}
+`
+		path := filepath.Join(t.TempDir(), "policy.yaml")
+		require.NoError(t, os.WriteFile(path, []byte(yaml), 0600))
+		_, err := LoadConfig(path)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported approval method")
+	})
+
 	t.Run("TelegramValid", func(t *testing.T) {
 		yaml := `
 enabled: true
