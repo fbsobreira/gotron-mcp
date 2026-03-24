@@ -196,6 +196,12 @@ func (e *Engine) Check(intent *Intent) (*CheckResult, error) {
 	// 6. Legacy TRX daily limit
 	if intent.TokenID == "TRX" && wp.DailyLimitTRX > 0 && e.store != nil {
 		if _, exists := wp.TokenLimits["TRX"]; !exists {
+			if wp.DailyLimitTRX > float64(math.MaxInt64)/1_000_000 {
+				return &CheckResult{
+					Allowed: false,
+					Reason:  fmt.Sprintf("daily TRX limit %.0f exceeds trackable range for wallet %q", wp.DailyLimitTRX, intent.WalletName),
+				}, nil
+			}
 			limitSUN := int64(wp.DailyLimitTRX * 1_000_000)
 			ok, dailySpent, err := e.store.CheckAndReserve(intent.WalletName+"/TRX", checkTime, intent.AmountSUN, limitSUN)
 			if err != nil {
