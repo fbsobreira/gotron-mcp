@@ -171,3 +171,23 @@ func TestGetSigner_NotFound(t *testing.T) {
 	require.Error(t, err, "expected error for unknown wallet")
 	assert.Contains(t, err.Error(), "not found")
 }
+
+func TestResolveWalletName_Name(t *testing.T) {
+	m := newTestManager(t)
+	result := m.ResolveWalletName("my-wallet")
+	assert.Equal(t, "my-wallet", result)
+}
+
+func TestResolveWalletName_NonTAddress(t *testing.T) {
+	m := newTestManager(t)
+	result := m.ResolveWalletName("not-a-t-address")
+	assert.Equal(t, "not-a-t-address", result)
+}
+
+func TestResolveWalletName_UnknownAddress(t *testing.T) {
+	m := newTestManager(t)
+	// A valid-length T-address that doesn't exist in the store
+	addr := "TXyz1234567890abcdefghijklmnopqrst"
+	result := m.ResolveWalletName(addr)
+	assert.Equal(t, addr, result)
+}

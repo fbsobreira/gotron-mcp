@@ -62,7 +62,7 @@ func IntentFromContractData(walletName string, data *transaction.ContractData) (
 		if err := extractAmount(intent, data.Fields, "call_value"); err != nil {
 			return nil, fmt.Errorf("malformed call_value: %w", err)
 		}
-		intent.TokenAmount = intent.AmountTRX()
+		intent.TokenAmount = float64(intent.AmountSUN)
 		return intent, nil
 	}
 
@@ -82,7 +82,7 @@ func IntentFromContractData(walletName string, data *transaction.ContractData) (
 			}
 		}
 	}
-	intent.TokenAmount = intent.AmountTRX()
+	intent.TokenAmount = float64(intent.AmountSUN)
 
 	return intent, nil
 }

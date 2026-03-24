@@ -33,7 +33,7 @@ func RegisterSignTools(s *server.MCPServer, pool *nodepool.Pool, wm *wallet.Mana
 			mcp.WithDescription("Show the active policy for a wallet: spend limits, token limits, whitelist, and approval thresholds. Returns 'no policy' if the wallet is unrestricted."),
 			mcp.WithString("wallet", mcp.Required(), mcp.Description("Wallet name")),
 		),
-		handleGetWalletPolicy(pe),
+		handleGetWalletPolicy(pe, wm),
 	)
 
 	// sign_and_broadcast and sign_and_confirm always available — they enforce policy
@@ -422,11 +422,14 @@ func handleBroadcastTransaction(pool *nodepool.Pool) server.ToolHandlerFunc {
 	}
 }
 
-func handleGetWalletPolicy(pe *policy.Engine) server.ToolHandlerFunc {
+func handleGetWalletPolicy(pe *policy.Engine, wm *wallet.Manager) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		walletName := req.GetString("wallet", "")
 		if walletName == "" {
 			return mcp.NewToolResultError("wallet is required"), nil
+		}
+		if wm != nil {
+			walletName = wm.ResolveWalletName(walletName)
 		}
 
 		if pe == nil {

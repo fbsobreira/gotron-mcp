@@ -174,6 +174,12 @@ func (e *Engine) Check(intent *Intent) (*CheckResult, error) {
 	// 5. Per-token daily unit limit (compared in raw on-chain units)
 	if tl := wp.TokenLimits[intent.TokenID]; tl != nil && tl.DailyLimitUnits > 0 && e.store != nil {
 		rawLimit := tl.RawDailyLimit()
+		if rawLimit > float64(math.MaxInt64) {
+			return &CheckResult{
+				Allowed: false,
+				Reason:  fmt.Sprintf("daily token limit for %s exceeds trackable range for wallet %q", intent.TokenID, intent.WalletName),
+			}, nil
+		}
 		spendKey := fmt.Sprintf("%s/%s", intent.WalletName, intent.TokenID)
 		ok, _, err := e.store.CheckAndReserve(spendKey, checkTime, int64(intent.TokenAmount), int64(rawLimit))
 		if err != nil {

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
+	"github.com/fbsobreira/gotron-mcp/internal/policy"
 	"github.com/fbsobreira/gotron-mcp/internal/wallet"
 	"github.com/fbsobreira/gotron-sdk/pkg/keystore"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
@@ -393,4 +395,88 @@ func TestBroadcastTransaction_Success(t *testing.T) {
 	data := parseJSONResult(t, result)
 	assert.Equal(t, true, data["success"])
 	assert.NotEmpty(t, data["transaction_id"], "transaction_id should not be empty")
+}
+
+// --- get_wallet_policy tests ---
+
+func TestGetWalletPolicy_NoEngine(t *testing.T) {
+	handler := handleGetWalletPolicy(nil, nil)
+	result := callTool(t, handler, map[string]any{
+		"wallet": "my-wallet",
+	})
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, "my-wallet", data["wallet"])
+	assert.Equal(t, false, data["policy_enabled"])
+	assert.Contains(t, data["message"], "No policy engine configured")
+}
+
+func TestGetWalletPolicy_NoPolicyForWallet(t *testing.T) {
+	cfg := &policy.Config{
+		Enabled: true,
+		Wallets: map[string]*policy.WalletPolicy{},
+	}
+	store, err := policy.NewStore(filepath.Join(t.TempDir(), "state.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+
+	pe := policy.NewEngine(cfg, store)
+	handler := handleGetWalletPolicy(pe, nil)
+	result := callTool(t, handler, map[string]any{
+		"wallet": "unknown-wallet",
+	})
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, "unknown-wallet", data["wallet"])
+	assert.Equal(t, true, data["policy_enabled"])
+	assert.Equal(t, false, data["has_policy"])
+	assert.Contains(t, data["message"], "No policy configured for this wallet")
+}
+
+func TestGetWalletPolicy_WithPolicy(t *testing.T) {
+	cfg := &policy.Config{
+		Enabled: true,
+		Wallets: map[string]*policy.WalletPolicy{
+			"hot-wallet": {
+				PerTxLimitTRX: 100,
+				Whitelist:     []string{"TXyz1234567890abcdefghijklmnopqrst"},
+				TokenLimits: map[string]*policy.TokenLimit{
+					"USDT_CONTRACT": {
+						Decimals:        6,
+						PerTxLimitUnits: 50,
+						DailyLimitUnits: 500,
+					},
+				},
+			},
+		},
+	}
+	store, err := policy.NewStore(filepath.Join(t.TempDir(), "state.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+
+	pe := policy.NewEngine(cfg, store)
+	handler := handleGetWalletPolicy(pe, nil)
+	result := callTool(t, handler, map[string]any{
+		"wallet": "hot-wallet",
+	})
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, "hot-wallet", data["wallet"])
+	assert.Equal(t, true, data["policy_enabled"])
+	assert.Equal(t, true, data["has_policy"])
+	assert.Equal(t, float64(100), data["per_tx_limit_trx"])
+
+	whitelist, ok := data["whitelist"].([]any)
+	require.True(t, ok, "expected whitelist to be a list")
+	assert.Contains(t, whitelist, "TXyz1234567890abcdefghijklmnopqrst")
+
+	tokenLimits, ok := data["token_limits"].(map[string]any)
+	require.True(t, ok, "expected token_limits to be a map")
+	usdtLimit, ok := tokenLimits["USDT_CONTRACT"].(map[string]any)
+	require.True(t, ok, "expected USDT_CONTRACT entry in token_limits")
+	assert.Equal(t, float64(50), usdtLimit["per_tx_limit_units"])
+	assert.Equal(t, float64(500), usdtLimit["daily_limit_units"])
 }

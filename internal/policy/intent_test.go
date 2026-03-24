@@ -53,7 +53,7 @@ func TestIntentFromContractData_TransferContract(t *testing.T) {
 	assert.Equal(t, "TVjsyZ7fYF3qLF6BQgPmTEZy1xrNNyVAAA", intent.ToAddr)
 	assert.Equal(t, int64(5_000_000), intent.AmountSUN)
 	assert.Equal(t, "TRX", intent.TokenID)
-	assert.InDelta(t, 5.0, intent.TokenAmount, 0.0001)
+	assert.Equal(t, float64(5_000_000), intent.TokenAmount)
 }
 
 func TestIntentFromContractData_TransferContract_Int64Amount(t *testing.T) {
@@ -69,7 +69,7 @@ func TestIntentFromContractData_TransferContract_Int64Amount(t *testing.T) {
 	intent, err := IntentFromContractData("w", data)
 	require.NoError(t, err)
 	assert.Equal(t, int64(10_000_000), intent.AmountSUN)
-	assert.InDelta(t, 10.0, intent.TokenAmount, 0.0001)
+	assert.Equal(t, float64(10_000_000), intent.TokenAmount)
 }
 
 func TestIntentFromContractData_TransferContract_MissingAmount(t *testing.T) {
@@ -101,7 +101,7 @@ func TestIntentFromContractData_FrozenBalance_Fallback(t *testing.T) {
 	intent, err := IntentFromContractData("w", data)
 	require.NoError(t, err)
 	assert.Equal(t, int64(100_000_000), intent.AmountSUN)
-	assert.InDelta(t, 100.0, intent.TokenAmount, 0.0001)
+	assert.Equal(t, float64(100_000_000), intent.TokenAmount)
 }
 
 func TestIntentFromContractData_BalanceField_Fallback(t *testing.T) {
@@ -206,7 +206,7 @@ func TestIntentFromContractData_TriggerSmartContract_UnknownSelector(t *testing.
 	assert.Equal(t, "TRX", intent.TokenID)
 	assert.Equal(t, int64(2_000_000), intent.AmountSUN)
 	assert.Equal(t, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", intent.ToAddr)
-	assert.InDelta(t, 2.0, intent.TokenAmount, 0.0001)
+	assert.Equal(t, float64(2_000_000), intent.TokenAmount)
 }
 
 func TestIntentFromContractData_TriggerSmartContract_NoData(t *testing.T) {
