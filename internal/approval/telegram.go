@@ -172,17 +172,17 @@ func formatApprovalMessage(req Request) string {
 
 	// Spend context
 	if req.SpendContext != "" {
-		fmt.Fprintf(&b, "📊 *Spend:* %s\n", req.SpendContext)
+		fmt.Fprintf(&b, "📊 *Spend:* %s\n", escapeMD(req.SpendContext))
 	}
 
 	// Agent reason
 	if req.Reason != "" {
-		fmt.Fprintf(&b, "\n🤖 *Reason:* _%s_\n", req.Reason)
+		fmt.Fprintf(&b, "\n🤖 *Reason:* _%s_\n", escapeMD(req.Reason))
 	}
 
 	// Summary
 	if req.HumanSummary != "" {
-		fmt.Fprintf(&b, "💬 _%s_\n", req.HumanSummary)
+		fmt.Fprintf(&b, "💬 _%s_\n", escapeMD(req.HumanSummary))
 	}
 
 	// Expiry
@@ -204,14 +204,25 @@ func formatApprovalMessage(req Request) string {
 
 func writeField(b *strings.Builder, emoji, label, value string) {
 	if value != "" {
-		fmt.Fprintf(b, "%s *%s:* `%s`\n", emoji, label, value)
+		fmt.Fprintf(b, "%s *%s:* `%s`\n", emoji, label, escapeMD(value))
 	}
 }
 
 func writeContractField(b *strings.Builder, emoji, label string, data map[string]any, key string) {
 	if v, ok := data[key].(string); ok && v != "" {
-		fmt.Fprintf(b, "%s *%s:*\n`%s`\n", emoji, label, v)
+		fmt.Fprintf(b, "%s *%s:*\n`%s`\n", emoji, label, escapeMD(v))
 	}
+}
+
+// escapeMD escapes Telegram Markdown metacharacters in user-supplied text.
+func escapeMD(s string) string {
+	r := strings.NewReplacer(
+		"`", "\\`",
+		"*", "\\*",
+		"_", "\\_",
+		"[", "\\[",
+	)
+	return r.Replace(s)
 }
 
 // --- Telegram API methods ---
@@ -255,7 +266,7 @@ func (t *TelegramApprover) editMessageResult(ctx context.Context, msgID int64, r
 	text := fmt.Sprintf("%s\n\n%s by %s at %s",
 		formatApprovalMessage(req),
 		status,
-		result.ApprovedBy,
+		escapeMD(result.ApprovedBy),
 		result.Timestamp.Format("15:04:05 UTC"),
 	)
 	t.editMessage(ctx, msgID, text)
@@ -370,6 +381,9 @@ func (t *TelegramApprover) handleCallbackQuery(update map[string]any) {
 
 	t.mu.Lock()
 	resultCh, exists := t.pending[approvalID]
+	if exists {
+		delete(t.pending, approvalID) // consume immediately to prevent double-callback
+	}
 	t.mu.Unlock()
 
 	if !exists {

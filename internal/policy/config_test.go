@@ -296,3 +296,71 @@ func TestNormalizeAddress(t *testing.T) {
 		assert.Equal(t, addr, result)
 	})
 }
+
+func TestLoadConfig_ApprovalValidation(t *testing.T) {
+	t.Run("TelegramMissingSection", func(t *testing.T) {
+		yaml := `
+enabled: true
+approval:
+  method: telegram
+wallets: {}
+`
+		path := filepath.Join(t.TempDir(), "policy.yaml")
+		require.NoError(t, os.WriteFile(path, []byte(yaml), 0600))
+		_, err := LoadConfig(path)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "requires telegram config section")
+	})
+
+	t.Run("TelegramMissingBotTokenEnv", func(t *testing.T) {
+		yaml := `
+enabled: true
+approval:
+  method: telegram
+  telegram:
+    chat_id: 123
+    authorized_users: [456]
+wallets: {}
+`
+		path := filepath.Join(t.TempDir(), "policy.yaml")
+		require.NoError(t, os.WriteFile(path, []byte(yaml), 0600))
+		_, err := LoadConfig(path)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "bot_token_env is required")
+	})
+
+	t.Run("TelegramMissingAuthorizedUsers", func(t *testing.T) {
+		yaml := `
+enabled: true
+approval:
+  method: telegram
+  telegram:
+    bot_token_env: MY_TOKEN
+    chat_id: 123
+wallets: {}
+`
+		path := filepath.Join(t.TempDir(), "policy.yaml")
+		require.NoError(t, os.WriteFile(path, []byte(yaml), 0600))
+		_, err := LoadConfig(path)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "authorized_users requires at least one")
+	})
+
+	t.Run("TelegramValid", func(t *testing.T) {
+		yaml := `
+enabled: true
+approval:
+  method: telegram
+  telegram:
+    bot_token_env: MY_TOKEN
+    chat_id: 123
+    authorized_users: [456]
+wallets: {}
+`
+		path := filepath.Join(t.TempDir(), "policy.yaml")
+		require.NoError(t, os.WriteFile(path, []byte(yaml), 0600))
+		cfg, err := LoadConfig(path)
+		require.NoError(t, err)
+		assert.Equal(t, "telegram", cfg.Approval.Method)
+	})
+}

@@ -211,8 +211,24 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.
 			if pErr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: policy check failed: %v", pErr)), nil
 			}
+			// Check may reserve daily spend — arm rollback immediately
+			reserved = result.Allowed || result.ApprovalRequired
+			if reserved {
+				defer func() {
+					if reserved {
+						pe.ReleaseReserve(intent)
+					}
+				}()
+			}
 			if !result.Allowed {
 				if result.ApprovalRequired {
+					if !pe.HasApprover() {
+						return mcp.NewToolResultJSON(map[string]any{
+							"status": "approval_required",
+							"reason": result.Reason,
+							"hint":   "No approval backend configured. Configure telegram approval in policy.yaml to enable interactive approval.",
+						})
+					}
 					progress.Send(3, "Requesting approval...")
 					approved, aErr := pe.RequestApproval(ctx, intent)
 					if aErr != nil {
@@ -239,12 +255,6 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.
 					})
 				}
 			}
-			reserved = true
-			defer func() {
-				if reserved {
-					pe.ReleaseReserve(intent)
-				}
-			}()
 		}
 
 		progress.Send(3, "Signing with wallet...")
@@ -348,8 +358,24 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.En
 			if pErr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: policy check failed: %v", pErr)), nil
 			}
+			// Check may reserve daily spend — arm rollback immediately
+			reserved = result.Allowed || result.ApprovalRequired
+			if reserved {
+				defer func() {
+					if reserved {
+						pe.ReleaseReserve(intent)
+					}
+				}()
+			}
 			if !result.Allowed {
 				if result.ApprovalRequired {
+					if !pe.HasApprover() {
+						return mcp.NewToolResultJSON(map[string]any{
+							"status": "approval_required",
+							"reason": result.Reason,
+							"hint":   "No approval backend configured. Configure telegram approval in policy.yaml to enable interactive approval.",
+						})
+					}
 					progress.Send(3, "Requesting approval...")
 					approved, aErr := pe.RequestApproval(ctx, intent)
 					if aErr != nil {
@@ -376,12 +402,6 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.En
 					})
 				}
 			}
-			reserved = true
-			defer func() {
-				if reserved {
-					pe.ReleaseReserve(intent)
-				}
-			}()
 		}
 
 		progress.Send(3, "Signing with wallet...")
@@ -556,6 +576,9 @@ func handleRequestLimitOverride(pool *nodepool.Pool, wm *wallet.Manager, pe *pol
 		}
 
 		// Request approval via Telegram
+		if !pe.HasApprover() {
+			return mcp.NewToolResultError("request_limit_override: no approval backend configured — configure telegram approval in policy.yaml"), nil
+		}
 		approved, aErr := pe.RequestApproval(ctx, intent)
 		if aErr != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: %v", aErr)), nil

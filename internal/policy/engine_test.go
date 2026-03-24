@@ -479,14 +479,14 @@ func TestRequestApproval_NilEngine(t *testing.T) {
 	var e *Engine
 	approved, err := e.RequestApproval(context.Background(), &Intent{WalletName: "any"})
 	assert.False(t, approved)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }
 
 func TestRequestApproval_NoApprover(t *testing.T) {
 	e := newTestEngine(t, &Config{})
 	approved, err := e.RequestApproval(context.Background(), &Intent{WalletName: "any"})
 	assert.False(t, approved)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }
 
 func TestRequestApproval_Approved(t *testing.T) {

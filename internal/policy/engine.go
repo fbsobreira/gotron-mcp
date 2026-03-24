@@ -48,6 +48,7 @@ func (e *Engine) HasApprover() bool {
 
 // RequestApproval calls the configured approver to get human approval.
 // Returns (approved, error). If no approver is configured, returns (false, nil).
+// Callers should check HasApprover() first and handle the no-approver case.
 func (e *Engine) RequestApproval(ctx context.Context, intent *Intent) (bool, error) {
 	if e == nil || e.approver == nil {
 		return false, nil
@@ -142,7 +143,7 @@ func buildApprovalSummary(intent *Intent) string {
 		return fmt.Sprintf("Transfer %.6f TRX to %s", intent.AmountTRX(), intent.ToAddr)
 	case "TriggerSmartContract":
 		if intent.TokenID != "TRX" && intent.TokenID != "" {
-			return fmt.Sprintf("Token transfer to %s (contract: %s)", intent.ToAddr, intent.TokenID)
+			return fmt.Sprintf("Token transfer of %.0f units to %s (contract: %s)", intent.TokenAmount, intent.ToAddr, intent.TokenID)
 		}
 		return fmt.Sprintf("Contract call to %s", intent.ToAddr)
 	default:

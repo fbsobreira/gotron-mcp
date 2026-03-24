@@ -146,6 +146,9 @@ func LoadConfig(path string) (*Config, error) {
 		if cfg.Approval.Telegram.BotTokenEnv == "" {
 			return nil, fmt.Errorf("telegram.bot_token_env is required")
 		}
+		if cfg.Approval.Telegram.ChatID == 0 {
+			return nil, fmt.Errorf("telegram.chat_id is required")
+		}
 		if len(cfg.Approval.Telegram.AuthorizedUsers) == 0 {
 			return nil, fmt.Errorf("telegram.authorized_users requires at least one user ID")
 		}
