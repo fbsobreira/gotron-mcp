@@ -97,10 +97,25 @@ type WalletPolicy struct {
 	Whitelist []string `yaml:"whitelist"`
 }
 
+// ApprovalConfig holds configuration for the transaction approval backend.
+type ApprovalConfig struct {
+	Method   string              `yaml:"method"` // "telegram", "webhook" (future)
+	Telegram *TelegramYAMLConfig `yaml:"telegram"`
+}
+
+// TelegramYAMLConfig holds Telegram-specific approval configuration.
+type TelegramYAMLConfig struct {
+	BotTokenEnv     string  `yaml:"bot_token_env"`    // env var name for bot token
+	AuthorizedUsers []int64 `yaml:"authorized_users"` // Telegram user IDs
+	ChatID          int64   `yaml:"chat_id"`          // Chat to send approvals to
+	TimeoutSeconds  int     `yaml:"timeout_seconds"`  // default 300
+}
+
 // Config holds the per-wallet policy configuration.
 type Config struct {
-	Enabled bool                     `yaml:"enabled"`
-	Wallets map[string]*WalletPolicy `yaml:"wallets"`
+	Enabled  bool                     `yaml:"enabled"`
+	Wallets  map[string]*WalletPolicy `yaml:"wallets"`
+	Approval *ApprovalConfig          `yaml:"approval"`
 }
 
 // LoadConfig reads and parses a policy YAML file.
@@ -121,6 +136,25 @@ func LoadConfig(path string) (*Config, error) {
 
 	if cfg.Wallets == nil {
 		cfg.Wallets = make(map[string]*WalletPolicy)
+	}
+
+	// Validate approval config
+	if cfg.Approval != nil && cfg.Approval.Method != "" && cfg.Approval.Method != "telegram" {
+		return nil, fmt.Errorf("unsupported approval method %q — only 'telegram' is supported", cfg.Approval.Method)
+	}
+	if cfg.Approval != nil && cfg.Approval.Method == "telegram" {
+		if cfg.Approval.Telegram == nil {
+			return nil, fmt.Errorf("approval method 'telegram' requires telegram config section")
+		}
+		if cfg.Approval.Telegram.BotTokenEnv == "" {
+			return nil, fmt.Errorf("telegram.bot_token_env is required")
+		}
+		if cfg.Approval.Telegram.ChatID == 0 {
+			return nil, fmt.Errorf("telegram.chat_id is required")
+		}
+		if len(cfg.Approval.Telegram.AuthorizedUsers) == 0 {
+			return nil, fmt.Errorf("telegram.authorized_users requires at least one user ID")
+		}
 	}
 
 	// Validate, normalize, and promote legacy fields

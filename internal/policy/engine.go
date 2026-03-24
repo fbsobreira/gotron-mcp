@@ -1,9 +1,14 @@
 package policy
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"math"
+	"strings"
 	"time"
+
+	"github.com/fbsobreira/gotron-mcp/internal/approval"
 )
 
 // CheckResult holds the outcome of a policy evaluation.
@@ -15,8 +20,9 @@ type CheckResult struct {
 
 // Engine evaluates transaction intents against wallet policies.
 type Engine struct {
-	cfg   *Config
-	store *Store
+	cfg      *Config
+	store    *Store
+	approver approval.Approver // optional — handles approval_required responses
 }
 
 // NewEngine creates a policy engine with the given config and persistent store.
@@ -28,9 +34,133 @@ func NewEngine(cfg *Config, store *Store) *Engine {
 	return &Engine{cfg: cfg, store: store}
 }
 
-// Close closes the underlying store. Safe to call on nil engine.
+// SetApprover configures the approval backend for approval_required responses.
+func (e *Engine) SetApprover(a approval.Approver) {
+	if e != nil {
+		e.approver = a
+	}
+}
+
+// HasApprover returns true if an approval backend is configured.
+func (e *Engine) HasApprover() bool {
+	return e != nil && e.approver != nil
+}
+
+// RequestApproval calls the configured approver to get human approval.
+// Returns (approved, error). If no approver is configured, returns (false, nil).
+// Callers should check HasApprover() first and handle the no-approver case.
+func (e *Engine) RequestApproval(ctx context.Context, intent *Intent) (bool, error) {
+	if e == nil || e.approver == nil {
+		return false, nil
+	}
+
+	// Use configured timeout (TX will be rebuilt fresh after approval)
+	timeout := 5 * time.Minute
+	if e.cfg.Approval != nil && e.cfg.Approval.Telegram != nil && e.cfg.Approval.Telegram.TimeoutSeconds > 0 {
+		timeout = time.Duration(e.cfg.Approval.Telegram.TimeoutSeconds) * time.Second
+	}
+	expiresAt := time.Now().UTC().Add(timeout)
+
+	// Build human-readable summary
+	summary := buildApprovalSummary(intent)
+
+	// Build spend context for the approval message
+	spendContext := e.buildSpendContext(intent)
+
+	reason := intent.Reason
+	if reason == "" {
+		reason = "No reason provided by agent"
+	}
+
+	req := approval.Request{
+		WalletName:   intent.WalletName,
+		ContractType: intent.Action,
+		ContractData: intent.ContractData,
+		HumanSummary: summary,
+		Reason:       reason,
+		ExpiresAt:    expiresAt,
+		IsOverride:   intent.IsOverride,
+		SpendContext: spendContext,
+	}
+
+	result, err := e.approver.RequestApproval(ctx, req)
+	if err != nil {
+		return false, fmt.Errorf("approval request failed: %w", err)
+	}
+
+	return result.Approved, nil
+}
+
+// buildSpendContext creates a summary of current spend for the approval message.
+func (e *Engine) buildSpendContext(intent *Intent) string {
+	if e.store == nil {
+		return ""
+	}
+	wp := e.cfg.GetPolicy(intent.WalletName)
+	if wp == nil {
+		return ""
+	}
+
+	now := time.Now().UTC()
+	var parts []string
+
+	// Token-specific daily spend
+	if tl := wp.TokenLimits[intent.TokenID]; tl != nil && tl.DailyLimitUnits > 0 {
+		spendKey := fmt.Sprintf("%s/%s", intent.WalletName, intent.TokenID)
+		spentRaw, err := e.store.GetDailySpend(spendKey, now)
+		if err != nil {
+			log.Printf("warning: failed to read daily spend for %s: %v", spendKey, err)
+		} else {
+			mult := decimalMultiplier(tl.Decimals)
+			spentHuman := float64(spentRaw) / mult
+			parts = append(parts, fmt.Sprintf("Daily %s: %.0f / %.0f", intent.TokenID, spentHuman, tl.DailyLimitUnits))
+		}
+	}
+
+	// Legacy TRX daily spend
+	if intent.TokenID == "TRX" && wp.DailyLimitTRX > 0 {
+		if _, exists := wp.TokenLimits["TRX"]; !exists {
+			spent, err := e.store.GetDailySpend(intent.WalletName+"/TRX", now)
+			if err != nil {
+				log.Printf("warning: failed to read daily TRX spend: %v", err)
+			} else {
+				spentTRX := float64(spent) / 1_000_000
+				parts = append(parts, fmt.Sprintf("Daily TRX: %.2f / %.0f", spentTRX, wp.DailyLimitTRX))
+			}
+		}
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, " | ")
+}
+
+// buildApprovalSummary creates a one-line summary of the transaction for approval.
+func buildApprovalSummary(intent *Intent) string {
+	switch intent.Action {
+	case "TransferContract":
+		return fmt.Sprintf("Transfer %.6f TRX to %s", intent.AmountTRX(), intent.ToAddr)
+	case "TriggerSmartContract":
+		if intent.TokenID != "TRX" && intent.TokenID != "" {
+			return fmt.Sprintf("Token transfer of %.0f units to %s (contract: %s)", intent.TokenAmount, intent.ToAddr, intent.TokenID)
+		}
+		return fmt.Sprintf("Contract call to %s", intent.ToAddr)
+	default:
+		return fmt.Sprintf("%s from wallet %q", intent.Action, intent.WalletName)
+	}
+}
+
+// Close closes the underlying store and approver. Safe to call on nil engine.
 func (e *Engine) Close() error {
-	if e == nil || e.store == nil {
+	if e == nil {
+		return nil
+	}
+	// Close the approver if it implements io.Closer
+	if closer, ok := e.approver.(interface{ Close() }); ok {
+		closer.Close()
+	}
+	if e.store == nil {
 		return nil
 	}
 	return e.store.Close()
@@ -59,7 +189,10 @@ func (e *Engine) GetRemainingBudget(wallet string) map[string]any {
 
 	// Legacy TRX daily limit
 	if wp.DailyLimitTRX > 0 {
-		spent, _ := e.store.GetDailySpend(wallet+"/TRX", now)
+		spent, err := e.store.GetDailySpend(wallet+"/TRX", now)
+		if err != nil {
+			log.Printf("warning: failed to read daily TRX spend for budget: %v", err)
+		}
 		spentTRX := float64(spent) / 1_000_000
 		remaining["trx_spent_today"] = spentTRX
 		remaining["trx_remaining_today"] = wp.DailyLimitTRX - spentTRX
@@ -69,7 +202,10 @@ func (e *Engine) GetRemainingBudget(wallet string) map[string]any {
 	for token, tl := range wp.TokenLimits {
 		if tl.DailyLimitUnits > 0 {
 			spendKey := fmt.Sprintf("%s/%s", wallet, token)
-			spentRaw, _ := e.store.GetDailySpend(spendKey, now)
+			spentRaw, err := e.store.GetDailySpend(spendKey, now)
+			if err != nil {
+				log.Printf("warning: failed to read daily spend for %s: %v", spendKey, err)
+			}
 			mult := decimalMultiplier(tl.Decimals)
 			spentHuman := float64(spentRaw) / mult
 			remaining[token+"_spent_today"] = spentHuman
@@ -116,6 +252,8 @@ func (e *Engine) Check(intent *Intent) (*CheckResult, error) {
 	}
 
 	// 2. Per-TX token unit limit (stateless, compared in raw on-chain units)
+	var approvalNeeded bool
+	var approvalReason string
 	if tl := wp.TokenLimits[intent.TokenID]; tl != nil {
 		rawLimit := tl.RawPerTxLimit()
 		if rawLimit > 0 && intent.TokenAmount > rawLimit {
@@ -124,14 +262,11 @@ func (e *Engine) Check(intent *Intent) (*CheckResult, error) {
 				Reason:  fmt.Sprintf("transaction amount exceeds per-tx token limit of %.0f %s for wallet %q", tl.PerTxLimitUnits, intent.TokenID, intent.WalletName),
 			}, nil
 		}
-		// Per-token approval threshold
+		// Per-token approval threshold — flag but don't return yet (need stateful checks first)
 		rawApproval := tl.RawApprovalThreshold()
 		if rawApproval > 0 && intent.TokenAmount > rawApproval {
-			return &CheckResult{
-				Allowed:          false,
-				ApprovalRequired: true,
-				Reason:           fmt.Sprintf("transaction amount exceeds approval threshold of %.0f %s for wallet %q — approval required", tl.ApprovalRequiredAboveUnits, intent.TokenID, intent.WalletName),
-			}, nil
+			approvalNeeded = true
+			approvalReason = fmt.Sprintf("transaction amount exceeds approval threshold of %.0f %s for wallet %q — approval required", tl.ApprovalRequiredAboveUnits, intent.TokenID, intent.WalletName)
 		}
 	}
 
@@ -147,13 +282,12 @@ func (e *Engine) Check(intent *Intent) (*CheckResult, error) {
 		}
 	}
 
-	// 4. Approval threshold (stateless — check before reserving spend)
-	if intent.TokenID == "TRX" && wp.ApprovalRequiredAboveTRX > 0 && intent.AmountTRX() > wp.ApprovalRequiredAboveTRX {
-		return &CheckResult{
-			Allowed:          false,
-			ApprovalRequired: true,
-			Reason:           fmt.Sprintf("transaction amount %.6f TRX exceeds approval threshold of %.0f TRX for wallet %q — approval required", intent.AmountTRX(), wp.ApprovalRequiredAboveTRX, intent.WalletName),
-		}, nil
+	// 4. Legacy TRX approval threshold — only if token_limits["TRX"] doesn't exist
+	if !approvalNeeded && intent.TokenID == "TRX" && wp.ApprovalRequiredAboveTRX > 0 && intent.AmountTRX() > wp.ApprovalRequiredAboveTRX {
+		if _, exists := wp.TokenLimits["TRX"]; !exists {
+			approvalNeeded = true
+			approvalReason = fmt.Sprintf("transaction amount %.6f TRX exceeds approval threshold of %.0f TRX for wallet %q — approval required", intent.AmountTRX(), wp.ApprovalRequiredAboveTRX, intent.WalletName)
+		}
 	}
 	// TODO: approval_required_above_usd (requires price service #85)
 
@@ -218,6 +352,15 @@ func (e *Engine) Check(intent *Intent) (*CheckResult, error) {
 
 	// TODO: Aggregate USD limits (requires price service #85)
 
+	// 7. Approval threshold — return after stateful checks so daily spend is already reserved
+	if approvalNeeded {
+		return &CheckResult{
+			Allowed:          false,
+			ApprovalRequired: true,
+			Reason:           approvalReason,
+		}, nil
+	}
+
 	return &CheckResult{Allowed: true}, nil
 }
 
@@ -253,6 +396,53 @@ func (e *Engine) ReleaseReserve(intent *Intent) {
 	}
 }
 
+// NotifyBroadcast sends a post-broadcast notification if the approver supports it.
+func (e *Engine) NotifyBroadcast(ctx context.Context, txid string, success bool) {
+	if e == nil || e.approver == nil {
+		return
+	}
+	if notifier, ok := e.approver.(approval.Notifier); ok {
+		if err := notifier.NotifyBroadcast(ctx, txid, success); err != nil {
+			log.Printf("warning: failed to send broadcast notification: %v", err)
+		}
+	}
+}
+
+// RecordOverrideSpend tracks the spend from an override transaction without enforcing limits.
+// This ensures daily budget reporting stays accurate after overrides.
+func (e *Engine) RecordOverrideSpend(intent *Intent) {
+	if e == nil || e.store == nil || intent == nil {
+		return
+	}
+	// Guard against int64 overflow (same as Check)
+	if intent.TokenAmount > float64(math.MaxInt64) {
+		log.Printf("warning: override token amount too large to track for wallet %q", intent.WalletName)
+		return
+	}
+	now := time.Now().UTC()
+
+	// Record per-token spend
+	wp := e.cfg.GetPolicy(intent.WalletName)
+	if wp == nil {
+		return
+	}
+	if tl := wp.TokenLimits[intent.TokenID]; tl != nil && tl.DailyLimitUnits > 0 {
+		spendKey := fmt.Sprintf("%s/%s", intent.WalletName, intent.TokenID)
+		if err := e.store.AddDailySpend(spendKey, now, int64(intent.TokenAmount)); err != nil {
+			log.Printf("warning: failed to record override spend for %s: %v", spendKey, err)
+		}
+	}
+
+	// Record legacy TRX spend
+	if intent.TokenID == "TRX" && wp.DailyLimitTRX > 0 {
+		if _, exists := wp.TokenLimits["TRX"]; !exists {
+			if err := e.store.AddDailySpend(intent.WalletName+"/TRX", now, intent.AmountSUN); err != nil {
+				log.Printf("warning: failed to record override TRX spend: %v", err)
+			}
+		}
+	}
+}
+
 // RecordAudit records a transaction in the audit log.
 // Daily spend is already tracked atomically in Check via CheckAndReserve.
 func (e *Engine) RecordAudit(intent *Intent, txid string) error {
@@ -268,5 +458,7 @@ func (e *Engine) RecordAudit(intent *Intent, txid string) error {
 		AmountSUN:  intent.AmountSUN,
 		WalletName: intent.WalletName,
 		TxID:       txid,
+		Reason:     intent.Reason,
+		Override:   intent.IsOverride,
 	})
 }

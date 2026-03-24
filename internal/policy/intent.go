@@ -14,15 +14,19 @@ import (
 
 // Intent represents what a transaction intends to do, extracted for policy evaluation.
 type Intent struct {
-	WalletName  string
-	Action      string // contract type: "TransferContract", "TriggerSmartContract", etc.
-	FromAddr    string
-	ToAddr      string
-	AmountSUN   int64     // TRX amount in SUN (for TRX transfers)
-	TokenID     string    // "TRX" for native transfers, contract address for TRC20
-	TokenAmount float64   // raw on-chain amount (SUN for TRX, raw uint256 for TRC20 before decimals)
-	RawTokenAmt *big.Int  // raw uint256 token amount (before decimals, for overflow-safe checks)
-	CheckTime   time.Time // set by Engine.Check — used by ReleaseReserve for consistent day bucket
+	WalletName   string
+	Action       string // contract type: "TransferContract", "TriggerSmartContract", etc.
+	FromAddr     string
+	ToAddr       string
+	AmountSUN    int64          // TRX amount in SUN (for TRX transfers)
+	TokenID      string         // "TRX" for native transfers, contract address for TRC20
+	TokenAmount  float64        // raw on-chain amount (SUN for TRX, raw uint256 for TRC20 before decimals)
+	RawTokenAmt  *big.Int       // raw uint256 token amount (before decimals, for overflow-safe checks)
+	CheckTime    time.Time      // set by Engine.Check — used by ReleaseReserve for consistent day bucket
+	TxExpiry     time.Time      // transaction expiry from protobuf (for approval timeout)
+	ContractData map[string]any // decoded fields for approval messages
+	Reason       string         // agent-provided reason for the transaction
+	IsOverride   bool           // true when this is a one-shot limit override request
 }
 
 // IntentFromContractData builds an Intent from decoded transaction contract data.

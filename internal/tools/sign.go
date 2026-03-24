@@ -36,21 +36,36 @@ func RegisterSignTools(s *server.MCPServer, pool *nodepool.Pool, wm *wallet.Mana
 		handleGetWalletPolicy(pe, wm),
 	)
 
+	// One-shot limit override — agent calls this when a limit denial is hit
+	if pe != nil {
+		s.AddTool(
+			mcp.NewTool("request_limit_override",
+				mcp.WithDescription("Request a one-time limit override via Telegram approval when a transaction exceeds policy limits. Use this after sign_and_broadcast returns a policy denial. The transaction is rebuilt and broadcast after human approval."),
+				mcp.WithString("transaction_hex", mcp.Required(), mcp.Description("The unsigned transaction hex that was denied")),
+				mcp.WithString("wallet", mcp.Required(), mcp.Description("Wallet name")),
+				mcp.WithString("reason", mcp.Required(), mcp.Description("Why this transaction needs to exceed the limit")),
+			),
+			handleRequestLimitOverride(pool, wm, pe),
+		)
+	}
+
 	// sign_and_broadcast and sign_and_confirm always available — they enforce policy
 	s.AddTool(
 		mcp.NewTool("sign_and_broadcast",
-			mcp.WithDescription("Sign and broadcast a transaction in one step. Enforces wallet policy (spend limits, whitelist) when configured."),
+			mcp.WithDescription("Sign and broadcast a transaction in one step. Enforces wallet policy (spend limits, whitelist) when configured. If approval is required, the transaction is rebuilt fresh after approval — the final txid may differ from the original transaction."),
 			mcp.WithString("transaction_hex", mcp.Required(), mcp.Description("Unsigned transaction hex")),
 			mcp.WithString("wallet", mcp.Required(), mcp.Description("Wallet name or address")),
+			mcp.WithString("reason", mcp.Description("Reason for this transaction — shown in approval messages")),
 		),
 		handleSignAndBroadcast(pool, wm, pe),
 	)
 
 	s.AddTool(
 		mcp.NewTool("sign_and_confirm",
-			mcp.WithDescription("Sign, broadcast, and wait for on-chain confirmation. Enforces wallet policy when configured."),
+			mcp.WithDescription("Sign, broadcast, and wait for on-chain confirmation. Enforces wallet policy when configured. If approval is required, the transaction is rebuilt fresh after approval — the final txid may differ from the original transaction."),
 			mcp.WithString("transaction_hex", mcp.Required(), mcp.Description("Unsigned transaction hex")),
 			mcp.WithString("wallet", mcp.Required(), mcp.Description("Wallet name or address")),
+			mcp.WithString("reason", mcp.Description("Reason for this transaction — shown in approval messages")),
 		),
 		handleSignAndConfirm(pool, wm, pe),
 	)
@@ -177,8 +192,14 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.
 			if intentErr != nil && pe != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: unable to extract intent: %v — denied by policy", intentErr)), nil
 			}
+			if intent != nil {
+				intent.ContractData = contractData
+				intent.Reason = req.GetString("reason", "")
+				if tx.RawData != nil && tx.RawData.Expiration > 0 {
+					intent.TxExpiry = time.UnixMilli(tx.RawData.Expiration)
+				}
+			}
 		} else if pe != nil {
-			// Fail closed: unknown TX type with active policy = deny
 			return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: unable to decode transaction (%v) — denied by policy", decErr)), nil
 		}
 
@@ -190,21 +211,50 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.
 			if pErr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: policy check failed: %v", pErr)), nil
 			}
+			// Check may reserve daily spend — arm rollback immediately
+			reserved = result.Allowed || result.ApprovalRequired
+			if reserved {
+				defer func() {
+					if reserved {
+						pe.ReleaseReserve(intent)
+					}
+				}()
+			}
 			if !result.Allowed {
 				if result.ApprovalRequired {
+					if !pe.HasApprover() {
+						return mcp.NewToolResultJSON(map[string]any{
+							"status": "approval_required",
+							"reason": result.Reason,
+							"hint":   "No approval backend configured. Configure telegram approval in policy.yaml to enable interactive approval.",
+						})
+					}
+					progress.Send(3, "Requesting approval...")
+					approved, aErr := pe.RequestApproval(ctx, intent)
+					if aErr != nil {
+						return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: %v", aErr)), nil
+					}
+					if !approved {
+						return mcp.NewToolResultJSON(map[string]any{
+							"status": "approval_rejected",
+							"reason": result.Reason,
+						})
+					}
+					// Approved — rebuild TX fresh (original may have expired during approval)
+					progress.Send(3, "Rebuilding transaction...")
+					freshTx, rebuildErr := rebuildTransaction(ctx, pool, intent)
+					if rebuildErr != nil {
+						return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: failed to rebuild TX after approval: %v", rebuildErr)), nil
+					}
+					tx = freshTx
+				} else {
 					return mcp.NewToolResultJSON(map[string]any{
-						"status": "approval_required",
+						"status": "policy_denied",
 						"reason": result.Reason,
+						"hint":   "Use request_limit_override tool with a reason to request a one-time limit override via Telegram approval.",
 					})
 				}
-				return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: policy denied: %s", result.Reason)), nil
 			}
-			reserved = true
-			defer func() {
-				if reserved {
-					pe.ReleaseReserve(intent)
-				}
-			}()
 		}
 
 		progress.Send(3, "Signing with wallet...")
@@ -236,11 +286,12 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.
 		// Broadcast succeeded — keep the reservation
 		reserved = false
 
-		// Record audit
+		// Record audit + notify approver
 		if intent != nil && pe != nil {
 			if err := pe.RecordAudit(intent, txid); err != nil {
 				log.Printf("ERROR: failed to record audit for wallet %q txid %s: %v", intent.WalletName, txid, err)
 			}
+			pe.NotifyBroadcast(ctx, txid, true)
 		}
 
 		result := map[string]any{
@@ -288,6 +339,13 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.En
 			if intentErr != nil && pe != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: unable to extract intent: %v — denied by policy", intentErr)), nil
 			}
+			if intent != nil {
+				intent.ContractData = decoded.Fields
+				intent.Reason = req.GetString("reason", "")
+				if tx.RawData != nil && tx.RawData.Expiration > 0 {
+					intent.TxExpiry = time.UnixMilli(tx.RawData.Expiration)
+				}
+			}
 		} else if pe != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: unable to decode transaction (%v) — denied by policy", decErr)), nil
 		}
@@ -300,21 +358,50 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.En
 			if pErr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: policy check failed: %v", pErr)), nil
 			}
+			// Check may reserve daily spend — arm rollback immediately
+			reserved = result.Allowed || result.ApprovalRequired
+			if reserved {
+				defer func() {
+					if reserved {
+						pe.ReleaseReserve(intent)
+					}
+				}()
+			}
 			if !result.Allowed {
 				if result.ApprovalRequired {
+					if !pe.HasApprover() {
+						return mcp.NewToolResultJSON(map[string]any{
+							"status": "approval_required",
+							"reason": result.Reason,
+							"hint":   "No approval backend configured. Configure telegram approval in policy.yaml to enable interactive approval.",
+						})
+					}
+					progress.Send(3, "Requesting approval...")
+					approved, aErr := pe.RequestApproval(ctx, intent)
+					if aErr != nil {
+						return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: %v", aErr)), nil
+					}
+					if !approved {
+						return mcp.NewToolResultJSON(map[string]any{
+							"status": "approval_rejected",
+							"reason": result.Reason,
+						})
+					}
+					// Approved — rebuild TX fresh
+					progress.Send(3, "Rebuilding transaction...")
+					freshTx, rebuildErr := rebuildTransaction(ctx, pool, intent)
+					if rebuildErr != nil {
+						return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: failed to rebuild TX after approval: %v", rebuildErr)), nil
+					}
+					tx = freshTx
+				} else {
 					return mcp.NewToolResultJSON(map[string]any{
-						"status": "approval_required",
+						"status": "policy_denied",
 						"reason": result.Reason,
+						"hint":   "Use request_limit_override tool with a reason to request a one-time limit override via Telegram approval.",
 					})
 				}
-				return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: policy denied: %s", result.Reason)), nil
 			}
-			reserved = true
-			defer func() {
-				if reserved {
-					pe.ReleaseReserve(intent)
-				}
-			}()
 		}
 
 		progress.Send(3, "Signing with wallet...")
@@ -422,6 +509,134 @@ func handleBroadcastTransaction(pool *nodepool.Pool) server.ToolHandlerFunc {
 	}
 }
 
+// rebuildTransaction creates a fresh transaction from the intent after approval.
+// This ensures the TX has a valid on-chain expiry (TRON TXs expire ~60s).
+func rebuildTransaction(ctx context.Context, pool *nodepool.Pool, intent *policy.Intent) (*core.Transaction, error) {
+	if intent.Action != "TransferContract" {
+		return nil, fmt.Errorf("cannot rebuild %s transactions — approval only supported for TransferContract", intent.Action)
+	}
+	if err := validateAddress(intent.FromAddr); err != nil {
+		return nil, fmt.Errorf("invalid from address for rebuild: %w", err)
+	}
+	if err := validateAddress(intent.ToAddr); err != nil {
+		return nil, fmt.Errorf("invalid to address for rebuild: %w", err)
+	}
+
+	ext, err := pool.Client().TransferCtx(ctx, intent.FromAddr, intent.ToAddr, intent.AmountSUN)
+	if err != nil {
+		return nil, fmt.Errorf("rebuilding transfer: %w", err)
+	}
+	return ext.Transaction, nil
+}
+
+func handleRequestLimitOverride(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.Engine) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		txHex := req.GetString("transaction_hex", "")
+		walletName := wm.ResolveWalletName(req.GetString("wallet", ""))
+		reason := req.GetString("reason", "")
+
+		if walletName == "" {
+			return mcp.NewToolResultError("wallet is required"), nil
+		}
+		if reason == "" {
+			return mcp.NewToolResultError("reason is required for limit override requests"), nil
+		}
+
+		tx, err := parseAndValidateTx(txHex)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		// Decode intent
+		decoded, decErr := transaction.DecodeContractData(tx)
+		if decErr != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: unable to decode transaction: %v", decErr)), nil
+		}
+		intent, intentErr := policy.IntentFromContractData(walletName, decoded)
+		if intentErr != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: %v", intentErr)), nil
+		}
+		intent.ContractData = decoded.Fields
+		intent.Reason = reason
+		intent.IsOverride = true
+
+		// Still enforce whitelist — override only bypasses amount limits
+		wp := pe.GetPolicy(walletName)
+		if wp != nil && len(wp.Whitelist) > 0 && intent.ToAddr != "" {
+			allowed := false
+			for _, addr := range wp.Whitelist {
+				if addr == intent.ToAddr {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: destination %s is not in the whitelist", intent.ToAddr)), nil
+			}
+		}
+
+		// Request approval via Telegram
+		if !pe.HasApprover() {
+			return mcp.NewToolResultError("request_limit_override: no approval backend configured — configure telegram approval in policy.yaml"), nil
+		}
+		approved, aErr := pe.RequestApproval(ctx, intent)
+		if aErr != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: %v", aErr)), nil
+		}
+		if !approved {
+			return mcp.NewToolResultJSON(map[string]any{
+				"status": "override_rejected",
+				"reason": "limit override was rejected by approver",
+			})
+		}
+
+		// Approved — rebuild TX fresh, sign, broadcast
+		freshTx, rebuildErr := rebuildTransaction(ctx, pool, intent)
+		if rebuildErr != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: failed to rebuild TX: %v", rebuildErr)), nil
+		}
+
+		s, err := wm.GetSigner(walletName)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: %v", err)), nil
+		}
+
+		signedTx, err := s.Sign(freshTx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: failed to sign: %v", err)), nil
+		}
+
+		txid, err := computeTxID(signedTx)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		ret, err := pool.Client().BroadcastCtx(ctx, signedTx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: broadcast failed: %v", err)), nil
+		}
+		if !ret.Result {
+			return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: broadcast rejected: %s %s", ret.Code.String(), string(ret.Message))), nil
+		}
+
+		// Record override spend (tracks daily budget without enforcing limits)
+		pe.RecordOverrideSpend(intent)
+		if err := pe.RecordAudit(intent, txid); err != nil {
+			log.Printf("ERROR: failed to record override audit: %v", err)
+		}
+		pe.NotifyBroadcast(ctx, txid, true)
+
+		return mcp.NewToolResultJSON(map[string]any{
+			"status":   "override_approved",
+			"txid":     txid,
+			"success":  true,
+			"code":     ret.Code.String(),
+			"message":  string(ret.Message),
+			"override": true,
+		})
+	}
+}
+
 func handleGetWalletPolicy(pe *policy.Engine, wm *wallet.Manager) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		walletName := req.GetString("wallet", "")
@@ -451,9 +666,10 @@ func handleGetWalletPolicy(pe *policy.Engine, wm *wallet.Manager) server.ToolHan
 		}
 
 		result := map[string]any{
-			"wallet":         walletName,
-			"policy_enabled": true,
-			"has_policy":     true,
+			"wallet":              walletName,
+			"policy_enabled":      true,
+			"has_policy":          true,
+			"approver_configured": pe.HasApprover(),
 		}
 
 		// TRX limits

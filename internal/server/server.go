@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/fbsobreira/gotron-mcp/internal/approval"
 	"github.com/fbsobreira/gotron-mcp/internal/config"
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/policy"
@@ -148,5 +149,31 @@ func initPolicyEngine(cfg *config.Config, pool *nodepool.Pool) *policy.Engine {
 
 	pe := policy.NewEngine(policyCfg, store)
 	log.Printf("Policy engine loaded: %d wallet(s) configured", len(policyCfg.Wallets))
+
+	// Configure approval backend
+	if policyCfg.Approval != nil && policyCfg.Approval.Method == "telegram" {
+		tgCfg := policyCfg.Approval.Telegram
+		if tgCfg == nil {
+			log.Printf("warning: approval method 'telegram' but no telegram config section")
+		} else if tgCfg.BotTokenEnv == "" {
+			log.Printf("warning: telegram.bot_token_env not configured — Telegram approval disabled")
+		} else if botToken := os.Getenv(tgCfg.BotTokenEnv); botToken == "" {
+			log.Printf("warning: env var %s not set — Telegram approval disabled", tgCfg.BotTokenEnv)
+		} else {
+			ta, tErr := approval.NewTelegramApprover(approval.TelegramConfig{
+				BotToken:        botToken,
+				AuthorizedUsers: tgCfg.AuthorizedUsers,
+				ChatID:          tgCfg.ChatID,
+				TimeoutSeconds:  tgCfg.TimeoutSeconds,
+			})
+			if tErr != nil {
+				log.Printf("warning: failed to create Telegram approver: %v", tErr)
+			} else {
+				pe.SetApprover(ta)
+				log.Printf("Telegram approval bot configured (chat: %d)", tgCfg.ChatID)
+			}
+		}
+	}
+
 	return pe
 }

@@ -23,6 +23,8 @@ type AuditEntry struct {
 	AmountSUN  int64     `json:"amount_sun"`
 	WalletName string    `json:"wallet"`
 	TxID       string    `json:"txid"`
+	Reason     string    `json:"reason,omitempty"`
+	Override   bool      `json:"override,omitempty"`
 }
 
 // Store provides persistent storage for daily spend tracking and audit logging.
