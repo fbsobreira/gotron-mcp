@@ -329,6 +329,44 @@ func TestBatchGetPrices_CachesResults(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&callCount), "should use cache from batch")
 }
 
+func TestBatchGetPrices_StaleFallbackOnError(t *testing.T) {
+	var callCount int32
+	_, svc := newMockCoinGecko(t, func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&callCount, 1)
+		if n == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"tron":{"usd":0.12},"tether":{"usd":1.0}}`)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	})
+
+	// First batch succeeds — populates cache
+	prices, err := svc.BatchGetPrices(context.Background(), []string{"tron", "tether"})
+	require.NoError(t, err)
+	assert.Len(t, prices, 2)
+
+	// Wait for cache to expire
+	time.Sleep(1100 * time.Millisecond)
+
+	// Second batch fails — should return stale values
+	prices, err = svc.BatchGetPrices(context.Background(), []string{"tron", "tether"})
+	require.NoError(t, err, "should fall back to stale cache on error")
+	assert.InDelta(t, 0.12, prices["tron"], 0.001)
+	assert.InDelta(t, 1.0, prices["tether"], 0.001)
+}
+
+func TestBatchGetPrices_NoStaleReturnsError(t *testing.T) {
+	_, svc := newMockCoinGecko(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+
+	// No cache, server fails — should return error
+	_, err := svc.BatchGetPrices(context.Background(), []string{"tron"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "batch price fetch")
+}
+
 func TestSetCache_EvictsOldestEntries(t *testing.T) {
 	svc := NewService(Config{CacheTTL: 60 * time.Second})
 	svc.maxCacheSize = 5 // low limit to trigger eviction

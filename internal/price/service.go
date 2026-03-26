@@ -163,17 +163,18 @@ func (s *Service) GetTokenPrice(ctx context.Context, tokenID string) (float64, e
 }
 
 // BatchGetPrices fetches prices for multiple CoinGecko IDs in one call.
+// Falls back to stale cached values on fetch error, consistent with single-token methods.
 func (s *Service) BatchGetPrices(ctx context.Context, coinIDs []string) (map[string]float64, error) {
 	ids := strings.Join(coinIDs, ",")
 	path := fmt.Sprintf("/simple/price?ids=%s&vs_currencies=usd", url.QueryEscape(ids))
-	body, err := s.doGet(ctx, path)
-	if err != nil {
-		return nil, fmt.Errorf("batch price fetch: %w", err)
+	body, fetchErr := s.doGet(ctx, path)
+	if fetchErr != nil {
+		return s.batchStale(coinIDs, fetchErr)
 	}
 
 	var result map[string]map[string]float64
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("parsing batch price response: %w", err)
+		return s.batchStale(coinIDs, fmt.Errorf("parsing batch price response: %w", err))
 	}
 
 	prices := make(map[string]float64, len(result))
@@ -184,6 +185,22 @@ func (s *Service) BatchGetPrices(ctx context.Context, coinIDs []string) (map[str
 		}
 	}
 	return prices, nil
+}
+
+// batchStale returns stale cached prices for the requested IDs on fetch error.
+// Returns the original error only if no stale values are available.
+func (s *Service) batchStale(coinIDs []string, fetchErr error) (map[string]float64, error) {
+	prices := make(map[string]float64)
+	for _, id := range coinIDs {
+		if stale := s.getStale("id:" + id); stale != nil {
+			prices[id] = stale.USD
+		}
+	}
+	if len(prices) > 0 {
+		log.Printf("price: using stale prices for batch fetch (%d/%d available, error: %v)", len(prices), len(coinIDs), fetchErr)
+		return prices, nil
+	}
+	return nil, fmt.Errorf("batch price fetch: %w", fetchErr)
 }
 
 // --- Cache ---
