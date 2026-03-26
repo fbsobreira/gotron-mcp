@@ -2,7 +2,11 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsHostedMode(t *testing.T) {
@@ -18,9 +22,7 @@ func TestIsHostedMode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &Config{Transport: tt.transport}
-			if got := cfg.IsHostedMode(); got != tt.want {
-				t.Errorf("IsHostedMode() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, cfg.IsHostedMode(), "IsHostedMode()")
 		})
 	}
 }
@@ -46,9 +48,7 @@ func TestEnvOrDefault(t *testing.T) {
 				_ = os.Unsetenv(tt.key)
 			}
 			got := envOrDefault(tt.key, tt.fallback)
-			if got != tt.want {
-				t.Errorf("envOrDefault(%q, %q) = %q, want %q", tt.key, tt.fallback, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "envOrDefault(%q, %q)", tt.key, tt.fallback)
 		})
 	}
 }
@@ -66,12 +66,8 @@ func TestNetworkNodes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, ok := networkNodes[tt.network]
-			if !ok {
-				t.Fatalf("network %q not found in networkNodes", tt.network)
-			}
-			if got != tt.want {
-				t.Errorf("networkNodes[%q] = %q, want %q", tt.network, got, tt.want)
-			}
+			require.True(t, ok, "network %q not found in networkNodes", tt.network)
+			assert.Equal(t, tt.want, got, "networkNodes[%q]", tt.network)
 		})
 	}
 }
@@ -91,9 +87,129 @@ func TestResolveNode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := resolveNode(tt.network)
-			if got != tt.want {
-				t.Errorf("resolveNode(%q) = %q, want %q", tt.network, got, tt.want)
+			assert.Equal(t, tt.want, got, "resolveNode(%q)", tt.network)
+		})
+	}
+}
+
+func TestConfig_DefaultPolicyConfig(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err, "UserHomeDir must succeed")
+
+	tests := []struct {
+		name   string
+		envVal string
+		want   string
+	}{
+		{
+			"empty defaults to home-based path",
+			"",
+			filepath.Join(home, ".gotron-mcp", "policy.yaml"),
+		},
+		{
+			"env override is preserved",
+			"/custom/policy.yaml",
+			"/custom/policy.yaml",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{PolicyConfig: tt.envVal}
+			if cfg.PolicyConfig == "" && home != "" {
+				cfg.PolicyConfig = filepath.Join(home, ".gotron-mcp", "policy.yaml")
 			}
+			assert.Equal(t, tt.want, cfg.PolicyConfig)
+		})
+	}
+}
+
+func TestConfig_DefaultStateDir(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err, "UserHomeDir must succeed")
+
+	tests := []struct {
+		name   string
+		envVal string
+		want   string
+	}{
+		{
+			"empty defaults to home-based path",
+			"",
+			filepath.Join(home, ".gotron-mcp"),
+		},
+		{
+			"env override is preserved",
+			"/custom/state",
+			"/custom/state",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{StateDir: tt.envVal}
+			if cfg.StateDir == "" && home != "" {
+				cfg.StateDir = filepath.Join(home, ".gotron-mcp")
+			}
+			assert.Equal(t, tt.want, cfg.StateDir)
+		})
+	}
+}
+
+func TestConfig_DefaultKeystoreDir(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err, "UserHomeDir must succeed")
+
+	tests := []struct {
+		name   string
+		envVal string
+		want   string
+	}{
+		{
+			"empty defaults to home-based path",
+			"",
+			filepath.Join(home, ".gotron-mcp", "wallets"),
+		},
+		{
+			"env override is preserved",
+			"/custom/wallets",
+			"/custom/wallets",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{KeystoreDir: tt.envVal}
+			if cfg.KeystoreDir == "" && home != "" {
+				cfg.KeystoreDir = filepath.Join(home, ".gotron-mcp", "wallets")
+			}
+			assert.Equal(t, tt.want, cfg.KeystoreDir)
+		})
+	}
+}
+
+func TestEnvOrDefaultInt(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      string
+		envVal   string
+		setEnv   bool
+		fallback int
+		want     int
+	}{
+		{"env set valid", "TEST_INT_VAR", "42", true, 0, 42},
+		{"env unset uses fallback", "TEST_INT_UNSET_XYZ", "", false, 10, 10},
+		{"env empty uses fallback", "TEST_INT_EMPTY", "", true, 5, 5},
+		{"env invalid uses fallback", "TEST_INT_INVALID", "abc", true, 7, 7},
+		{"env negative uses fallback", "TEST_INT_NEG", "-1", true, 3, 3},
+		{"env zero", "TEST_INT_ZERO", "0", true, 99, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setEnv {
+				t.Setenv(tt.key, tt.envVal)
+			} else {
+				_ = os.Unsetenv(tt.key)
+			}
+			got := envOrDefaultInt(tt.key, tt.fallback)
+			assert.Equal(t, tt.want, got, "envOrDefaultInt(%q, %d)", tt.key, tt.fallback)
 		})
 	}
 }

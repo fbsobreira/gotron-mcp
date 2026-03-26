@@ -23,32 +23,35 @@ const bufSize = 1024 * 1024
 type mockWalletServer struct {
 	api.UnimplementedWalletServer
 
-	GetAccountFunc                 func(context.Context, *core.Account) (*core.Account, error)
-	GetAccountResourceFunc         func(context.Context, *core.Account) (*api.AccountResourceMessage, error)
-	GetNowBlock2Func               func(context.Context, *api.EmptyMessage) (*api.BlockExtention, error)
-	GetBlockByNum2Func             func(context.Context, *api.NumberMessage) (*api.BlockExtention, error)
-	GetTransactionByIdFunc         func(context.Context, *api.BytesMessage) (*core.Transaction, error)
-	GetTransactionInfoByIdFunc     func(context.Context, *api.BytesMessage) (*core.TransactionInfo, error)
-	GetNodeInfoFunc                func(context.Context, *api.EmptyMessage) (*core.NodeInfo, error)
-	GetEnergyPricesFunc            func(context.Context, *api.EmptyMessage) (*api.PricesResponseMessage, error)
-	GetBandwidthPricesFunc         func(context.Context, *api.EmptyMessage) (*api.PricesResponseMessage, error)
-	ListWitnessesFunc              func(context.Context, *api.EmptyMessage) (*api.WitnessList, error)
-	ListProposalsFunc              func(context.Context, *api.EmptyMessage) (*api.ProposalList, error)
-	TriggerConstantContractFunc    func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error)
-	BroadcastTransactionFunc       func(context.Context, *core.Transaction) (*api.Return, error)
-	FreezeBalanceV2Func            func(context.Context, *core.FreezeBalanceV2Contract) (*api.TransactionExtention, error)
-	UnfreezeBalanceV2Func          func(context.Context, *core.UnfreezeBalanceV2Contract) (*api.TransactionExtention, error)
-	CreateTransaction2Func         func(context.Context, *core.TransferContract) (*api.TransactionExtention, error)
-	TriggerContractFunc            func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error)
-	VoteWitnessAccount2Func        func(context.Context, *core.VoteWitnessContract) (*api.TransactionExtention, error)
-	EstimateEnergyFunc             func(context.Context, *core.TriggerSmartContract) (*api.EstimateEnergyMessage, error)
-	GetTransactionFromPendingFunc  func(context.Context, *api.BytesMessage) (*core.Transaction, error)
-	GetTransactionListFromPendFunc func(context.Context, *api.EmptyMessage) (*api.TransactionIdList, error)
-	GetPendingSizeFunc             func(context.Context, *api.EmptyMessage) (*api.NumberMessage, error)
-	GetContractFunc                func(context.Context, *api.BytesMessage) (*core.SmartContract, error)
-	DelegateResourceFunc           func(context.Context, *core.DelegateResourceContract) (*api.TransactionExtention, error)
-	UnDelegateResourceFunc         func(context.Context, *core.UnDelegateResourceContract) (*api.TransactionExtention, error)
-	WithdrawExpireUnfreezeFunc     func(context.Context, *core.WithdrawExpireUnfreezeContract) (*api.TransactionExtention, error)
+	GetAccountFunc                         func(context.Context, *core.Account) (*core.Account, error)
+	GetAccountResourceFunc                 func(context.Context, *core.Account) (*api.AccountResourceMessage, error)
+	GetNowBlock2Func                       func(context.Context, *api.EmptyMessage) (*api.BlockExtention, error)
+	GetBlockByNum2Func                     func(context.Context, *api.NumberMessage) (*api.BlockExtention, error)
+	GetTransactionByIdFunc                 func(context.Context, *api.BytesMessage) (*core.Transaction, error)
+	GetTransactionInfoByIdFunc             func(context.Context, *api.BytesMessage) (*core.TransactionInfo, error)
+	GetNodeInfoFunc                        func(context.Context, *api.EmptyMessage) (*core.NodeInfo, error)
+	GetEnergyPricesFunc                    func(context.Context, *api.EmptyMessage) (*api.PricesResponseMessage, error)
+	GetBandwidthPricesFunc                 func(context.Context, *api.EmptyMessage) (*api.PricesResponseMessage, error)
+	ListWitnessesFunc                      func(context.Context, *api.EmptyMessage) (*api.WitnessList, error)
+	ListProposalsFunc                      func(context.Context, *api.EmptyMessage) (*api.ProposalList, error)
+	TriggerConstantContractFunc            func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error)
+	BroadcastTransactionFunc               func(context.Context, *core.Transaction) (*api.Return, error)
+	FreezeBalanceV2Func                    func(context.Context, *core.FreezeBalanceV2Contract) (*api.TransactionExtention, error)
+	UnfreezeBalanceV2Func                  func(context.Context, *core.UnfreezeBalanceV2Contract) (*api.TransactionExtention, error)
+	CreateTransaction2Func                 func(context.Context, *core.TransferContract) (*api.TransactionExtention, error)
+	TriggerContractFunc                    func(context.Context, *core.TriggerSmartContract) (*api.TransactionExtention, error)
+	VoteWitnessAccount2Func                func(context.Context, *core.VoteWitnessContract) (*api.TransactionExtention, error)
+	EstimateEnergyFunc                     func(context.Context, *core.TriggerSmartContract) (*api.EstimateEnergyMessage, error)
+	GetTransactionFromPendingFunc          func(context.Context, *api.BytesMessage) (*core.Transaction, error)
+	GetTransactionListFromPendFunc         func(context.Context, *api.EmptyMessage) (*api.TransactionIdList, error)
+	GetPendingSizeFunc                     func(context.Context, *api.EmptyMessage) (*api.NumberMessage, error)
+	GetContractFunc                        func(context.Context, *api.BytesMessage) (*core.SmartContract, error)
+	DelegateResourceFunc                   func(context.Context, *core.DelegateResourceContract) (*api.TransactionExtention, error)
+	UnDelegateResourceFunc                 func(context.Context, *core.UnDelegateResourceContract) (*api.TransactionExtention, error)
+	WithdrawExpireUnfreezeFunc             func(context.Context, *core.WithdrawExpireUnfreezeContract) (*api.TransactionExtention, error)
+	GetDelegatedResourceV2Func             func(context.Context, *api.DelegatedResourceMessage) (*api.DelegatedResourceList, error)
+	GetDelegatedResourceAccountIndexV2Func func(context.Context, *api.BytesMessage) (*core.DelegatedResourceAccountIndex, error)
+	GetCanDelegatedMaxSizeFunc             func(context.Context, *api.CanDelegatedMaxSizeRequestMessage) (*api.CanDelegatedMaxSizeResponseMessage, error)
 }
 
 func (m *mockWalletServer) GetAccount(ctx context.Context, in *core.Account) (*core.Account, error) {
@@ -231,6 +234,27 @@ func (m *mockWalletServer) WithdrawExpireUnfreeze(ctx context.Context, in *core.
 		return m.WithdrawExpireUnfreezeFunc(ctx, in)
 	}
 	return m.UnimplementedWalletServer.WithdrawExpireUnfreeze(ctx, in)
+}
+
+func (m *mockWalletServer) GetDelegatedResourceV2(ctx context.Context, in *api.DelegatedResourceMessage) (*api.DelegatedResourceList, error) {
+	if m.GetDelegatedResourceV2Func != nil {
+		return m.GetDelegatedResourceV2Func(ctx, in)
+	}
+	return m.UnimplementedWalletServer.GetDelegatedResourceV2(ctx, in)
+}
+
+func (m *mockWalletServer) GetDelegatedResourceAccountIndexV2(ctx context.Context, in *api.BytesMessage) (*core.DelegatedResourceAccountIndex, error) {
+	if m.GetDelegatedResourceAccountIndexV2Func != nil {
+		return m.GetDelegatedResourceAccountIndexV2Func(ctx, in)
+	}
+	return m.UnimplementedWalletServer.GetDelegatedResourceAccountIndexV2(ctx, in)
+}
+
+func (m *mockWalletServer) GetCanDelegatedMaxSize(ctx context.Context, in *api.CanDelegatedMaxSizeRequestMessage) (*api.CanDelegatedMaxSizeResponseMessage, error) {
+	if m.GetCanDelegatedMaxSizeFunc != nil {
+		return m.GetCanDelegatedMaxSizeFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.GetCanDelegatedMaxSize(ctx, in)
 }
 
 // newMockClient creates a GrpcClient connected to an in-memory gRPC server.

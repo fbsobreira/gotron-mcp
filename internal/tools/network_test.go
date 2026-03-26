@@ -9,15 +9,15 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/address"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func TestGetTransaction_Success(t *testing.T) {
 	txID := "0000000000000000000000000000000000000000000000000000000000000001"
 	txIDBytes, err := hex.DecodeString(txID)
-	if err != nil {
-		t.Fatalf("failed to decode txID: %v", err)
-	}
+	require.NoError(t, err, "failed to decode txID")
 
 	mock := &mockWalletServer{
 		GetTransactionByIdFunc: func(_ context.Context, _ *api.BytesMessage) (*core.Transaction, error) {
@@ -48,17 +48,13 @@ func TestGetTransaction_Success(t *testing.T) {
 	result := callTool(t, handleGetTransaction(pool), map[string]any{
 		"transaction_id": txID,
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 }
 
 func TestGetTransaction_ContractData(t *testing.T) {
 	txID := "0000000000000000000000000000000000000000000000000000000000000002"
 	txIDBytes, err := hex.DecodeString(txID)
-	if err != nil {
-		t.Fatalf("failed to decode txID: %v", err)
-	}
+	require.NoError(t, err, "failed to decode txID")
 
 	// Build a real TransferContract proto parameter
 	transfer := &core.TransferContract{
@@ -67,9 +63,7 @@ func TestGetTransaction_ContractData(t *testing.T) {
 		Amount:       5_000_000, // 5 TRX
 	}
 	paramAny, err := anypb.New(transfer)
-	if err != nil {
-		t.Fatalf("failed to create Any: %v", err)
-	}
+	require.NoError(t, err, "failed to create Any")
 
 	mock := &mockWalletServer{
 		GetTransactionByIdFunc: func(_ context.Context, _ *api.BytesMessage) (*core.Transaction, error) {
@@ -100,27 +94,15 @@ func TestGetTransaction_ContractData(t *testing.T) {
 	result := callTool(t, handleGetTransaction(pool), map[string]any{
 		"transaction_id": txID,
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
-	if data["contract_type"] != "TransferContract" {
-		t.Errorf("contract_type = %v, want TransferContract", data["contract_type"])
-	}
+	assert.Equal(t, "TransferContract", data["contract_type"], "contract_type")
 	contractData, ok := data["contract_data"].(map[string]any)
-	if !ok {
-		t.Fatal("expected contract_data map in response")
-	}
-	if got := contractData["owner_address"]; got != "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF" {
-		t.Errorf("owner_address = %v, want TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", got)
-	}
-	if got := contractData["to_address"]; got != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
-		t.Errorf("to_address = %v, want TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", got)
-	}
-	if got := contractData["amount"]; got != "5.000000" {
-		t.Errorf("amount = %v, want 5.000000", got)
-	}
+	require.True(t, ok, "expected contract_data map in response")
+	assert.Equal(t, "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", contractData["owner_address"], "owner_address")
+	assert.Equal(t, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", contractData["to_address"], "to_address")
+	assert.Equal(t, "5.000000", contractData["amount"], "amount")
 }
 
 // mustDecodeAddr decodes a base58 TRON address to bytes for test fixtures.
@@ -135,9 +117,7 @@ func mustDecodeAddr(addr string) []byte {
 func TestGetTransaction_MissingID(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
 	result := callTool(t, handleGetTransaction(pool), map[string]any{})
-	if !result.IsError {
-		t.Error("expected error for missing transaction_id")
-	}
+	assert.True(t, result.IsError, "expected error for missing transaction_id")
 }
 
 func TestGetNetwork_Success(t *testing.T) {
@@ -155,9 +135,7 @@ func TestGetNetwork_Success(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetNetwork(pool, "mainnet", "mock:50051"), map[string]any{})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 }
 
 func TestGetChainParameters_Success(t *testing.T) {
@@ -178,18 +156,12 @@ func TestGetChainParameters_Success(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetChainParameters(pool), map[string]any{})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
 	nodeInfo, ok := data["node_info"].(map[string]any)
-	if !ok {
-		t.Fatal("expected node_info map")
-	}
-	if nodeInfo["begin_sync_num"] != float64(1000) {
-		t.Errorf("begin_sync_num = %v, want 1000", nodeInfo["begin_sync_num"])
-	}
+	require.True(t, ok, "expected node_info map")
+	assert.Equal(t, float64(1000), nodeInfo["begin_sync_num"], "begin_sync_num")
 }
 
 func TestGetChainParameters_Error(t *testing.T) {
@@ -200,9 +172,7 @@ func TestGetChainParameters_Error(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetChainParameters(pool), map[string]any{})
-	if !result.IsError {
-		t.Error("expected error when GetNodeInfo fails")
-	}
+	assert.True(t, result.IsError, "expected error when GetNodeInfo fails")
 }
 
 func TestGetEnergyPrices_Success(t *testing.T) {
@@ -213,9 +183,7 @@ func TestGetEnergyPrices_Success(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetEnergyPrices(pool), map[string]any{})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 }
 
 func TestGetEnergyPrices_Error(t *testing.T) {
@@ -226,9 +194,7 @@ func TestGetEnergyPrices_Error(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetEnergyPrices(pool), map[string]any{})
-	if !result.IsError {
-		t.Error("expected error when GetEnergyPrices fails")
-	}
+	assert.True(t, result.IsError, "expected error when GetEnergyPrices fails")
 }
 
 func TestGetBandwidthPrices_Success(t *testing.T) {
@@ -239,9 +205,7 @@ func TestGetBandwidthPrices_Success(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetBandwidthPrices(pool), map[string]any{})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 }
 
 func TestGetBandwidthPrices_Error(t *testing.T) {
@@ -252,9 +216,7 @@ func TestGetBandwidthPrices_Error(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetBandwidthPrices(pool), map[string]any{})
-	if !result.IsError {
-		t.Error("expected error when GetBandwidthPrices fails")
-	}
+	assert.True(t, result.IsError, "expected error when GetBandwidthPrices fails")
 }
 
 func TestGetPendingTransactions_Success(t *testing.T) {
@@ -268,20 +230,12 @@ func TestGetPendingTransactions_Success(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetPendingTransactions(pool), map[string]any{})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 	data := parseJSONResult(t, result)
-	if data["pool_size"] != float64(3) {
-		t.Errorf("pool_size = %v, want 3", data["pool_size"])
-	}
+	assert.Equal(t, float64(3), data["pool_size"], "pool_size")
 	ids, ok := data["transaction_ids"].([]any)
-	if !ok {
-		t.Fatal("expected transaction_ids array")
-	}
-	if len(ids) != 3 {
-		t.Errorf("transaction_ids length = %d, want 3", len(ids))
-	}
+	require.True(t, ok, "expected transaction_ids array")
+	assert.Len(t, ids, 3, "transaction_ids length")
 }
 
 func TestGetPendingTransactions_EmptyPool(t *testing.T) {
@@ -295,21 +249,13 @@ func TestGetPendingTransactions_EmptyPool(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetPendingTransactions(pool), map[string]any{})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 	data := parseJSONResult(t, result)
-	if data["pool_size"] != float64(0) {
-		t.Errorf("pool_size = %v, want 0", data["pool_size"])
-	}
+	assert.Equal(t, float64(0), data["pool_size"], "pool_size")
 	// Verify transaction_ids is [] not null
 	ids, ok := data["transaction_ids"].([]any)
-	if !ok {
-		t.Fatal("expected transaction_ids to be an array, not null")
-	}
-	if len(ids) != 0 {
-		t.Errorf("transaction_ids length = %d, want 0", len(ids))
-	}
+	require.True(t, ok, "expected transaction_ids to be an array, not null")
+	assert.Len(t, ids, 0, "transaction_ids length")
 }
 
 func TestGetPendingTransactions_SizeError(t *testing.T) {
@@ -320,9 +266,7 @@ func TestGetPendingTransactions_SizeError(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetPendingTransactions(pool), map[string]any{})
-	if !result.IsError {
-		t.Error("expected error when GetPendingSize fails")
-	}
+	assert.True(t, result.IsError, "expected error when GetPendingSize fails")
 }
 
 func TestGetPendingTransactions_ListError(t *testing.T) {
@@ -336,9 +280,7 @@ func TestGetPendingTransactions_ListError(t *testing.T) {
 	}
 	pool := newMockPool(t, mock)
 	result := callTool(t, handleGetPendingTransactions(pool), map[string]any{})
-	if !result.IsError {
-		t.Error("expected error when GetTransactionListFromPending fails")
-	}
+	assert.True(t, result.IsError, "expected error when GetTransactionListFromPending fails")
 }
 
 func TestIsTransactionPending_Success(t *testing.T) {
@@ -351,13 +293,9 @@ func TestIsTransactionPending_Success(t *testing.T) {
 	result := callTool(t, handleIsTransactionPending(pool), map[string]any{
 		"transaction_id": "0000000000000000000000000000000000000000000000000000000000000001",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 	data := parseJSONResult(t, result)
-	if data["pending"] != true {
-		t.Errorf("pending = %v, want true", data["pending"])
-	}
+	assert.Equal(t, true, data["pending"], "pending")
 }
 
 func TestIsTransactionPending_NotFound(t *testing.T) {
@@ -370,21 +308,15 @@ func TestIsTransactionPending_NotFound(t *testing.T) {
 	result := callTool(t, handleIsTransactionPending(pool), map[string]any{
 		"transaction_id": "0000000000000000000000000000000000000000000000000000000000000001",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 	data := parseJSONResult(t, result)
-	if data["pending"] != false {
-		t.Errorf("pending = %v, want false", data["pending"])
-	}
+	assert.Equal(t, false, data["pending"], "pending")
 }
 
 func TestIsTransactionPending_MissingID(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
 	result := callTool(t, handleIsTransactionPending(pool), map[string]any{})
-	if !result.IsError {
-		t.Error("expected error for missing transaction_id")
-	}
+	assert.True(t, result.IsError, "expected error for missing transaction_id")
 }
 
 func TestGetPendingByAddress_Success(t *testing.T) {
@@ -397,16 +329,10 @@ func TestGetPendingByAddress_Success(t *testing.T) {
 	result := callTool(t, handleGetPendingByAddress(pool), map[string]any{
 		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 	data := parseJSONResult(t, result)
-	if data["address"] != "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF" {
-		t.Errorf("address = %v, want TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", data["address"])
-	}
-	if data["count"] != float64(0) {
-		t.Errorf("count = %v, want 0", data["count"])
-	}
+	assert.Equal(t, "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", data["address"], "address")
+	assert.Equal(t, float64(0), data["count"], "count")
 }
 
 func TestGetPendingByAddress_WithTransactions(t *testing.T) {
@@ -417,9 +343,7 @@ func TestGetPendingByAddress_WithTransactions(t *testing.T) {
 		Amount:       1_000_000,
 	}
 	paramAny, err := anypb.New(transfer)
-	if err != nil {
-		t.Fatalf("failed to create Any: %v", err)
-	}
+	require.NoError(t, err, "failed to create Any")
 
 	mock := &mockWalletServer{
 		GetTransactionListFromPendFunc: func(_ context.Context, _ *api.EmptyMessage) (*api.TransactionIdList, error) {
@@ -442,37 +366,20 @@ func TestGetPendingByAddress_WithTransactions(t *testing.T) {
 	result := callTool(t, handleGetPendingByAddress(pool), map[string]any{
 		"address": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 	data := parseJSONResult(t, result)
-	if data["count"] != float64(1) {
-		t.Errorf("count = %v, want 1", data["count"])
-	}
+	assert.Equal(t, float64(1), data["count"], "count")
 	txs, ok := data["transactions"].([]any)
-	if !ok || len(txs) == 0 {
-		t.Fatal("expected non-empty transactions array")
-	}
+	require.True(t, ok && len(txs) > 0, "expected non-empty transactions array")
 	tx0 := txs[0].(map[string]any)
-	if tx0["contract_type"] != "TransferContract" {
-		t.Errorf("contract_type = %v, want TransferContract", tx0["contract_type"])
-	}
-	if tx0["transaction_id"] == nil || tx0["transaction_id"] == "" {
-		t.Error("expected transaction_id in entry")
-	}
+	assert.Equal(t, "TransferContract", tx0["contract_type"], "contract_type")
+	assert.NotNil(t, tx0["transaction_id"], "expected transaction_id in entry")
+	assert.NotEqual(t, "", tx0["transaction_id"], "expected transaction_id in entry")
 	cd, ok := tx0["contract_data"].(map[string]any)
-	if !ok {
-		t.Fatal("expected contract_data map in entry")
-	}
-	if got := cd["owner_address"]; got != "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF" {
-		t.Errorf("owner_address = %v, want TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", got)
-	}
-	if got := cd["to_address"]; got != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
-		t.Errorf("to_address = %v, want TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", got)
-	}
-	if got := cd["amount"]; got != "1.000000" {
-		t.Errorf("amount = %v, want 1.000000", got)
-	}
+	require.True(t, ok, "expected contract_data map in entry")
+	assert.Equal(t, "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", cd["owner_address"], "owner_address")
+	assert.Equal(t, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", cd["to_address"], "to_address")
+	assert.Equal(t, "1.000000", cd["amount"], "amount")
 }
 
 func TestGetPendingByAddress_InvalidAddress(t *testing.T) {
@@ -480,9 +387,7 @@ func TestGetPendingByAddress_InvalidAddress(t *testing.T) {
 	result := callTool(t, handleGetPendingByAddress(pool), map[string]any{
 		"address": "invalid",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid address")
 }
 
 func TestNormalizeResult(t *testing.T) {
@@ -498,8 +403,6 @@ func TestNormalizeResult(t *testing.T) {
 	}
 	for _, tt := range tests {
 		got := normalizeResult(tt.in)
-		if got != tt.want {
-			t.Errorf("normalizeResult(%q) = %q, want %q", tt.in, got, tt.want)
-		}
+		assert.Equal(t, tt.want, got, "normalizeResult(%q)", tt.in)
 	}
 }

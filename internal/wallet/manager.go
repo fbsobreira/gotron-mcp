@@ -130,6 +130,24 @@ func (m *Manager) resolveAddress(nameOrAddress string) (string, error) {
 	return "", fmt.Errorf("wallet %q not found", nameOrAddress)
 }
 
+// ResolveWalletName returns the canonical wallet name for a name-or-address input.
+// If the input is a wallet name, returns it. If it's an address, looks up
+// the wallet name via the store. Returns the input unchanged if no mapping is found.
+func (m *Manager) ResolveWalletName(nameOrAddress string) string {
+	// If it looks like a name (not a T-address), return as-is
+	if !strings.HasPrefix(nameOrAddress, "T") || len(nameOrAddress) != 34 {
+		return nameOrAddress
+	}
+	// It's an address — try to find the wallet name
+	for _, name := range m.store.LocalAccounts() {
+		addr, aErr := m.store.AddressFromAccountName(name)
+		if aErr == nil && addr == nameOrAddress {
+			return name
+		}
+	}
+	return nameOrAddress
+}
+
 var validWalletName = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 // validateWalletName checks that the name is safe for filesystem use.

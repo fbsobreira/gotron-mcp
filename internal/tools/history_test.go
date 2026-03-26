@@ -8,6 +8,8 @@ import (
 
 	"github.com/fbsobreira/gotron-mcp/internal/trongrid"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockHistoryClient struct {
@@ -74,18 +76,12 @@ func TestHandleGetTransactionHistory(t *testing.T) {
 			req.Params.Arguments = tt.params
 
 			result, err := handler(context.Background(), req)
-			if err != nil {
-				t.Fatalf("unexpected Go error: %v", err)
-			}
+			require.NoError(t, err, "unexpected Go error")
 			if tt.wantErr {
-				if !result.IsError {
-					t.Error("expected tool error")
-				}
+				assert.True(t, result.IsError, "expected tool error")
 				return
 			}
-			if result.IsError {
-				t.Errorf("unexpected tool error: %v", result.Content)
-			}
+			assert.False(t, result.IsError, "unexpected tool error: %v", result.Content)
 		})
 	}
 }
@@ -104,48 +100,25 @@ func TestHandleGetTransactionHistoryShapedOutput(t *testing.T) {
 	req.Params.Arguments = map[string]any{"address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8"}
 
 	result, err := handler(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.IsError {
-		t.Fatalf("unexpected tool error: %v", result.Content)
-	}
-	if len(result.Content) == 0 {
-		t.Fatal("expected non-empty result content")
-	}
+	require.NoError(t, err, "unexpected error")
+	require.False(t, result.IsError, "unexpected tool error: %v", result.Content)
+	require.NotEmpty(t, result.Content, "expected non-empty result content")
 	tc, ok := result.Content[0].(mcp.TextContent)
-	if !ok {
-		t.Fatalf("expected TextContent, got %T", result.Content[0])
-	}
+	require.True(t, ok, "expected TextContent, got %T", result.Content[0])
 	var data map[string]any
-	if err := json.Unmarshal([]byte(tc.Text), &data); err != nil {
-		t.Fatalf("failed to unmarshal result: %v", err)
-	}
-	if data["count"] != float64(1) {
-		t.Errorf("count = %v, want 1", data["count"])
-	}
+	require.NoError(t, json.Unmarshal([]byte(tc.Text), &data), "failed to unmarshal result")
+	assert.Equal(t, float64(1), data["count"])
 	txs, ok := data["transactions"].([]any)
-	if !ok || len(txs) == 0 {
-		t.Fatal("expected non-empty transactions array")
-	}
+	require.True(t, ok && len(txs) > 0, "expected non-empty transactions array")
 	tx, ok := txs[0].(map[string]any)
-	if !ok {
-		t.Fatalf("expected map for transaction, got %T", txs[0])
-	}
-	if tx["txid"] != "tx1" {
-		t.Errorf("txid = %v, want tx1", tx["txid"])
-	}
+	require.True(t, ok, "expected map for transaction, got %T", txs[0])
+	assert.Equal(t, "tx1", tx["txid"])
 	// Should not have raw_data (full blob) — only shaped fields
-	if _, ok := tx["raw_data"]; ok {
-		t.Error("shaped output should not contain raw_data")
-	}
+	_, hasRawData := tx["raw_data"]
+	assert.False(t, hasRawData, "shaped output should not contain raw_data")
 	meta, ok := data["meta"].(map[string]any)
-	if !ok {
-		t.Fatal("expected meta map in response")
-	}
-	if meta["fingerprint"] != "fp1" {
-		t.Errorf("fingerprint = %v, want fp1", meta["fingerprint"])
-	}
+	require.True(t, ok, "expected meta map in response")
+	assert.Equal(t, "fp1", meta["fingerprint"])
 }
 
 func TestHandleGetTRC20Transfers(t *testing.T) {
@@ -168,38 +141,20 @@ func TestHandleGetTRC20Transfers(t *testing.T) {
 	req.Params.Arguments = map[string]any{"address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8"}
 
 	result, err := handler(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.IsError {
-		t.Fatalf("unexpected tool error: %v", result.Content)
-	}
+	require.NoError(t, err, "unexpected error")
+	require.False(t, result.IsError, "unexpected tool error: %v", result.Content)
 
-	if len(result.Content) == 0 {
-		t.Fatal("expected non-empty result content")
-	}
+	require.NotEmpty(t, result.Content, "expected non-empty result content")
 	tc, ok := result.Content[0].(mcp.TextContent)
-	if !ok {
-		t.Fatalf("expected TextContent, got %T", result.Content[0])
-	}
+	require.True(t, ok, "expected TextContent, got %T", result.Content[0])
 	var data map[string]any
-	if err := json.Unmarshal([]byte(tc.Text), &data); err != nil {
-		t.Fatalf("failed to unmarshal result: %v", err)
-	}
+	require.NoError(t, json.Unmarshal([]byte(tc.Text), &data), "failed to unmarshal result")
 	transfers, ok := data["transfers"].([]any)
-	if !ok || len(transfers) != 1 {
-		t.Fatalf("expected 1 transfer, got %v", data["transfers"])
-	}
+	require.True(t, ok && len(transfers) == 1, "expected 1 transfer, got %v", data["transfers"])
 	tr, ok := transfers[0].(map[string]any)
-	if !ok {
-		t.Fatalf("expected map for transfer, got %T", transfers[0])
-	}
-	if tr["token_symbol"] != "USDT" {
-		t.Errorf("token_symbol = %v, want USDT", tr["token_symbol"])
-	}
-	if tr["from"] != "TFrom" {
-		t.Errorf("from = %v, want TFrom", tr["from"])
-	}
+	require.True(t, ok, "expected map for transfer, got %T", transfers[0])
+	assert.Equal(t, "USDT", tr["token_symbol"])
+	assert.Equal(t, "TFrom", tr["from"])
 }
 
 func TestHandleGetContractEvents(t *testing.T) {
@@ -219,41 +174,21 @@ func TestHandleGetContractEvents(t *testing.T) {
 	req.Params.Arguments = map[string]any{"contract_address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8"}
 
 	result, err := handler(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.IsError {
-		t.Fatalf("unexpected tool error: %v", result.Content)
-	}
+	require.NoError(t, err, "unexpected error")
+	require.False(t, result.IsError, "unexpected tool error: %v", result.Content)
 
-	if len(result.Content) == 0 {
-		t.Fatal("expected non-empty result content")
-	}
+	require.NotEmpty(t, result.Content, "expected non-empty result content")
 	tc, ok := result.Content[0].(mcp.TextContent)
-	if !ok {
-		t.Fatalf("expected TextContent, got %T", result.Content[0])
-	}
+	require.True(t, ok, "expected TextContent, got %T", result.Content[0])
 	var data map[string]any
-	if err := json.Unmarshal([]byte(tc.Text), &data); err != nil {
-		t.Fatalf("failed to unmarshal result: %v", err)
-	}
-	if data["count"] != float64(1) {
-		t.Errorf("count = %v, want 1", data["count"])
-	}
+	require.NoError(t, json.Unmarshal([]byte(tc.Text), &data), "failed to unmarshal result")
+	assert.Equal(t, float64(1), data["count"])
 	events, ok := data["events"].([]any)
-	if !ok || len(events) == 0 {
-		t.Fatal("expected non-empty events array")
-	}
+	require.True(t, ok && len(events) > 0, "expected non-empty events array")
 	ev, ok := events[0].(map[string]any)
-	if !ok {
-		t.Fatalf("expected map for event, got %T", events[0])
-	}
-	if ev["txid"] != "tx1" {
-		t.Errorf("txid = %v, want tx1", ev["txid"])
-	}
-	if ev["event_name"] != "Transfer" {
-		t.Errorf("event_name = %v, want Transfer", ev["event_name"])
-	}
+	require.True(t, ok, "expected map for event, got %T", events[0])
+	assert.Equal(t, "tx1", ev["txid"])
+	assert.Equal(t, "Transfer", ev["event_name"])
 }
 
 func TestHandleGetContractEventsWithName(t *testing.T) {
@@ -277,15 +212,9 @@ func TestHandleGetContractEventsWithName(t *testing.T) {
 	}
 
 	result, err := handler(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.IsError {
-		t.Fatalf("unexpected tool error: %v", result.Content)
-	}
-	if !called {
-		t.Error("expected GetContractEventsByName to be called")
-	}
+	require.NoError(t, err, "unexpected error")
+	require.False(t, result.IsError, "unexpected tool error: %v", result.Content)
+	assert.True(t, called, "expected GetContractEventsByName to be called")
 }
 
 type trackingClient struct {
@@ -313,27 +242,13 @@ func TestParseQueryOpts(t *testing.T) {
 	// Note: JSON unmarshals numbers as float64, which is what mcp-go expects
 
 	opts, err := parseQueryOpts(req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if opts.Limit != 50 {
-		t.Errorf("Limit = %d, want 50", opts.Limit)
-	}
-	if opts.Fingerprint != "abc" {
-		t.Errorf("Fingerprint = %q, want abc", opts.Fingerprint)
-	}
-	if !opts.OnlyConfirmed {
-		t.Error("OnlyConfirmed should be true")
-	}
-	if !opts.OnlyTo {
-		t.Error("OnlyTo should be true")
-	}
-	if opts.MinTimestamp != 1000 {
-		t.Errorf("MinTimestamp = %d, want 1000", opts.MinTimestamp)
-	}
-	if opts.MaxTimestamp != 2000 {
-		t.Errorf("MaxTimestamp = %d, want 2000", opts.MaxTimestamp)
-	}
+	require.NoError(t, err, "unexpected error")
+	assert.Equal(t, 50, opts.Limit)
+	assert.Equal(t, "abc", opts.Fingerprint)
+	assert.True(t, opts.OnlyConfirmed, "OnlyConfirmed should be true")
+	assert.True(t, opts.OnlyTo, "OnlyTo should be true")
+	assert.Equal(t, int64(1000), opts.MinTimestamp)
+	assert.Equal(t, int64(2000), opts.MaxTimestamp)
 }
 
 func TestParseQueryOptsLimitCap(t *testing.T) {
@@ -342,12 +257,8 @@ func TestParseQueryOptsLimitCap(t *testing.T) {
 	// Note: JSON unmarshals numbers as float64, which is what mcp-go expects
 
 	opts, err := parseQueryOpts(req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if opts.Limit != 200 {
-		t.Errorf("Limit = %d, want 200 (capped)", opts.Limit)
-	}
+	require.NoError(t, err, "unexpected error")
+	assert.Equal(t, 200, opts.Limit, "Limit should be capped at 200")
 }
 
 func TestParseQueryOptsDefaultLimit(t *testing.T) {
@@ -355,12 +266,8 @@ func TestParseQueryOptsDefaultLimit(t *testing.T) {
 	req.Params.Arguments = map[string]any{}
 
 	opts, err := parseQueryOpts(req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if opts.Limit != defaultHistoryLimit {
-		t.Errorf("Limit = %d, want %d (default)", opts.Limit, defaultHistoryLimit)
-	}
+	require.NoError(t, err, "unexpected error")
+	assert.Equal(t, defaultHistoryLimit, opts.Limit, "Limit should be default")
 }
 
 func TestParseQueryOptsOnlyFrom(t *testing.T) {
@@ -368,15 +275,9 @@ func TestParseQueryOptsOnlyFrom(t *testing.T) {
 	req.Params.Arguments = map[string]any{"only_from": true}
 
 	opts, err := parseQueryOpts(req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !opts.OnlyFrom {
-		t.Error("OnlyFrom should be true")
-	}
-	if opts.OnlyTo {
-		t.Error("OnlyTo should be false")
-	}
+	require.NoError(t, err, "unexpected error")
+	assert.True(t, opts.OnlyFrom, "OnlyFrom should be true")
+	assert.False(t, opts.OnlyTo, "OnlyTo should be false")
 }
 
 func TestParseQueryOptsMutuallyExclusive(t *testing.T) {
@@ -387,9 +288,7 @@ func TestParseQueryOptsMutuallyExclusive(t *testing.T) {
 	}
 
 	_, err := parseQueryOpts(req)
-	if err == nil {
-		t.Fatal("expected error for only_to + only_from")
-	}
+	require.Error(t, err, "expected error for only_to + only_from")
 }
 
 func TestParseQueryOptsTimestampOrder(t *testing.T) {
@@ -400,9 +299,7 @@ func TestParseQueryOptsTimestampOrder(t *testing.T) {
 	}
 
 	_, err := parseQueryOpts(req)
-	if err == nil {
-		t.Fatal("expected error for min_timestamp > max_timestamp")
-	}
+	require.Error(t, err, "expected error for min_timestamp > max_timestamp")
 }
 
 func TestHandleGetTransactionHistoryNilResponse(t *testing.T) {
@@ -412,12 +309,8 @@ func TestHandleGetTransactionHistoryNilResponse(t *testing.T) {
 	req.Params.Arguments = map[string]any{"address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8"}
 
 	result, err := handler(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected Go error: %v", err)
-	}
-	if !result.IsError {
-		t.Error("expected tool error for nil response")
-	}
+	require.NoError(t, err, "unexpected Go error")
+	assert.True(t, result.IsError, "expected tool error for nil response")
 }
 
 func TestHandleGetTRC20TransfersNilResponse(t *testing.T) {
@@ -427,12 +320,8 @@ func TestHandleGetTRC20TransfersNilResponse(t *testing.T) {
 	req.Params.Arguments = map[string]any{"address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8"}
 
 	result, err := handler(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected Go error: %v", err)
-	}
-	if !result.IsError {
-		t.Error("expected tool error for nil response")
-	}
+	require.NoError(t, err, "unexpected Go error")
+	assert.True(t, result.IsError, "expected tool error for nil response")
 }
 
 func TestHandleGetContractEventsNilResponse(t *testing.T) {
@@ -442,12 +331,8 @@ func TestHandleGetContractEventsNilResponse(t *testing.T) {
 	req.Params.Arguments = map[string]any{"contract_address": "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8"}
 
 	result, err := handler(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected Go error: %v", err)
-	}
-	if !result.IsError {
-		t.Error("expected tool error for nil response")
-	}
+	require.NoError(t, err, "unexpected Go error")
+	assert.True(t, result.IsError, "expected tool error for nil response")
 }
 
 func TestHandleGetTRC20TransfersErrors(t *testing.T) {
@@ -474,12 +359,8 @@ func TestHandleGetTRC20TransfersErrors(t *testing.T) {
 			req.Params.Arguments = tt.params
 
 			result, err := handler(context.Background(), req)
-			if err != nil {
-				t.Fatalf("unexpected Go error: %v", err)
-			}
-			if !result.IsError {
-				t.Error("expected tool error")
-			}
+			require.NoError(t, err, "unexpected Go error")
+			assert.True(t, result.IsError, "expected tool error")
 		})
 	}
 }
@@ -508,12 +389,8 @@ func TestHandleGetContractEventsErrors(t *testing.T) {
 			req.Params.Arguments = tt.params
 
 			result, err := handler(context.Background(), req)
-			if err != nil {
-				t.Fatalf("unexpected Go error: %v", err)
-			}
-			if !result.IsError {
-				t.Error("expected tool error")
-			}
+			require.NoError(t, err, "unexpected Go error")
+			assert.True(t, result.IsError, "expected tool error")
 		})
 	}
 }

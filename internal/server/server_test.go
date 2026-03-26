@@ -6,6 +6,7 @@ import (
 	"github.com/fbsobreira/gotron-mcp/internal/config"
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-sdk/pkg/client"
+	"github.com/stretchr/testify/require"
 )
 
 func newTestPool() *nodepool.Pool {
@@ -21,13 +22,9 @@ func TestNew_HostedMode(t *testing.T) {
 	}
 	pool := newTestPool()
 
-	s, wm := New(cfg, pool)
-	if s == nil {
-		t.Fatal("New() returned nil")
-	}
-	if wm != nil {
-		t.Fatal("expected nil wallet manager in hosted mode")
-	}
+	s, wm, _ := New(cfg, pool)
+	require.NotNil(t, s, "New() returned nil")
+	require.Nil(t, wm, "expected nil wallet manager in hosted mode")
 }
 
 func TestNew_LocalMode(t *testing.T) {
@@ -38,13 +35,9 @@ func TestNew_LocalMode(t *testing.T) {
 	}
 	pool := newTestPool()
 
-	s, wm := New(cfg, pool)
-	if s == nil {
-		t.Fatal("New() returned nil")
-	}
-	if wm != nil {
-		t.Fatal("expected nil wallet manager without keystore config")
-	}
+	s, wm, _ := New(cfg, pool)
+	require.NotNil(t, s, "New() returned nil")
+	require.Nil(t, wm, "expected nil wallet manager without keystore config")
 }
 
 func TestNew_LocalModeWithKeystore(t *testing.T) {
@@ -57,13 +50,9 @@ func TestNew_LocalModeWithKeystore(t *testing.T) {
 	}
 	pool := newTestPool()
 
-	s, wm := New(cfg, pool)
-	if s == nil {
-		t.Fatal("New() returned nil")
-	}
-	if wm == nil {
-		t.Fatal("expected non-nil wallet manager with keystore config")
-	}
+	s, wm, _ := New(cfg, pool)
+	require.NotNil(t, s, "New() returned nil")
+	require.NotNil(t, wm, "expected non-nil wallet manager with keystore config")
 	wm.Close()
 }
 
@@ -77,13 +66,11 @@ func TestNew_HostedModeNoSignTools(t *testing.T) {
 	}
 	pool := newTestPool()
 
-	s, wm := New(cfg, pool)
-	if s == nil {
-		t.Fatal("New() returned nil")
-	}
+	s, wm, _ := New(cfg, pool)
+	require.NotNil(t, s, "New() returned nil")
 	if wm != nil {
 		wm.Close()
-		t.Fatal("expected nil wallet manager in hosted mode even with keystore config")
+		require.Fail(t, "expected nil wallet manager in hosted mode even with keystore config")
 	}
 	// In hosted mode, sign tools should NOT be registered even with keystore
 }

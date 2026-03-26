@@ -58,9 +58,12 @@ func main() {
 		}
 	}
 
-	s, wm := mcpserver.New(cfg, pool)
+	s, wm, pe := mcpserver.New(cfg, pool)
 	if wm != nil {
 		defer wm.Close()
+	}
+	if pe != nil {
+		defer func() { _ = pe.Close() }()
 	}
 
 	switch cfg.Transport {

@@ -8,6 +8,8 @@ import (
 
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -18,9 +20,7 @@ func TestTransferTRX_InvalidFromAddress(t *testing.T) {
 		"to":     "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"amount": "100",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid from address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid from address")
 }
 
 func TestTransferTRX_InvalidToAddress(t *testing.T) {
@@ -30,9 +30,7 @@ func TestTransferTRX_InvalidToAddress(t *testing.T) {
 		"to":     "invalid",
 		"amount": "100",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid to address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid to address")
 }
 
 func TestTransferTRX_InvalidAmount(t *testing.T) {
@@ -42,9 +40,7 @@ func TestTransferTRX_InvalidAmount(t *testing.T) {
 		"to":     "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"amount": "abc",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid amount")
-	}
+	assert.True(t, result.IsError, "expected error for invalid amount")
 }
 
 func TestTransferTRX_ZeroAmount(t *testing.T) {
@@ -54,9 +50,7 @@ func TestTransferTRX_ZeroAmount(t *testing.T) {
 		"to":     "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"amount": "0",
 	})
-	if !result.IsError {
-		t.Error("expected error for zero amount")
-	}
+	assert.True(t, result.IsError, "expected error for zero amount")
 }
 
 func TestTransferTRX_Success(t *testing.T) {
@@ -76,20 +70,12 @@ func TestTransferTRX_Success(t *testing.T) {
 		"to":     "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"amount": "100.5",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
-	if data["type"] != "TransferContract" {
-		t.Errorf("type = %v, want TransferContract", data["type"])
-	}
-	if data["from"] != "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF" {
-		t.Errorf("from = %v", data["from"])
-	}
-	if data["transaction_hex"] == nil || data["transaction_hex"] == "" {
-		t.Error("transaction_hex should not be empty")
-	}
+	assert.Equal(t, "TransferContract", data["type"])
+	assert.Equal(t, "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", data["from"])
+	assert.NotEmpty(t, data["transaction_hex"], "transaction_hex should not be empty")
 }
 
 func TestTransferTRX_WithMemo(t *testing.T) {
@@ -112,24 +98,16 @@ func TestTransferTRX_WithMemo(t *testing.T) {
 		"amount": "1",
 		"memo":   "test payment",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	// Decode the transaction_hex and verify memo was applied
 	data := parseJSONResult(t, result)
 	txHex := data["transaction_hex"].(string)
 	txBytes, err := hex.DecodeString(txHex)
-	if err != nil {
-		t.Fatalf("failed to decode transaction_hex: %v", err)
-	}
+	require.NoError(t, err, "failed to decode transaction_hex")
 	var tx core.Transaction
-	if err := proto.Unmarshal(txBytes, &tx); err != nil {
-		t.Fatalf("failed to unmarshal transaction: %v", err)
-	}
-	if string(tx.RawData.Data) != "test payment" {
-		t.Errorf("memo = %q, want %q", string(tx.RawData.Data), "test payment")
-	}
+	require.NoError(t, proto.Unmarshal(txBytes, &tx), "failed to unmarshal transaction")
+	assert.Equal(t, "test payment", string(tx.RawData.Data))
 }
 
 func TestTransferTRX_WithPermissionID(t *testing.T) {
@@ -152,26 +130,16 @@ func TestTransferTRX_WithPermissionID(t *testing.T) {
 		"amount":        "1",
 		"permission_id": float64(2),
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
 	txHex := data["transaction_hex"].(string)
 	txBytes, err := hex.DecodeString(txHex)
-	if err != nil {
-		t.Fatalf("failed to decode transaction_hex: %v", err)
-	}
+	require.NoError(t, err, "failed to decode transaction_hex")
 	var tx core.Transaction
-	if err := proto.Unmarshal(txBytes, &tx); err != nil {
-		t.Fatalf("failed to unmarshal transaction: %v", err)
-	}
-	if len(tx.RawData.Contract) == 0 {
-		t.Fatal("expected at least one contract")
-	}
-	if tx.RawData.Contract[0].PermissionId != 2 {
-		t.Errorf("permission_id = %d, want 2", tx.RawData.Contract[0].PermissionId)
-	}
+	require.NoError(t, proto.Unmarshal(txBytes, &tx), "failed to unmarshal transaction")
+	require.NotEmpty(t, tx.RawData.Contract, "expected at least one contract")
+	assert.Equal(t, int32(2), tx.RawData.Contract[0].PermissionId)
 }
 
 func TestTransferTRC20_InvalidAddress(t *testing.T) {
@@ -182,9 +150,7 @@ func TestTransferTRC20_InvalidAddress(t *testing.T) {
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"amount":           "100",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid from address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid from address")
 }
 
 func TestTransferTRC20_InvalidContractAddress(t *testing.T) {
@@ -195,9 +161,7 @@ func TestTransferTRC20_InvalidContractAddress(t *testing.T) {
 		"contract_address": "invalid",
 		"amount":           "100",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid contract address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid contract address")
 }
 
 func TestTransferTRC20_InvalidToAddress(t *testing.T) {
@@ -208,9 +172,7 @@ func TestTransferTRC20_InvalidToAddress(t *testing.T) {
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"amount":           "100",
 	})
-	if !result.IsError {
-		t.Error("expected error for invalid to address")
-	}
+	assert.True(t, result.IsError, "expected error for invalid to address")
 }
 
 func TestTransferTRC20_InvalidFeeLimit(t *testing.T) {
@@ -231,9 +193,7 @@ func TestTransferTRC20_InvalidFeeLimit(t *testing.T) {
 		"amount":           "100",
 		"fee_limit":        float64(20000),
 	})
-	if !result.IsError {
-		t.Error("expected error for fee_limit > 15000")
-	}
+	assert.True(t, result.IsError, "expected error for fee_limit > 15000")
 }
 
 func TestTransferTRC20_Success(t *testing.T) {
@@ -263,15 +223,9 @@ func TestTransferTRC20_Success(t *testing.T) {
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"amount":           "100",
 	})
-	if result.IsError {
-		t.Fatalf("expected success, got error: %v", result.Content)
-	}
+	require.False(t, result.IsError, "expected success, got error: %v", result.Content)
 
 	data := parseJSONResult(t, result)
-	if data["type"] != "TriggerSmartContract" {
-		t.Errorf("type = %v, want TriggerSmartContract", data["type"])
-	}
-	if data["transaction_hex"] == nil || data["transaction_hex"] == "" {
-		t.Error("transaction_hex should not be empty")
-	}
+	assert.Equal(t, "TriggerSmartContract", data["type"])
+	assert.NotEmpty(t, data["transaction_hex"], "transaction_hex should not be empty")
 }

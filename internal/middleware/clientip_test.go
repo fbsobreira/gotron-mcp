@@ -3,6 +3,8 @@ package middleware
 import (
 	"net/http"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestParseTrustMode(t *testing.T) {
@@ -21,9 +23,7 @@ func TestParseTrustMode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			got := ParseTrustMode(tt.input)
-			if got != tt.want {
-				t.Errorf("ParseTrustMode(%q) = %q, want %q", tt.input, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "ParseTrustMode(%q)", tt.input)
 		})
 	}
 }
@@ -165,9 +165,7 @@ func TestClientIP(t *testing.T) {
 				r.Header.Set(k, v)
 			}
 			got := ClientIP(r, tt.mode)
-			if got != tt.want {
-				t.Errorf("ClientIP() = %q, want %q", got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "ClientIP()")
 		})
 	}
 }
