@@ -12,6 +12,7 @@ import (
 	"github.com/fbsobreira/gotron-mcp/internal/config"
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/policy"
+	"github.com/fbsobreira/gotron-mcp/internal/price"
 	"github.com/fbsobreira/gotron-mcp/internal/resources"
 	"github.com/fbsobreira/gotron-mcp/internal/tools"
 	"github.com/fbsobreira/gotron-mcp/internal/trongrid"
@@ -48,6 +49,7 @@ Available capabilities:
 - Comprehensive account overview in one call (analyze_account)
 - Transfer cost estimation with energy/bandwidth breakdown (analyze_transfer_cost)
 - TRC20 approval safety: check allowances and revoke approvals (get_trc20_allowance, revoke_approval)
+- Token USD prices via CoinGecko with caching (get_token_price)
 - Account permissions and multi-sig structure (get_account_permissions)
 - Resource delegation info and delegatable amounts (get_delegated_resources, get_delegatable_amount)
 - Governance: list witnesses, proposals (list_witnesses, list_proposals)
@@ -78,6 +80,12 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 	tools.RegisterCostTools(s, pool, trc20Cache)
 	tools.RegisterApprovalReadTools(s, pool, trc20Cache)
 
+	// Price service (CoinGecko) — single instance shared by tools and policy engine
+	priceSvc := price.NewService(price.Config{
+		APIKey: cfg.CoinGeckoAPIKey,
+	})
+	tools.RegisterPriceTools(s, priceSvc)
+
 	// TronGrid REST API tools (transaction history, TRC20 transfers, contract events)
 	tgClient := trongrid.NewClient(cfg.Network, cfg.APIKey)
 	tools.RegisterHistoryTools(s, tgClient)
@@ -101,7 +109,7 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 		} else {
 			tools.RegisterWalletTools(s, wm)
 
-			pe = initPolicyEngine(cfg, pool)
+			pe = initPolicyEngine(cfg, pool, priceSvc)
 
 			if cfg.RequirePolicy && pe == nil {
 				log.Printf("warning: --require-policy is set but no policy loaded — sign tools disabled")
@@ -116,7 +124,7 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 
 // initPolicyEngine loads the policy config, resolves token decimals, and creates
 // the bbolt-backed policy engine. Returns nil if policy is not configured or fails.
-func initPolicyEngine(cfg *config.Config, pool *nodepool.Pool) *policy.Engine {
+func initPolicyEngine(cfg *config.Config, pool *nodepool.Pool, priceSvc *price.Service) *policy.Engine {
 	policyCfg, err := policy.LoadConfig(cfg.PolicyConfig)
 	if err != nil {
 		log.Printf("warning: failed to load policy config: %v", err)
@@ -149,6 +157,11 @@ func initPolicyEngine(cfg *config.Config, pool *nodepool.Pool) *policy.Engine {
 
 	pe := policy.NewEngine(policyCfg, store)
 	log.Printf("Policy engine loaded: %d wallet(s) configured", len(policyCfg.Wallets))
+
+	// Configure price provider for USD limits (shared with MCP tools)
+	if priceSvc != nil {
+		pe.SetPriceProvider(priceSvc)
+	}
 
 	// Configure approval backend
 	if policyCfg.Approval != nil && policyCfg.Approval.Method == "telegram" {

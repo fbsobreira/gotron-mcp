@@ -29,6 +29,7 @@ type Config struct {
 	RequirePolicy   bool
 	PolicyConfig    string
 	StateDir        string
+	CoinGeckoAPIKey string
 }
 
 var networkNodes = map[string]string{
@@ -59,6 +60,7 @@ func Parse() *Config {
 	flag.BoolVar(&cfg.RequirePolicy, "require-policy", envOrDefault("GOTRON_MCP_REQUIRE_POLICY", "") == "true", "Refuse to sign if no policy config exists")
 	flag.StringVar(&cfg.PolicyConfig, "policy-config", envOrDefault("GOTRON_MCP_POLICY_CONFIG", ""), "Path to policy YAML config (default: ~/.gotron-mcp/policy.yaml)")
 	flag.StringVar(&cfg.StateDir, "state-dir", envOrDefault("GOTRON_MCP_STATE_DIR", ""), "Path to state directory for spend tracking (default: ~/.gotron-mcp/)")
+	flag.StringVar(&cfg.CoinGeckoAPIKey, "coingecko-api-key", envOrDefault("GOTRON_MCP_COINGECKO_API_KEY", ""), "CoinGecko Pro API key for higher rate limits")
 
 	flag.Parse()
 

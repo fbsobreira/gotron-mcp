@@ -20,10 +20,10 @@ enabled: false
 wallets:
   # "savings" — high-value wallet with strict limits
   # savings:
-  #   # Aggregate USD limits across all tokens (requires price service #85)
-  #   # daily_limit_usd: 150
-  #   # per_tx_limit_usd: 50
-  #   # approval_required_above_usd: 500
+  #   # USD limits (uses CoinGecko prices for conversion)
+  #   per_tx_limit_usd: 50                 # max $50 per single TX
+  #   approval_required_above_usd: 500     # require approval above $500
+  #   # daily_limit_usd: 1000             # aggregate daily USD limit (coming soon)
   #
   #   # Per-token limits (human-readable units)
   #   # Token decimals are auto-resolved from the network at startup.
