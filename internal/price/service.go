@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -206,13 +207,31 @@ func (s *Service) getStale(key string) *CachedPrice {
 func (s *Service) setCache(key string, usd float64) {
 	s.mu.Lock()
 	s.cache[key] = &CachedPrice{USD: usd, UpdatedAt: time.Now()}
-	// Evict entries beyond max stale age to prevent unbounded growth
 	if len(s.cache) > maxCacheEntries {
+		// First pass: remove entries beyond max stale age
 		maxStale := s.cacheTTL * maxStaleFactor
 		now := time.Now()
 		for k, p := range s.cache {
 			if now.Sub(p.UpdatedAt) > maxStale {
 				delete(s.cache, k)
+			}
+		}
+		// Second pass: if still over limit, evict oldest entries
+		if len(s.cache) > maxCacheEntries {
+			type entry struct {
+				key string
+				ts  time.Time
+			}
+			entries := make([]entry, 0, len(s.cache))
+			for k, p := range s.cache {
+				entries = append(entries, entry{k, p.UpdatedAt})
+			}
+			sort.Slice(entries, func(i, j int) bool {
+				return entries[i].ts.Before(entries[j].ts)
+			})
+			toRemove := len(s.cache) - maxCacheEntries
+			for i := 0; i < toRemove; i++ {
+				delete(s.cache, entries[i].key)
 			}
 		}
 	}

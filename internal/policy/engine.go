@@ -166,10 +166,11 @@ func (e *Engine) intentToUSD(ctx context.Context, intent *Intent, wp *WalletPoli
 	var humanAmount float64
 	if intent.TokenID == "TRX" {
 		humanAmount = intent.AmountTRX()
-	} else if tl := wp.TokenLimits[intent.TokenID]; tl != nil && tl.Decimals > 0 {
+	} else if tl, ok := wp.TokenLimits[intent.TokenID]; ok && tl != nil {
+		// Token is configured in policy — use its decimals (0 is valid for zero-decimal tokens)
 		humanAmount = intent.TokenAmount / decimalMultiplier(tl.Decimals)
 	} else {
-		// No decimals info — cannot compute accurate USD value
+		// Token not in policy — cannot compute accurate USD value
 		return 0, fmt.Errorf("unknown decimals for token %s — cannot compute USD value", intent.TokenID)
 	}
 
@@ -329,8 +330,8 @@ func (e *Engine) Check(ctx context.Context, intent *Intent) (*CheckResult, error
 			approvalReason = fmt.Sprintf("transaction amount %.6f TRX exceeds approval threshold of %.0f TRX for wallet %q — approval required", intent.AmountTRX(), wp.ApprovalRequiredAboveTRX, intent.WalletName)
 		}
 	}
-	// 5. Per-TX USD limit (stateless, requires price provider — fail-closed)
-	if wp.PerTxLimitUSD > 0 && e.pricer != nil {
+	// 5. Per-TX USD limit (stateless, fail-closed when price unavailable)
+	if wp.PerTxLimitUSD > 0 {
 		usdValue, usdErr := e.intentToUSD(ctx, intent, wp)
 		if usdErr != nil {
 			log.Printf("warning: cannot verify USD limit for wallet %q: %v", intent.WalletName, usdErr)
@@ -347,8 +348,8 @@ func (e *Engine) Check(ctx context.Context, intent *Intent) (*CheckResult, error
 		}
 	}
 
-	// 6. USD approval threshold (requires price provider — fail-closed)
-	if !approvalNeeded && wp.ApprovalRequiredAboveUSD > 0 && e.pricer != nil {
+	// 6. USD approval threshold (fail-closed when price unavailable)
+	if !approvalNeeded && wp.ApprovalRequiredAboveUSD > 0 {
 		usdValue, usdErr := e.intentToUSD(ctx, intent, wp)
 		if usdErr != nil {
 			log.Printf("warning: cannot verify USD approval threshold for wallet %q: %v", intent.WalletName, usdErr)

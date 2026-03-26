@@ -867,24 +867,84 @@ func TestCheck_ApprovalRequiredAboveUSD_FailClosed(t *testing.T) {
 	assert.Contains(t, result.Reason, "price unavailable")
 }
 
-func TestCheck_USDLimits_NoPriceProvider(t *testing.T) {
+func TestCheck_USDLimits_NoPriceProvider_FailClosed(t *testing.T) {
 	cfg := &Config{Wallets: map[string]*WalletPolicy{
 		"wallet": {
-			PerTxLimitUSD:           10,
+			PerTxLimitUSD: 10,
+		},
+	}}
+	e := newTestEngine(t, cfg)
+	// No price provider set — USD checks should fail-closed
+
+	result, err := e.Check(context.Background(), &Intent{
+		WalletName:  "wallet",
+		AmountSUN:   50_000_000,
+		TokenID:     "TRX",
+		TokenAmount: 50_000_000,
+	})
+	require.NoError(t, err)
+	assert.False(t, result.Allowed, "USD checks must fail-closed when no price provider")
+	assert.Contains(t, result.Reason, "price unavailable")
+}
+
+func TestCheck_USDApproval_NoPriceProvider_FailClosed(t *testing.T) {
+	cfg := &Config{Wallets: map[string]*WalletPolicy{
+		"wallet": {
 			ApprovalRequiredAboveUSD: 5,
 		},
 	}}
 	e := newTestEngine(t, cfg)
-	// No price provider set — USD checks should be skipped
 
 	result, err := e.Check(context.Background(), &Intent{
 		WalletName:  "wallet",
-		AmountSUN:   999_000_000,
+		AmountSUN:   50_000_000,
 		TokenID:     "TRX",
-		TokenAmount: 999_000_000,
+		TokenAmount: 50_000_000,
 	})
 	require.NoError(t, err)
-	assert.True(t, result.Allowed, "USD checks skipped when no price provider")
+	assert.False(t, result.Allowed, "USD approval threshold must fail-closed when no price provider")
+	assert.Contains(t, result.Reason, "price unavailable")
+}
+
+func TestCheck_NoUSDLimits_NoPriceProvider_Allowed(t *testing.T) {
+	cfg := &Config{Wallets: map[string]*WalletPolicy{
+		"wallet": {PerTxLimitTRX: 1000},
+	}}
+	e := newTestEngine(t, cfg)
+	// No USD limits configured, no price provider — should be fine
+
+	result, err := e.Check(context.Background(), &Intent{
+		WalletName:  "wallet",
+		AmountSUN:   50_000_000,
+		TokenID:     "TRX",
+		TokenAmount: 50_000_000,
+	})
+	require.NoError(t, err)
+	assert.True(t, result.Allowed, "no USD limits = no price provider needed")
+}
+
+func TestCheck_USDLimits_ZeroDecimalToken(t *testing.T) {
+	cfg := &Config{Wallets: map[string]*WalletPolicy{
+		"wallet": {
+			PerTxLimitUSD: 100,
+			TokenLimits: map[string]*TokenLimit{
+				"NODEC": {Decimals: 0, PerTxLimitUnits: 10000},
+			},
+		},
+	}}
+	e := newTestEngine(t, cfg)
+	e.SetPriceProvider(&mockPricer{prices: map[string]float64{"NODEC": 0.50}})
+
+	// 100 raw units * $0.50 = $50 — below $100 USD limit
+	// decimalMultiplier(0) = 1, so humanAmount = 100 / 1 = 100
+	result, err := e.Check(context.Background(), &Intent{
+		WalletName:  "wallet",
+		TokenID:     "NODEC",
+		TokenAmount: 100,
+		ToAddr:      "TAnywhere",
+	})
+	require.NoError(t, err)
+	assert.True(t, result.Allowed, "zero-decimal token with configured entry should be allowed")
 }
 
 func TestCheck_USDLimits_UnknownDecimals(t *testing.T) {
