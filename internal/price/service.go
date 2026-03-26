@@ -225,6 +225,7 @@ func (s *Service) getStale(key string) *CachedPrice {
 
 func (s *Service) setCache(key string, usd float64) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.cache[key] = &CachedPrice{USD: usd, UpdatedAt: time.Now()}
 	if len(s.cache) > s.maxCacheSize {
 		// First pass: remove entries beyond max stale age
@@ -254,7 +255,6 @@ func (s *Service) setCache(key string, usd float64) {
 			}
 		}
 	}
-	s.mu.Unlock()
 }
 
 // --- HTTP ---

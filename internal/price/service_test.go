@@ -256,11 +256,10 @@ func TestGetPriceByContract_CaseInsensitiveCache(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&callCount), "same address different case should hit cache")
 }
 
-func TestSetCache_EvictsOldestWhenFull(t *testing.T) {
+func TestGetStale_RejectsEntriesOlderThanMaxStaleFactor(t *testing.T) {
 	svc := NewService(Config{CacheTTL: 1 * time.Second})
 
-	// Fill cache with entries — use a small number since we can't fill 10k in a test
-	// Instead, directly manipulate and verify the eviction logic
+	// Populate cache with entries of varying ages
 	now := time.Now()
 	svc.mu.Lock()
 	for i := 0; i < 10; i++ {
@@ -268,18 +267,17 @@ func TestSetCache_EvictsOldestWhenFull(t *testing.T) {
 	}
 	svc.mu.Unlock()
 
-	// Verify entries exist
 	svc.mu.RLock()
 	assert.Equal(t, 10, len(svc.cache))
 	svc.mu.RUnlock()
 
-	// getStale should reject entries older than 10x TTL (10s)
-	// key-0 is 10s old, key-1 is 9s old, etc.
+	// getStale rejects entries older than maxStaleFactor * cacheTTL (10 * 1s = 10s)
+	// key-0 is 10s old (at boundary), key-9 is 1s old
 	stale := svc.getStale("key-0")
-	assert.Nil(t, stale, "entry older than maxStaleFactor*TTL should be nil")
+	assert.Nil(t, stale, "entry at maxStaleFactor*TTL boundary should be nil")
 
 	stale = svc.getStale("key-9")
-	assert.NotNil(t, stale, "recent entry should be returned as stale")
+	assert.NotNil(t, stale, "recent entry within stale window should be returned")
 }
 
 func TestGetPriceByID_StaleExpired(t *testing.T) {
