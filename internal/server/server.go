@@ -31,6 +31,7 @@ func New(cfg *config.Config, pool *nodepool.Pool) (*server.MCPServer, *wallet.Ma
 		version.Version,
 		server.WithToolCapabilities(false),
 		server.WithResourceCapabilities(false, false),
+		server.WithElicitation(),
 		server.WithInstructions(`GoTRON MCP server for TRON blockchain interaction.
 
 Available capabilities:
@@ -90,8 +91,7 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 	tgClient := trongrid.NewClient(cfg.Network, cfg.APIKey)
 	tools.RegisterHistoryTools(s, tgClient)
 
-	// Transaction builders — always available (return unsigned tx hex)
-	tools.RegisterTransferTools(s, pool, trc20Cache)
+	// Transaction builders (non-transfer) — always available
 	tools.RegisterResourceTools(s, pool)
 	tools.RegisterWitnessWriteTools(s, pool)
 	tools.RegisterContractWriteTools(s, pool)
@@ -118,6 +118,9 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 			}
 		}
 	}
+
+	// Transfer builders — registered after wallet manager so wallet names resolve in "from"
+	tools.RegisterTransferTools(s, pool, trc20Cache, wm)
 
 	return s, wm, pe
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,10 +14,12 @@ import (
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/policy"
 	"github.com/fbsobreira/gotron-mcp/internal/wallet"
+	"github.com/fbsobreira/gotron-sdk/pkg/client/transaction"
 	"github.com/fbsobreira/gotron-sdk/pkg/keystore"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -149,7 +152,7 @@ func TestSignTransaction_Success(t *testing.T) {
 
 func TestSignAndBroadcast_InvalidHex(t *testing.T) {
 	wm, pool := newTestSignSetup(t, &mockWalletServer{})
-	result := callTool(t, handleSignAndBroadcast(pool, wm, nil), map[string]any{
+	result := callTool(t, handleSignAndBroadcast(nil, pool, wm, nil), map[string]any{
 		"transaction_hex": "not-hex",
 		"wallet":          "test",
 	})
@@ -159,7 +162,7 @@ func TestSignAndBroadcast_InvalidHex(t *testing.T) {
 func TestSignAndBroadcast_WalletNotFound(t *testing.T) {
 	wm, pool := newTestSignSetup(t, &mockWalletServer{})
 	txHex := buildTestTxHex(t)
-	result := callTool(t, handleSignAndBroadcast(pool, wm, nil), map[string]any{
+	result := callTool(t, handleSignAndBroadcast(nil, pool, wm, nil), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "nonexistent",
 	})
@@ -182,7 +185,7 @@ func TestSignAndBroadcast_Success(t *testing.T) {
 	require.NoError(t, err, "CreateWallet")
 
 	txHex := buildTestTxHex(t)
-	result := callTool(t, handleSignAndBroadcast(pool, wm, nil), map[string]any{
+	result := callTool(t, handleSignAndBroadcast(nil, pool, wm, nil), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "broadcast-signer",
 	})
@@ -223,7 +226,7 @@ func TestSignAndConfirm_Success(t *testing.T) {
 	require.NoError(t, err, "CreateWallet")
 
 	txHex := buildTestTxHex(t)
-	result := callTool(t, handleSignAndConfirm(pool, wm, nil), map[string]any{
+	result := callTool(t, handleSignAndConfirm(nil, pool, wm, nil), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "confirm-signer",
 	})
@@ -292,7 +295,7 @@ func TestSignAndBroadcast_BroadcastFails(t *testing.T) {
 	_, err := wm.CreateWallet("test-wallet")
 	require.NoError(t, err, "CreateWallet")
 	txHex := buildTestTxHex(t)
-	result := callTool(t, handleSignAndBroadcast(pool, wm, nil), map[string]any{
+	result := callTool(t, handleSignAndBroadcast(nil, pool, wm, nil), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "test-wallet",
 	})
@@ -313,7 +316,7 @@ func TestSignAndBroadcast_BroadcastRejected(t *testing.T) {
 	_, err := wm.CreateWallet("test-wallet")
 	require.NoError(t, err, "CreateWallet")
 	txHex := buildTestTxHex(t)
-	result := callTool(t, handleSignAndBroadcast(pool, wm, nil), map[string]any{
+	result := callTool(t, handleSignAndBroadcast(nil, pool, wm, nil), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "test-wallet",
 	})
@@ -344,7 +347,7 @@ func TestSignAndConfirm_ContextCancelled(t *testing.T) {
 		"transaction_hex": txHex,
 		"wallet":          "test-wallet",
 	}
-	handler := handleSignAndConfirm(pool, wm, nil)
+	handler := handleSignAndConfirm(nil, pool, wm, nil)
 	result, goErr := handler(ctx, req)
 	require.NoError(t, goErr, "handler returned Go error")
 	assert.True(t, result.IsError, "expected error for cancelled context")
@@ -363,7 +366,7 @@ func TestSignAndConfirm_RPCError(t *testing.T) {
 	_, err := wm.CreateWallet("test-wallet")
 	require.NoError(t, err, "CreateWallet")
 	txHex := buildTestTxHex(t)
-	result := callTool(t, handleSignAndConfirm(pool, wm, nil), map[string]any{
+	result := callTool(t, handleSignAndConfirm(nil, pool, wm, nil), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "test-wallet",
 	})
@@ -548,7 +551,7 @@ func TestSignAndBroadcast_PolicyDenied_ReturnsHint(t *testing.T) {
 		5_000_000,
 	)
 
-	result := callTool(t, handleSignAndBroadcast(pool, wm, pe), map[string]any{
+	result := callTool(t, handleSignAndBroadcast(nil, pool, wm, pe), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "hot-wallet",
 	})
@@ -721,7 +724,7 @@ func TestSignAndBroadcast_ApprovalFlow_Approved(t *testing.T) {
 		10_000_000,
 	)
 
-	result := callTool(t, handleSignAndBroadcast(pool, wm, pe), map[string]any{
+	result := callTool(t, handleSignAndBroadcast(nil, pool, wm, pe), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "hot-wallet",
 		"reason":          "test approval flow",
@@ -758,7 +761,7 @@ func TestSignAndBroadcast_ApprovalFlow_Rejected(t *testing.T) {
 		10_000_000,
 	)
 
-	result := callTool(t, handleSignAndBroadcast(pool, wm, pe), map[string]any{
+	result := callTool(t, handleSignAndBroadcast(nil, pool, wm, pe), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "hot-wallet",
 		"reason":          "test rejection",
@@ -792,7 +795,7 @@ func TestSignAndBroadcast_NoApprover_ReturnsHint(t *testing.T) {
 		10_000_000,
 	)
 
-	result := callTool(t, handleSignAndBroadcast(pool, wm, pe), map[string]any{
+	result := callTool(t, handleSignAndBroadcast(nil, pool, wm, pe), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "hot-wallet",
 	})
@@ -830,7 +833,7 @@ func TestSignAndConfirm_PolicyDenied_ReturnsHint(t *testing.T) {
 		5_000_000,
 	)
 
-	result := callTool(t, handleSignAndConfirm(pool, wm, pe), map[string]any{
+	result := callTool(t, handleSignAndConfirm(nil, pool, wm, pe), map[string]any{
 		"transaction_hex": txHex,
 		"wallet":          "hot-wallet",
 	})
@@ -1024,4 +1027,497 @@ func TestRebuildTransaction_InvalidAddress(t *testing.T) {
 	_, err := rebuildTransaction(context.Background(), pool, intent)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid from address")
+}
+
+// mockBasicSession implements server.ClientSession but NOT SessionWithElicitation.
+type mockBasicSession struct{ id string }
+
+func (m *mockBasicSession) SessionID() string { return m.id }
+func (m *mockBasicSession) NotificationChannel() chan<- mcp.JSONRPCNotification {
+	return make(chan mcp.JSONRPCNotification, 1)
+}
+func (m *mockBasicSession) Initialize()       {}
+func (m *mockBasicSession) Initialized() bool { return true }
+
+// mockElicitSession implements server.SessionWithElicitation for testing.
+type mockElicitSession struct {
+	id     string
+	result *mcp.ElicitationResult
+	err    error
+}
+
+func (m *mockElicitSession) SessionID() string { return m.id }
+func (m *mockElicitSession) NotificationChannel() chan<- mcp.JSONRPCNotification {
+	return make(chan mcp.JSONRPCNotification, 1)
+}
+func (m *mockElicitSession) Initialize()       {}
+func (m *mockElicitSession) Initialized() bool { return true }
+func (m *mockElicitSession) RequestElicitation(_ context.Context, _ mcp.ElicitationRequest) (*mcp.ElicitationResult, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.result, nil
+}
+
+// --- Elicitation full flow tests ---
+
+// callToolWithCtx invokes a handler with a custom context (for session injection).
+func callToolWithCtx(t *testing.T, ctx context.Context, handler func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error), args map[string]any) *mcp.CallToolResult {
+	t.Helper()
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = args
+	result, err := handler(ctx, req)
+	if err != nil {
+		t.Fatalf("handler returned Go error (not tool error): %v", err)
+	}
+	return result
+}
+
+func TestSignAndBroadcast_Elicitation_Confirmed(t *testing.T) {
+	mock := &mockWalletServer{
+		BroadcastTransactionFunc: func(_ context.Context, _ *core.Transaction) (*api.Return, error) {
+			return &api.Return{Result: true, Code: api.Return_SUCCESS, Message: []byte("ok")}, nil
+		},
+	}
+	wm, pool := newTestSignSetup(t, mock)
+	_, err := wm.CreateWallet("elicit-signer")
+	require.NoError(t, err)
+
+	mcpSrv := server.NewMCPServer("test", "1.0.0", server.WithElicitation())
+	session := &mockElicitSession{
+		id: "confirm-session",
+		result: &mcp.ElicitationResult{
+			ElicitationResponse: mcp.ElicitationResponse{
+				Action: mcp.ElicitationResponseActionAccept,
+			},
+		},
+	}
+	ctx := mcpSrv.WithContext(context.Background(), session)
+
+	txHex := buildTransferTxHex(t,
+		"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		1_000_000,
+	)
+
+	handler := handleSignAndBroadcast(mcpSrv, pool, wm, nil) // pe=nil triggers elicitation
+	result := callToolWithCtx(t, ctx, handler, map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "elicit-signer",
+	})
+	require.False(t, result.IsError, "expected success after user confirmation, got: %v", result.Content)
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, true, data["success"])
+	assert.NotEmpty(t, data["txid"])
+}
+
+func TestSignAndBroadcast_Elicitation_Declined(t *testing.T) {
+	mock := &mockWalletServer{}
+	wm, pool := newTestSignSetup(t, mock)
+	_, err := wm.CreateWallet("elicit-signer")
+	require.NoError(t, err)
+
+	mcpSrv := server.NewMCPServer("test", "1.0.0", server.WithElicitation())
+	session := &mockElicitSession{
+		id: "decline-session",
+		result: &mcp.ElicitationResult{
+			ElicitationResponse: mcp.ElicitationResponse{
+				Action: mcp.ElicitationResponseActionDecline,
+			},
+		},
+	}
+	ctx := mcpSrv.WithContext(context.Background(), session)
+
+	txHex := buildTransferTxHex(t,
+		"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		1_000_000,
+	)
+
+	handler := handleSignAndBroadcast(mcpSrv, pool, wm, nil)
+	result := callToolWithCtx(t, ctx, handler, map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "elicit-signer",
+	})
+	require.False(t, result.IsError, "expected JSON result, not tool error")
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, "cancelled", data["status"])
+	assert.Contains(t, data["reason"], "cancelled by user")
+}
+
+func TestSignAndBroadcast_Elicitation_NotSupported_Proceeds(t *testing.T) {
+	mock := &mockWalletServer{
+		BroadcastTransactionFunc: func(_ context.Context, _ *core.Transaction) (*api.Return, error) {
+			return &api.Return{Result: true, Code: api.Return_SUCCESS, Message: []byte("ok")}, nil
+		},
+	}
+	wm, pool := newTestSignSetup(t, mock)
+	_, err := wm.CreateWallet("elicit-signer")
+	require.NoError(t, err)
+
+	// Use a session that does NOT support elicitation — should proceed without confirmation
+	mcpSrv := server.NewMCPServer("test", "1.0.0", server.WithElicitation())
+	session := &mockBasicSession{id: "no-elicit"}
+	ctx := mcpSrv.WithContext(context.Background(), session)
+
+	txHex := buildTransferTxHex(t,
+		"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		1_000_000,
+	)
+
+	handler := handleSignAndBroadcast(mcpSrv, pool, wm, nil)
+	result := callToolWithCtx(t, ctx, handler, map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "elicit-signer",
+	})
+	require.False(t, result.IsError, "expected success when elicitation not supported, got: %v", result.Content)
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, true, data["success"], "should broadcast normally when elicitation unsupported")
+}
+
+func TestSignAndBroadcast_WithPolicy_SkipsElicitation(t *testing.T) {
+	mock := &mockWalletServer{
+		BroadcastTransactionFunc: func(_ context.Context, _ *core.Transaction) (*api.Return, error) {
+			return &api.Return{Result: true, Code: api.Return_SUCCESS, Message: []byte("ok")}, nil
+		},
+	}
+	wm, pool := newTestSignSetup(t, mock)
+	_, err := wm.CreateWallet("policy-wallet")
+	require.NoError(t, err)
+
+	cfg := &policy.Config{
+		Enabled: true,
+		Wallets: map[string]*policy.WalletPolicy{
+			"policy-wallet": {PerTxLimitTRX: 1000},
+		},
+	}
+	pe := newTestPolicyEngine(t, cfg)
+
+	// Session that would decline — but policy is active so elicitation should be skipped
+	mcpSrv := server.NewMCPServer("test", "1.0.0", server.WithElicitation())
+	session := &mockElicitSession{
+		id: "should-not-be-called",
+		result: &mcp.ElicitationResult{
+			ElicitationResponse: mcp.ElicitationResponse{
+				Action: mcp.ElicitationResponseActionDecline,
+			},
+		},
+	}
+	ctx := mcpSrv.WithContext(context.Background(), session)
+
+	txHex := buildTransferTxHex(t,
+		"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		1_000_000,
+	)
+
+	handler := handleSignAndBroadcast(mcpSrv, pool, wm, pe)
+	result := callToolWithCtx(t, ctx, handler, map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "policy-wallet",
+	})
+	require.False(t, result.IsError, "expected success — policy active means no elicitation, got: %v", result.Content)
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, true, data["success"], "should broadcast without elicitation when policy is active")
+}
+
+func TestSignAndConfirm_Elicitation_Declined(t *testing.T) {
+	mock := &mockWalletServer{}
+	wm, pool := newTestSignSetup(t, mock)
+	_, err := wm.CreateWallet("elicit-signer")
+	require.NoError(t, err)
+
+	mcpSrv := server.NewMCPServer("test", "1.0.0", server.WithElicitation())
+	session := &mockElicitSession{
+		id: "decline-confirm",
+		result: &mcp.ElicitationResult{
+			ElicitationResponse: mcp.ElicitationResponse{
+				Action: mcp.ElicitationResponseActionDecline,
+			},
+		},
+	}
+	ctx := mcpSrv.WithContext(context.Background(), session)
+
+	txHex := buildTransferTxHex(t,
+		"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		1_000_000,
+	)
+
+	handler := handleSignAndConfirm(mcpSrv, pool, wm, nil)
+	result := callToolWithCtx(t, ctx, handler, map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "elicit-signer",
+	})
+	require.False(t, result.IsError, "expected JSON result")
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, "cancelled", data["status"])
+	assert.Contains(t, data["reason"], "cancelled by user")
+}
+
+func TestSignAndConfirm_Elicitation_Confirmed(t *testing.T) {
+	mock := &mockWalletServer{
+		BroadcastTransactionFunc: func(_ context.Context, _ *core.Transaction) (*api.Return, error) {
+			return &api.Return{Result: true, Code: api.Return_SUCCESS, Message: []byte("ok")}, nil
+		},
+		GetTransactionInfoByIdFunc: func(_ context.Context, msg *api.BytesMessage) (*core.TransactionInfo, error) {
+			return &core.TransactionInfo{
+				Id:          msg.Value,
+				BlockNumber: 99999,
+				Fee:         50000,
+				Receipt:     &core.ResourceReceipt{EnergyUsageTotal: 10000, NetUsage: 200},
+			}, nil
+		},
+	}
+	wm, pool := newTestSignSetup(t, mock)
+	_, err := wm.CreateWallet("elicit-signer")
+	require.NoError(t, err)
+
+	mcpSrv := server.NewMCPServer("test", "1.0.0", server.WithElicitation())
+	session := &mockElicitSession{
+		id: "confirm-session",
+		result: &mcp.ElicitationResult{
+			ElicitationResponse: mcp.ElicitationResponse{
+				Action: mcp.ElicitationResponseActionAccept,
+			},
+		},
+	}
+	ctx := mcpSrv.WithContext(context.Background(), session)
+
+	txHex := buildTransferTxHex(t,
+		"TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
+		"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+		1_000_000,
+	)
+
+	handler := handleSignAndConfirm(mcpSrv, pool, wm, nil)
+	result := callToolWithCtx(t, ctx, handler, map[string]any{
+		"transaction_hex": txHex,
+		"wallet":          "elicit-signer",
+	})
+	require.False(t, result.IsError, "expected success after confirmation, got: %v", result.Content)
+
+	data := parseJSONResult(t, result)
+	assert.Equal(t, true, data["confirmed"])
+	assert.NotEmpty(t, data["txid"])
+}
+
+// --- formatTokenAmount tests ---
+
+func TestFormatTokenAmount(t *testing.T) {
+	tests := []struct {
+		name     string
+		raw      *big.Int
+		decimals int
+		want     string
+	}{
+		{"nil", nil, 6, "0"},
+		{"zero decimals", big.NewInt(42), 0, "42"},
+		{"1 USDT (6 decimals)", big.NewInt(1_000_000), 6, "1"},
+		{"10.5 USDT", big.NewInt(10_500_000), 6, "10.5"},
+		{"0.000001 USDT", big.NewInt(1), 6, "0.000001"},
+		{"large 18-decimal token", new(big.Int).SetUint64(1_000_000_000_000_000_000), 18, "1"},
+		{"fractional 18-decimal", big.NewInt(123_456_789_012_345_678), 18, "0.123456789012345678"},
+		{"negative decimals", big.NewInt(100), -1, "100"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatTokenAmount(tt.raw, tt.decimals)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// --- requestBroadcastConfirmation message building tests ---
+
+func TestRequestBroadcastConfirmation_MessageVariants(t *testing.T) {
+	mcpSrv := server.NewMCPServer("test", "1.0.0", server.WithElicitation())
+	acceptSession := &mockElicitSession{
+		id: "msg-test",
+		result: &mcp.ElicitationResult{
+			ElicitationResponse: mcp.ElicitationResponse{
+				Action: mcp.ElicitationResponseActionAccept,
+			},
+		},
+	}
+
+	tests := []struct {
+		name    string
+		decoded *transaction.ContractData
+	}{
+		{
+			name: "TransferContract with string amount",
+			decoded: &transaction.ContractData{
+				Type:   "TransferContract",
+				Fields: map[string]any{"owner_address": "TAddr1", "to_address": "TAddr2", "amount": "100.000000"},
+			},
+		},
+		{
+			name: "TransferContract with int64 amount (TRC10)",
+			decoded: &transaction.ContractData{
+				Type:   "TransferAssetContract",
+				Fields: map[string]any{"owner_address": "TAddr1", "to_address": "TAddr2", "amount": int64(5000)},
+			},
+		},
+		{
+			name: "TransferContract with float64 amount",
+			decoded: &transaction.ContractData{
+				Type:   "TransferContract",
+				Fields: map[string]any{"owner_address": "TAddr1", "to_address": "TAddr2", "amount": float64(42)},
+			},
+		},
+		{
+			name: "TriggerSmartContract with contract_address",
+			decoded: &transaction.ContractData{
+				Type:   "TriggerSmartContract",
+				Fields: map[string]any{"owner_address": "TAddr1", "contract_address": "TContract", "data": "abcd", "call_value": "0.000000"},
+			},
+		},
+		{
+			name: "TriggerSmartContract with call_value",
+			decoded: &transaction.ContractData{
+				Type:   "TriggerSmartContract",
+				Fields: map[string]any{"owner_address": "TAddr1", "contract_address": "TContract", "data": "abcd", "call_value": "5.000000"},
+			},
+		},
+		{
+			name: "minimal decoded data",
+			decoded: &transaction.ContractData{
+				Type:   "UnknownContract",
+				Fields: map[string]any{},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := mcpSrv.WithContext(context.Background(), acceptSession)
+			err := requestBroadcastConfirmation(ctx, mcpSrv, nil, tt.decoded, "test-wallet")
+			assert.NoError(t, err, "all message variants should proceed on Accept")
+		})
+	}
+}
+
+func TestRequestBroadcastConfirmation_ElicitationError(t *testing.T) {
+	mcpSrv := server.NewMCPServer("test", "1.0.0", server.WithElicitation())
+	errSession := &mockElicitSession{
+		id:  "err-session",
+		err: fmt.Errorf("unexpected elicitation error"),
+	}
+	ctx := mcpSrv.WithContext(context.Background(), errSession)
+
+	decoded := &transaction.ContractData{
+		Type:   "TransferContract",
+		Fields: map[string]any{"owner_address": "TAddr1", "to_address": "TAddr2", "amount": "1.000000"},
+	}
+
+	err := requestBroadcastConfirmation(ctx, mcpSrv, nil, decoded, "test-wallet")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cancelled")
+}
+
+// --- requestBroadcastConfirmation unit tests ---
+
+func TestRequestBroadcastConfirmation(t *testing.T) {
+	decoded := &transaction.ContractData{
+		Type:   "TransferContract",
+		Fields: map[string]any{"owner_address": "TAddr1", "to_address": "TAddr2", "amount": 100.0},
+	}
+
+	tests := []struct {
+		name      string
+		decoded   *transaction.ContractData
+		srv       *server.MCPServer
+		session   server.ClientSession
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name:    "nil decoded skips confirmation",
+			decoded: nil,
+			srv:     nil,
+			session: nil,
+			wantErr: false,
+		},
+		{
+			name:    "nil server skips confirmation",
+			decoded: decoded,
+			srv:     nil,
+			session: nil,
+			wantErr: false,
+		},
+		{
+			name:    "accept proceeds",
+			decoded: decoded,
+			srv:     server.NewMCPServer("test", "1.0.0", server.WithElicitation()),
+			session: &mockElicitSession{
+				id: "accept",
+				result: &mcp.ElicitationResult{
+					ElicitationResponse: mcp.ElicitationResponse{
+						Action: mcp.ElicitationResponseActionAccept,
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:    "decline cancels",
+			decoded: decoded,
+			srv:     server.NewMCPServer("test", "1.0.0", server.WithElicitation()),
+			session: &mockElicitSession{
+				id: "decline",
+				result: &mcp.ElicitationResult{
+					ElicitationResponse: mcp.ElicitationResponse{
+						Action: mcp.ElicitationResponseActionDecline,
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "cancelled by user",
+		},
+		{
+			name:    "cancel cancels",
+			decoded: decoded,
+			srv:     server.NewMCPServer("test", "1.0.0", server.WithElicitation()),
+			session: &mockElicitSession{
+				id: "cancel",
+				result: &mcp.ElicitationResult{
+					ElicitationResponse: mcp.ElicitationResponse{
+						Action: mcp.ElicitationResponseActionCancel,
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "cancelled by user",
+		},
+		{
+			name:    "session without elicitation support degrades gracefully",
+			decoded: decoded,
+			srv:     server.NewMCPServer("test", "1.0.0", server.WithElicitation()),
+			session: &mockBasicSession{id: "basic"},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			if tt.srv != nil && tt.session != nil {
+				ctx = tt.srv.WithContext(ctx, tt.session)
+			}
+			err := requestBroadcastConfirmation(ctx, tt.srv, nil, tt.decoded, "test-wallet")
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errSubstr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
