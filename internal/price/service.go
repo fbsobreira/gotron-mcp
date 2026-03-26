@@ -32,10 +32,11 @@ type CachedPrice struct {
 
 // Service provides token USD prices via CoinGecko with in-memory caching.
 type Service struct {
-	baseURL  string
-	apiKey   string // optional CoinGecko Pro API key
-	cacheTTL time.Duration
-	client   *http.Client
+	baseURL      string
+	apiKey       string // optional CoinGecko Pro API key
+	cacheTTL     time.Duration
+	maxCacheSize int // max cache entries before eviction (default: maxCacheEntries)
+	client       *http.Client
 
 	mu    sync.RWMutex
 	cache map[string]*CachedPrice // key: "TRX" or contract address → price
@@ -59,11 +60,12 @@ func NewService(cfg Config) *Service {
 		cacheTTL = defaultCacheTTL
 	}
 	return &Service{
-		baseURL:  baseURL,
-		apiKey:   cfg.APIKey,
-		cacheTTL: cacheTTL,
-		client:   &http.Client{Timeout: 10 * time.Second},
-		cache:    make(map[string]*CachedPrice),
+		baseURL:      baseURL,
+		apiKey:       cfg.APIKey,
+		cacheTTL:     cacheTTL,
+		maxCacheSize: maxCacheEntries,
+		client:       &http.Client{Timeout: 10 * time.Second},
+		cache:        make(map[string]*CachedPrice),
 	}
 }
 
@@ -207,7 +209,7 @@ func (s *Service) getStale(key string) *CachedPrice {
 func (s *Service) setCache(key string, usd float64) {
 	s.mu.Lock()
 	s.cache[key] = &CachedPrice{USD: usd, UpdatedAt: time.Now()}
-	if len(s.cache) > maxCacheEntries {
+	if len(s.cache) > s.maxCacheSize {
 		// First pass: remove entries beyond max stale age
 		maxStale := s.cacheTTL * maxStaleFactor
 		now := time.Now()
@@ -217,7 +219,7 @@ func (s *Service) setCache(key string, usd float64) {
 			}
 		}
 		// Second pass: if still over limit, evict oldest entries
-		if len(s.cache) > maxCacheEntries {
+		if len(s.cache) > s.maxCacheSize {
 			type entry struct {
 				key string
 				ts  time.Time
@@ -229,7 +231,7 @@ func (s *Service) setCache(key string, usd float64) {
 			sort.Slice(entries, func(i, j int) bool {
 				return entries[i].ts.Before(entries[j].ts)
 			})
-			toRemove := len(s.cache) - maxCacheEntries
+			toRemove := len(s.cache) - s.maxCacheSize
 			for i := 0; i < toRemove; i++ {
 				delete(s.cache, entries[i].key)
 			}
