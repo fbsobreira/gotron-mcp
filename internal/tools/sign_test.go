@@ -954,7 +954,7 @@ func TestGetWalletPolicy_WithRemainingBudget(t *testing.T) {
 		TokenID:     "TRX",
 		TokenAmount: 50_000_000,
 	}
-	result, err := pe.Check(intent)
+	result, err := pe.Check(context.Background(), intent)
 	require.NoError(t, err)
 	require.True(t, result.Allowed, "expected check to pass for 50 TRX within limits")
 

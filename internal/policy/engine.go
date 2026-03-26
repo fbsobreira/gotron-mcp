@@ -18,11 +18,17 @@ type CheckResult struct {
 	ApprovalRequired bool
 }
 
+// PriceProvider returns USD prices for tokens.
+type PriceProvider interface {
+	GetTokenPrice(ctx context.Context, tokenID string) (float64, error)
+}
+
 // Engine evaluates transaction intents against wallet policies.
 type Engine struct {
 	cfg      *Config
 	store    *Store
 	approver approval.Approver // optional — handles approval_required responses
+	pricer   PriceProvider     // optional — enables USD limit checks
 }
 
 // NewEngine creates a policy engine with the given config and persistent store.
@@ -32,6 +38,13 @@ func NewEngine(cfg *Config, store *Store) *Engine {
 		cfg = &Config{}
 	}
 	return &Engine{cfg: cfg, store: store}
+}
+
+// SetPriceProvider configures the price provider for USD limit checks.
+func (e *Engine) SetPriceProvider(p PriceProvider) {
+	if e != nil {
+		e.pricer = p
+	}
 }
 
 // SetApprover configures the approval backend for approval_required responses.
@@ -136,6 +149,34 @@ func (e *Engine) buildSpendContext(intent *Intent) string {
 	return strings.Join(parts, " | ")
 }
 
+// intentToUSD converts a transaction intent's amount to USD using the price provider.
+func (e *Engine) intentToUSD(ctx context.Context, intent *Intent, wp *WalletPolicy) (float64, error) {
+	if e.pricer == nil {
+		return 0, fmt.Errorf("no price provider configured")
+	}
+
+	priceCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	usdPrice, err := e.pricer.GetTokenPrice(priceCtx, intent.TokenID)
+	if err != nil {
+		return 0, err
+	}
+
+	// Convert raw on-chain amount to human units, then to USD
+	var humanAmount float64
+	if intent.TokenID == "TRX" {
+		humanAmount = intent.AmountTRX()
+	} else if tl, ok := wp.TokenLimits[intent.TokenID]; ok && tl != nil {
+		// Token is configured in policy — use its decimals (0 is valid for zero-decimal tokens)
+		humanAmount = intent.TokenAmount / decimalMultiplier(tl.Decimals)
+	} else {
+		// Token not in policy — cannot compute accurate USD value
+		return 0, fmt.Errorf("unknown decimals for token %s — cannot compute USD value", intent.TokenID)
+	}
+
+	return humanAmount * usdPrice, nil
+}
+
 // buildApprovalSummary creates a one-line summary of the transaction for approval.
 func buildApprovalSummary(intent *Intent) string {
 	switch intent.Action {
@@ -222,7 +263,7 @@ func (e *Engine) GetRemainingBudget(wallet string) map[string]any {
 // Stateless checks (whitelist, approval threshold, per-TX) run first.
 // Stateful checks (daily limits via CheckAndReserve) run last.
 // Call ReleaseReserve if the transaction fails after Check returns allowed.
-func (e *Engine) Check(intent *Intent) (*CheckResult, error) {
+func (e *Engine) Check(ctx context.Context, intent *Intent) (*CheckResult, error) {
 	if e == nil {
 		return &CheckResult{Allowed: true}, nil
 	}
@@ -289,7 +330,39 @@ func (e *Engine) Check(intent *Intent) (*CheckResult, error) {
 			approvalReason = fmt.Sprintf("transaction amount %.6f TRX exceeds approval threshold of %.0f TRX for wallet %q — approval required", intent.AmountTRX(), wp.ApprovalRequiredAboveTRX, intent.WalletName)
 		}
 	}
-	// TODO: approval_required_above_usd (requires price service #85)
+	// 5. Per-TX USD limit (stateless, fail-closed when price unavailable)
+	if wp.PerTxLimitUSD > 0 {
+		usdValue, usdErr := e.intentToUSD(ctx, intent, wp)
+		if usdErr != nil {
+			log.Printf("warning: cannot verify USD limit for wallet %q: %v", intent.WalletName, usdErr)
+			return &CheckResult{
+				Allowed: false,
+				Reason:  fmt.Sprintf("cannot verify per-TX USD limit for wallet %q: price unavailable (%v)", intent.WalletName, usdErr),
+			}, nil
+		}
+		if usdValue > wp.PerTxLimitUSD {
+			return &CheckResult{
+				Allowed: false,
+				Reason:  fmt.Sprintf("transaction value $%.2f exceeds per-TX USD limit of $%.0f for wallet %q", usdValue, wp.PerTxLimitUSD, intent.WalletName),
+			}, nil
+		}
+	}
+
+	// 6. USD approval threshold (fail-closed when price unavailable)
+	if !approvalNeeded && wp.ApprovalRequiredAboveUSD > 0 {
+		usdValue, usdErr := e.intentToUSD(ctx, intent, wp)
+		if usdErr != nil {
+			log.Printf("warning: cannot verify USD approval threshold for wallet %q: %v", intent.WalletName, usdErr)
+			return &CheckResult{
+				Allowed: false,
+				Reason:  fmt.Sprintf("cannot verify USD approval threshold for wallet %q: price unavailable (%v)", intent.WalletName, usdErr),
+			}, nil
+		}
+		if usdValue > wp.ApprovalRequiredAboveUSD {
+			approvalNeeded = true
+			approvalReason = fmt.Sprintf("transaction value $%.2f exceeds USD approval threshold of $%.0f for wallet %q — approval required", usdValue, wp.ApprovalRequiredAboveUSD, intent.WalletName)
+		}
+	}
 
 	// === STATEFUL checks (CheckAndReserve — has side effects) ===
 
@@ -305,7 +378,7 @@ func (e *Engine) Check(intent *Intent) (*CheckResult, error) {
 		}, nil
 	}
 
-	// 5. Per-token daily unit limit (compared in raw on-chain units)
+	// 7. Per-token daily unit limit (compared in raw on-chain units)
 	if tl := wp.TokenLimits[intent.TokenID]; tl != nil && tl.DailyLimitUnits > 0 && e.store != nil {
 		rawLimit := tl.RawDailyLimit()
 		if rawLimit > float64(math.MaxInt64) {
@@ -327,7 +400,7 @@ func (e *Engine) Check(intent *Intent) (*CheckResult, error) {
 		}
 	}
 
-	// 6. Legacy TRX daily limit
+	// 8. Legacy TRX daily limit
 	if intent.TokenID == "TRX" && wp.DailyLimitTRX > 0 && e.store != nil {
 		if _, exists := wp.TokenLimits["TRX"]; !exists {
 			if wp.DailyLimitTRX > float64(math.MaxInt64)/1_000_000 {
@@ -350,9 +423,7 @@ func (e *Engine) Check(intent *Intent) (*CheckResult, error) {
 		}
 	}
 
-	// TODO: Aggregate USD limits (requires price service #85)
-
-	// 7. Approval threshold — return after stateful checks so daily spend is already reserved
+	// 9. Approval threshold — return after stateful checks so daily spend is already reserved
 	if approvalNeeded {
 		return &CheckResult{
 			Allowed:          false,

@@ -207,7 +207,7 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.
 		reserved := false
 		if intent != nil && pe != nil {
 			progress.Send(2, "Checking policy...")
-			result, pErr := pe.Check(intent)
+			result, pErr := pe.Check(ctx, intent)
 			if pErr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: policy check failed: %v", pErr)), nil
 			}
@@ -354,7 +354,7 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.En
 		reserved := false
 		if intent != nil && pe != nil {
 			progress.Send(2, "Checking policy...")
-			result, pErr := pe.Check(intent)
+			result, pErr := pe.Check(ctx, intent)
 			if pErr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: policy check failed: %v", pErr)), nil
 			}
