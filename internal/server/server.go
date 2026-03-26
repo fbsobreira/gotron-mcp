@@ -13,6 +13,7 @@ import (
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/policy"
 	"github.com/fbsobreira/gotron-mcp/internal/price"
+	"github.com/fbsobreira/gotron-mcp/internal/prompts"
 	"github.com/fbsobreira/gotron-mcp/internal/resources"
 	"github.com/fbsobreira/gotron-mcp/internal/tools"
 	"github.com/fbsobreira/gotron-mcp/internal/trongrid"
@@ -31,6 +32,7 @@ func New(cfg *config.Config, pool *nodepool.Pool) (*server.MCPServer, *wallet.Ma
 		version.Version,
 		server.WithToolCapabilities(false),
 		server.WithResourceCapabilities(false, false),
+		server.WithPromptCapabilities(false),
 		server.WithElicitation(),
 		server.WithInstructions(`GoTRON MCP server for TRON blockchain interaction.
 
@@ -66,6 +68,9 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 
 	// Knowledge base resources
 	resources.RegisterResources(s)
+
+	// Prompt workflows
+	prompts.RegisterPrompts(s)
 
 	// Always register read-only tools
 	tools.RegisterAccountTools(s, pool)
