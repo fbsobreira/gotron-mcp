@@ -82,7 +82,7 @@ func (m *Manager) ListWallets() ([]WalletInfo, error) {
 // GetSigner returns a Signer for the named wallet or address.
 // The wallet is unlocked with the manager's passphrase.
 func (m *Manager) GetSigner(nameOrAddress string) (signer.Signer, error) {
-	addr, err := m.resolveAddress(nameOrAddress)
+	addr, err := m.ResolveAddress(nameOrAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -115,9 +115,9 @@ func (m *Manager) Close() {
 	m.store.CloseAll()
 }
 
-// resolveAddress converts a wallet name to its address, or returns the
+// ResolveAddress converts a wallet name to its address, or returns the
 // input if it's already a base58 address (starts with T).
-func (m *Manager) resolveAddress(nameOrAddress string) (string, error) {
+func (m *Manager) ResolveAddress(nameOrAddress string) (string, error) {
 	// Try as wallet name first
 	addr, err := m.store.AddressFromAccountName(nameOrAddress)
 	if err == nil {

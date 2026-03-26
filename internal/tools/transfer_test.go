@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/fbsobreira/gotron-mcp/internal/wallet"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/stretchr/testify/assert"
@@ -15,7 +16,7 @@ import (
 
 func TestTransferTRX_InvalidFromAddress(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleTransferTRX(pool), map[string]any{
+	result := callTool(t, handleTransferTRX(pool, nil), map[string]any{
 		"from":   "invalid",
 		"to":     "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"amount": "100",
@@ -25,7 +26,7 @@ func TestTransferTRX_InvalidFromAddress(t *testing.T) {
 
 func TestTransferTRX_InvalidToAddress(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleTransferTRX(pool), map[string]any{
+	result := callTool(t, handleTransferTRX(pool, nil), map[string]any{
 		"from":   "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":     "invalid",
 		"amount": "100",
@@ -35,7 +36,7 @@ func TestTransferTRX_InvalidToAddress(t *testing.T) {
 
 func TestTransferTRX_InvalidAmount(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleTransferTRX(pool), map[string]any{
+	result := callTool(t, handleTransferTRX(pool, nil), map[string]any{
 		"from":   "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":     "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"amount": "abc",
@@ -45,7 +46,7 @@ func TestTransferTRX_InvalidAmount(t *testing.T) {
 
 func TestTransferTRX_ZeroAmount(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleTransferTRX(pool), map[string]any{
+	result := callTool(t, handleTransferTRX(pool, nil), map[string]any{
 		"from":   "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":     "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"amount": "0",
@@ -65,7 +66,7 @@ func TestTransferTRX_Success(t *testing.T) {
 		},
 	}
 	pool := newMockPool(t, mock)
-	result := callTool(t, handleTransferTRX(pool), map[string]any{
+	result := callTool(t, handleTransferTRX(pool, nil), map[string]any{
 		"from":   "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":     "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"amount": "100.5",
@@ -92,7 +93,7 @@ func TestTransferTRX_WithMemo(t *testing.T) {
 		},
 	}
 	pool := newMockPool(t, mock)
-	result := callTool(t, handleTransferTRX(pool), map[string]any{
+	result := callTool(t, handleTransferTRX(pool, nil), map[string]any{
 		"from":   "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":     "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"amount": "1",
@@ -124,7 +125,7 @@ func TestTransferTRX_WithPermissionID(t *testing.T) {
 		},
 	}
 	pool := newMockPool(t, mock)
-	result := callTool(t, handleTransferTRX(pool), map[string]any{
+	result := callTool(t, handleTransferTRX(pool, nil), map[string]any{
 		"from":          "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":            "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"amount":        "1",
@@ -144,7 +145,7 @@ func TestTransferTRX_WithPermissionID(t *testing.T) {
 
 func TestTransferTRC20_InvalidAddress(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleTransferTRC20(pool, nil), map[string]any{
+	result := callTool(t, handleTransferTRC20(pool, nil, nil), map[string]any{
 		"from":             "invalid",
 		"to":               "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -155,7 +156,7 @@ func TestTransferTRC20_InvalidAddress(t *testing.T) {
 
 func TestTransferTRC20_InvalidContractAddress(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleTransferTRC20(pool, nil), map[string]any{
+	result := callTool(t, handleTransferTRC20(pool, nil, nil), map[string]any{
 		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":               "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"contract_address": "invalid",
@@ -166,7 +167,7 @@ func TestTransferTRC20_InvalidContractAddress(t *testing.T) {
 
 func TestTransferTRC20_InvalidToAddress(t *testing.T) {
 	pool := newMockPool(t, &mockWalletServer{})
-	result := callTool(t, handleTransferTRC20(pool, nil), map[string]any{
+	result := callTool(t, handleTransferTRC20(pool, nil, nil), map[string]any{
 		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":               "bad",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -186,7 +187,7 @@ func TestTransferTRC20_InvalidFeeLimit(t *testing.T) {
 		},
 	}
 	pool := newMockPool(t, mock)
-	result := callTool(t, handleTransferTRC20(pool, nil), map[string]any{
+	result := callTool(t, handleTransferTRC20(pool, nil, nil), map[string]any{
 		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -217,7 +218,7 @@ func TestTransferTRC20_Success(t *testing.T) {
 		},
 	}
 	pool := newMockPool(t, mock)
-	result := callTool(t, handleTransferTRC20(pool, nil), map[string]any{
+	result := callTool(t, handleTransferTRC20(pool, nil, nil), map[string]any{
 		"from":             "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF",
 		"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
 		"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -228,4 +229,53 @@ func TestTransferTRC20_Success(t *testing.T) {
 	data := parseJSONResult(t, result)
 	assert.Equal(t, "TriggerSmartContract", data["type"])
 	assert.NotEmpty(t, data["transaction_hex"], "transaction_hex should not be empty")
+}
+
+// --- resolveFromAddress tests ---
+
+func TestResolveFromAddress_NilWM_ValidAddress(t *testing.T) {
+	addr, err := resolveFromAddress(nil, "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF")
+	require.NoError(t, err)
+	assert.Equal(t, "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", addr)
+}
+
+func TestResolveFromAddress_NilWM_InvalidAddress(t *testing.T) {
+	_, err := resolveFromAddress(nil, "not-an-address")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid from address")
+	assert.NotContains(t, err.Error(), "list_wallets", "should not mention list_wallets when no wallet manager")
+}
+
+func TestResolveFromAddress_WithWM_WalletName(t *testing.T) {
+	wm, err := wallet.NewManager(t.TempDir(), "test-pass")
+	require.NoError(t, err)
+	t.Cleanup(func() { wm.Close() })
+
+	addr, createErr := wm.CreateWallet("my-wallet")
+	require.NoError(t, createErr)
+
+	resolved, err := resolveFromAddress(wm, "my-wallet")
+	require.NoError(t, err)
+	assert.Equal(t, addr, resolved, "should resolve wallet name to address")
+}
+
+func TestResolveFromAddress_WithWM_RawAddress(t *testing.T) {
+	wm, err := wallet.NewManager(t.TempDir(), "test-pass")
+	require.NoError(t, err)
+	t.Cleanup(func() { wm.Close() })
+
+	// Pass a valid address directly — should work even without matching wallet
+	addr, err := resolveFromAddress(wm, "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF")
+	require.NoError(t, err)
+	assert.Equal(t, "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", addr)
+}
+
+func TestResolveFromAddress_WithWM_UnknownName(t *testing.T) {
+	wm, err := wallet.NewManager(t.TempDir(), "test-pass")
+	require.NoError(t, err)
+	t.Cleanup(func() { wm.Close() })
+
+	_, err = resolveFromAddress(wm, "unknown-wallet")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "list_wallets", "should hint to use list_wallets")
 }

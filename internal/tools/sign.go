@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
+	"math/big"
 	"strings"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/fbsobreira/gotron-mcp/internal/wallet"
 	"github.com/fbsobreira/gotron-sdk/pkg/client/transaction"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
+	trc20Std "github.com/fbsobreira/gotron-sdk/pkg/standards/trc20"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"google.golang.org/protobuf/proto"
@@ -57,7 +60,7 @@ func RegisterSignTools(s *server.MCPServer, pool *nodepool.Pool, wm *wallet.Mana
 			mcp.WithString("wallet", mcp.Required(), mcp.Description("Wallet name or address")),
 			mcp.WithString("reason", mcp.Description("Reason for this transaction — shown in approval messages")),
 		),
-		handleSignAndBroadcast(pool, wm, pe),
+		handleSignAndBroadcast(s, pool, wm, pe),
 	)
 
 	s.AddTool(
@@ -67,7 +70,7 @@ func RegisterSignTools(s *server.MCPServer, pool *nodepool.Pool, wm *wallet.Mana
 			mcp.WithString("wallet", mcp.Required(), mcp.Description("Wallet name or address")),
 			mcp.WithString("reason", mcp.Description("Reason for this transaction — shown in approval messages")),
 		),
-		handleSignAndConfirm(pool, wm, pe),
+		handleSignAndConfirm(s, pool, wm, pe),
 	)
 
 	// sign_transaction and broadcast_transaction only available when no policy engine
@@ -162,9 +165,9 @@ func handleSignTransaction(wm *wallet.Manager) server.ToolHandlerFunc {
 	}
 }
 
-func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.Engine) server.ToolHandlerFunc {
+func handleSignAndBroadcast(mcpSrv *server.MCPServer, pool *nodepool.Pool, wm *wallet.Manager, pe *policy.Engine) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		progress := newProgressReporter(ctx, req, 4)
+		progress := newProgressReporter(ctx, req, 5)
 		txHex := req.GetString("transaction_hex", "")
 		walletName := wm.ResolveWalletName(req.GetString("wallet", ""))
 
@@ -257,7 +260,18 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.
 			}
 		}
 
-		progress.Send(3, "Signing with wallet...")
+		// Elicitation confirmation (only when no policy engine)
+		if pe == nil && decoded != nil {
+			progress.Send(3, "Requesting confirmation...")
+			if confirmErr := requestBroadcastConfirmation(ctx, mcpSrv, pool, decoded, walletName); confirmErr != nil {
+				return mcp.NewToolResultJSON(map[string]any{
+					"status": "cancelled",
+					"reason": confirmErr.Error(),
+				})
+			}
+		}
+
+		progress.Send(4, "Signing with wallet...")
 		s, err := wm.GetSigner(walletName)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: %v", err)), nil
@@ -273,7 +287,7 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		progress.Send(4, "Broadcasting to network...")
+		progress.Send(5, "Broadcasting to network...")
 		conn := pool.Client()
 		ret, err := conn.BroadcastCtx(ctx, signedTx)
 		if err != nil {
@@ -311,11 +325,11 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.
 	}
 }
 
-func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.Engine) server.ToolHandlerFunc {
+func handleSignAndConfirm(mcpSrv *server.MCPServer, pool *nodepool.Pool, wm *wallet.Manager, pe *policy.Engine) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		const maxConfirmAttempts = 20
-		// 4 setup steps + polling attempts + 1 confirmation step
-		progress := newProgressReporter(ctx, req, 5+maxConfirmAttempts)
+		// 5 setup steps + polling attempts + 1 confirmation step
+		progress := newProgressReporter(ctx, req, 6+maxConfirmAttempts)
 
 		txHex := req.GetString("transaction_hex", "")
 		walletName := wm.ResolveWalletName(req.GetString("wallet", ""))
@@ -404,7 +418,18 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.En
 			}
 		}
 
-		progress.Send(3, "Signing with wallet...")
+		// Elicitation confirmation (only when no policy engine)
+		if pe == nil && decoded != nil {
+			progress.Send(3, "Requesting confirmation...")
+			if confirmErr := requestBroadcastConfirmation(ctx, mcpSrv, pool, decoded, walletName); confirmErr != nil {
+				return mcp.NewToolResultJSON(map[string]any{
+					"status": "cancelled",
+					"reason": confirmErr.Error(),
+				})
+			}
+		}
+
+		progress.Send(4, "Signing with wallet...")
 		s, err := wm.GetSigner(walletName)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: %v", err)), nil
@@ -420,7 +445,7 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.En
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		progress.Send(4, "Broadcasting to network...")
+		progress.Send(5, "Broadcasting to network...")
 		conn := pool.Client()
 		ret, err := conn.BroadcastCtx(ctx, signedTx)
 		if err != nil {
@@ -451,7 +476,7 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.En
 			case <-ticker.C:
 			}
 
-			progress.Send(5+attempt, fmt.Sprintf("Waiting for confirmation (attempt %d/%d)...", attempt+1, maxConfirmAttempts))
+			progress.Send(6+attempt, fmt.Sprintf("Waiting for confirmation (attempt %d/%d)...", attempt+1, maxConfirmAttempts))
 
 			info, infoErr := conn.GetTransactionInfoByIDCtx(ctx, txid)
 			if infoErr != nil {
@@ -461,7 +486,7 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.En
 				return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: %v", infoErr)), nil
 			}
 			if info != nil && info.BlockNumber > 0 {
-				progress.Send(5+maxConfirmAttempts, fmt.Sprintf("Confirmed in block %d", info.BlockNumber))
+				progress.Send(6+maxConfirmAttempts, fmt.Sprintf("Confirmed in block %d", info.BlockNumber))
 				return mcp.NewToolResultJSON(map[string]any{
 					"txid":           txid,
 					"success":        info.GetResult() != core.TransactionInfo_FAILED,
@@ -527,6 +552,139 @@ func rebuildTransaction(ctx context.Context, pool *nodepool.Pool, intent *policy
 		return nil, fmt.Errorf("rebuilding transfer: %w", err)
 	}
 	return ext.Transaction, nil
+}
+
+// formatTokenAmount formats a raw big.Int token amount with decimal point insertion.
+// For example, formatTokenAmount(big.NewInt(1000000), 6) returns "1.000000".
+func formatTokenAmount(raw *big.Int, decimals int) string {
+	if raw == nil {
+		return "0"
+	}
+	s := raw.String()
+	if decimals <= 0 {
+		return s
+	}
+	// Pad with leading zeros if needed
+	for len(s) <= decimals {
+		s = "0" + s
+	}
+	intPart := s[:len(s)-decimals]
+	fracPart := s[len(s)-decimals:]
+	// Trim trailing zeros from fractional part for cleaner display
+	fracPart = strings.TrimRight(fracPart, "0")
+	if fracPart == "" {
+		return intPart
+	}
+	return intPart + "." + fracPart
+}
+
+// requestBroadcastConfirmation asks the user to confirm a transaction before broadcast
+// via MCP elicitation. Returns nil to proceed, or an error to cancel.
+// Gracefully skips if the client doesn't support elicitation or decoded is nil.
+func requestBroadcastConfirmation(
+	ctx context.Context,
+	s *server.MCPServer,
+	pool *nodepool.Pool,
+	decoded *transaction.ContractData,
+	walletName string,
+) error {
+	if decoded == nil || s == nil {
+		return nil
+	}
+
+	// Build human-readable confirmation message from decoded contract fields.
+	// For TRC20 transfers, decode ABI data and resolve decimals for human-readable amounts.
+	var msg strings.Builder
+	msg.WriteString("Confirm transaction before broadcast:\n\n")
+	fmt.Fprintf(&msg, "Type: %s\n", decoded.Type)
+	if from, ok := decoded.Fields["owner_address"]; ok {
+		fmt.Fprintf(&msg, "From: %v (wallet: %q)\n", from, walletName)
+	}
+
+	// Try to decode TRC20 transfer details from ABI data
+	trc20Decoded := false
+	if decoded.Type == "TriggerSmartContract" {
+		if intent, err := policy.IntentFromContractData(walletName, decoded); err == nil && intent.TokenID != "TRX" {
+			fmt.Fprintf(&msg, "To: %s\n", intent.ToAddr)
+			fmt.Fprintf(&msg, "Token contract: %s\n", intent.TokenID)
+			// Try to resolve token decimals and symbol for human-readable display
+			if pool != nil {
+				token := trc20Std.New(pool.Client(), intent.TokenID)
+				if symbol, sErr := token.Symbol(ctx); sErr == nil {
+					if decimals, dErr := token.Decimals(ctx); dErr == nil && decimals > 0 && intent.RawTokenAmt != nil {
+						// Use big.Int string with decimal point insertion for exact precision
+						fmt.Fprintf(&msg, "Amount: %s %s\n", formatTokenAmount(intent.RawTokenAmt, int(decimals)), symbol)
+					} else if intent.RawTokenAmt != nil {
+						fmt.Fprintf(&msg, "Amount: %s raw units (%s)\n", intent.RawTokenAmt.String(), symbol)
+					} else {
+						fmt.Fprintf(&msg, "Amount: %.0f raw units (%s)\n", intent.TokenAmount, symbol)
+					}
+				} else if intent.RawTokenAmt != nil {
+					fmt.Fprintf(&msg, "Amount: %s raw units\n", intent.RawTokenAmt.String())
+				} else {
+					fmt.Fprintf(&msg, "Amount: %.0f raw units\n", intent.TokenAmount)
+				}
+			} else if intent.RawTokenAmt != nil {
+				fmt.Fprintf(&msg, "Amount: %s raw units\n", intent.RawTokenAmt.String())
+			} else {
+				fmt.Fprintf(&msg, "Amount: %.0f raw units\n", intent.TokenAmount)
+			}
+			trc20Decoded = true
+		}
+	}
+
+	if !trc20Decoded {
+		if to, ok := decoded.Fields["to_address"]; ok {
+			fmt.Fprintf(&msg, "To: %v\n", to)
+		}
+		if contract, ok := decoded.Fields["contract_address"]; ok {
+			fmt.Fprintf(&msg, "Contract: %v\n", contract)
+		}
+		if amount, ok := decoded.Fields["amount"]; ok {
+			switch v := amount.(type) {
+			case string:
+				// TransferContract: SDK already converts to human-readable TRX string
+				fmt.Fprintf(&msg, "Amount: %s TRX\n", v)
+			case int64:
+				// TransferAssetContract (TRC10): raw units
+				fmt.Fprintf(&msg, "Amount: %d (raw units)\n", v)
+			case float64:
+				fmt.Fprintf(&msg, "Amount: %g (raw units)\n", v)
+			default:
+				fmt.Fprintf(&msg, "Amount: %v\n", amount)
+			}
+		}
+		if callValue, ok := decoded.Fields["call_value"]; ok {
+			// SDK converts call_value via sunToTRX() — returns string
+			if cv, isStr := callValue.(string); isStr && cv != "" && cv != "0.000000" {
+				fmt.Fprintf(&msg, "Call Value: %s TRX\n", cv)
+			}
+		}
+	}
+
+	elicitReq := mcp.ElicitationRequest{
+		Params: mcp.ElicitationParams{
+			Message: msg.String(),
+			RequestedSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+	}
+
+	result, err := s.RequestElicitation(ctx, elicitReq)
+	if err != nil {
+		if errors.Is(err, server.ErrElicitationNotSupported) || errors.Is(err, server.ErrNoActiveSession) {
+			return nil
+		}
+		return fmt.Errorf("transaction broadcast cancelled: %w", err)
+	}
+
+	if result.Action == mcp.ElicitationResponseActionAccept {
+		return nil
+	}
+
+	return fmt.Errorf("transaction broadcast cancelled by user")
 }
 
 func handleRequestLimitOverride(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.Engine) server.ToolHandlerFunc {
