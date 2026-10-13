@@ -47,6 +47,7 @@ Available capabilities:
 - Estimate energy costs (estimate_energy). Automatically falls back to secondary node if primary does not support this RPC
 - Validate and convert addresses between base58, hex, and Ethereum 0x formats (validate_address)
 - Network info, chain parameters, energy/bandwidth prices (get_network, get_chain_parameters)
+- TIP-899 post-quantum signature support of the connected node and this build (get_pq_capabilities)
 - Transaction lookup (get_transaction)
 - Transaction history, TRC20 transfers, contract events via TronGrid REST API (get_transaction_history, get_trc20_transfers, get_contract_events)
 - Comprehensive account overview in one call (analyze_account)
@@ -61,7 +62,7 @@ Available capabilities:
 - Resource delegation (delegate_resource, undelegate_resource)
 - Vote for super representatives (vote_witness)
 - Smart contract write calls (trigger_contract)
-- Sign and broadcast transactions via keystore (sign_transaction, broadcast_transaction) [local mode + keystore]
+- Sign and broadcast transactions via keystore (sign_transaction, broadcast_transaction), including TIP-899 post-quantum signing with ml_dsa_44 / fn_dsa_512 wallets (create_wallet key_type) [local mode + keystore]
 
 Knowledge base resources available at gotron://knowledge/ for TRON concepts and SDK usage guides.`),
 	)
@@ -78,6 +79,7 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 	trc20Cache := tools.RegisterTokenTools(s, pool)
 	tools.RegisterContractReadTools(s, pool)
 	tools.RegisterNetworkTools(s, pool, cfg.Network, cfg.Node)
+	tools.RegisterPQTools(s, pool)
 	tools.RegisterAddressTools(s)
 	tools.RegisterWitnessReadTools(s, pool)
 	tools.RegisterProposalTools(s, pool)

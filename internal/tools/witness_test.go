@@ -234,7 +234,8 @@ func TestVoteWitness_Success(t *testing.T) {
 	mock := &mockWalletServer{
 		VoteWitnessAccount2Func: func(_ context.Context, _ *core.VoteWitnessContract) (*api.TransactionExtention, error) {
 			return &api.TransactionExtention{
-				Txid: []byte{0x07, 0x08, 0x09},
+				Txid:   []byte{0x07, 0x08, 0x09},
+				Result: &api.Return{Result: true},
 				Transaction: &core.Transaction{
 					RawData: &core.TransactionRaw{},
 				},

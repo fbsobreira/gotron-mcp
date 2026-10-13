@@ -58,7 +58,8 @@ func TestTransferTRX_Success(t *testing.T) {
 	mock := &mockWalletServer{
 		CreateTransaction2Func: func(_ context.Context, _ *core.TransferContract) (*api.TransactionExtention, error) {
 			return &api.TransactionExtention{
-				Txid: []byte{0x0a, 0x0b, 0x0c},
+				Txid:   []byte{0x0a, 0x0b, 0x0c},
+				Result: &api.Return{Result: true},
 				Transaction: &core.Transaction{
 					RawData: &core.TransactionRaw{},
 				},
@@ -83,7 +84,8 @@ func TestTransferTRX_WithMemo(t *testing.T) {
 	mock := &mockWalletServer{
 		CreateTransaction2Func: func(_ context.Context, _ *core.TransferContract) (*api.TransactionExtention, error) {
 			return &api.TransactionExtention{
-				Txid: []byte{0x0a, 0x0b, 0x0c},
+				Txid:   []byte{0x0a, 0x0b, 0x0c},
+				Result: &api.Return{Result: true},
 				Transaction: &core.Transaction{
 					RawData: &core.TransactionRaw{
 						Contract: []*core.Transaction_Contract{{}},
@@ -115,7 +117,8 @@ func TestTransferTRX_WithPermissionID(t *testing.T) {
 	mock := &mockWalletServer{
 		CreateTransaction2Func: func(_ context.Context, _ *core.TransferContract) (*api.TransactionExtention, error) {
 			return &api.TransactionExtention{
-				Txid: []byte{0x0a, 0x0b, 0x0c},
+				Txid:   []byte{0x0a, 0x0b, 0x0c},
+				Result: &api.Return{Result: true},
 				Transaction: &core.Transaction{
 					RawData: &core.TransactionRaw{
 						Contract: []*core.Transaction_Contract{{}},

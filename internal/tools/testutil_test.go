@@ -52,6 +52,7 @@ type mockWalletServer struct {
 	GetDelegatedResourceV2Func             func(context.Context, *api.DelegatedResourceMessage) (*api.DelegatedResourceList, error)
 	GetDelegatedResourceAccountIndexV2Func func(context.Context, *api.BytesMessage) (*core.DelegatedResourceAccountIndex, error)
 	GetCanDelegatedMaxSizeFunc             func(context.Context, *api.CanDelegatedMaxSizeRequestMessage) (*api.CanDelegatedMaxSizeResponseMessage, error)
+	GetChainParametersFunc                 func(context.Context, *api.EmptyMessage) (*core.ChainParameters, error)
 }
 
 func (m *mockWalletServer) GetAccount(ctx context.Context, in *core.Account) (*core.Account, error) {
@@ -136,6 +137,13 @@ func (m *mockWalletServer) TriggerConstantContract(ctx context.Context, in *core
 		return m.TriggerConstantContractFunc(ctx, in)
 	}
 	return m.UnimplementedWalletServer.TriggerConstantContract(ctx, in)
+}
+
+func (m *mockWalletServer) GetChainParameters(ctx context.Context, in *api.EmptyMessage) (*core.ChainParameters, error) {
+	if m.GetChainParametersFunc != nil {
+		return m.GetChainParametersFunc(ctx, in)
+	}
+	return m.UnimplementedWalletServer.GetChainParameters(ctx, in)
 }
 
 func (m *mockWalletServer) BroadcastTransaction(ctx context.Context, in *core.Transaction) (*api.Return, error) {

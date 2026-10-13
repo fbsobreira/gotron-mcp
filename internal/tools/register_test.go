@@ -6,6 +6,7 @@ import (
 	"github.com/fbsobreira/gotron-mcp/internal/trongrid"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRegisterAllTools(t *testing.T) {
@@ -18,6 +19,7 @@ func TestRegisterAllTools(t *testing.T) {
 	RegisterContractReadTools(s, pool)
 	RegisterContractWriteTools(s, pool)
 	RegisterNetworkTools(s, pool, "mainnet", "mock:50051")
+	RegisterPQTools(s, pool)
 	RegisterProposalTools(s, pool)
 	RegisterResourceTools(s, pool)
 	wm := newTestWalletManager(t)
@@ -40,8 +42,8 @@ func TestRegisterAllTools(t *testing.T) {
 	// 4 sign (sign_transaction, sign_and_broadcast, sign_and_confirm, broadcast_transaction) +
 	// 1 policy (get_wallet_policy) +
 	// 2 wallet (create_wallet, list_wallets) +
-	// 3 token + 2 transfer + 1 witness read + 1 witness write + 3 history (TronGrid REST) = 42
-	const expectedToolCount = 42
+	// 3 token + 2 transfer + 1 witness read + 1 witness write + 3 history (TronGrid REST) + 1 pq (get_pq_capabilities) = 43
+	const expectedToolCount = 43
 	assert.Len(t, tools, expectedToolCount, "registered tool count")
 
 	representative := []string{
@@ -61,6 +63,7 @@ func TestRegisterAllTools(t *testing.T) {
 		"broadcast_transaction",
 		"create_wallet",
 		"list_wallets",
+		"get_pq_capabilities",
 		"get_trc20_balance",
 		"transfer_trx",
 		"transfer_trc20",
@@ -80,4 +83,10 @@ func TestRegisterAllTools(t *testing.T) {
 	for _, name := range representative {
 		assert.NotNil(t, tools[name], "expected tool %q to be registered", name)
 	}
+
+	// key_type must be advertised in the schema; clients only discover
+	// parameters through tools/list.
+	createWallet := tools["create_wallet"]
+	require.NotNil(t, createWallet, "create_wallet registered")
+	assert.Contains(t, createWallet.Tool.InputSchema.Properties, "key_type", "create_wallet advertises key_type")
 }

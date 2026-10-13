@@ -1,9 +1,11 @@
 package nodepool
 
 import (
+	"context"
 	"log"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/fbsobreira/gotron-sdk/pkg/client"
 	"google.golang.org/grpc"
@@ -132,12 +134,10 @@ func (p *Pool) Recover() bool {
 // If on fallback and primary recovers, switches back.
 func (p *Pool) CheckHealth() bool {
 	active := p.active.Load()
-	_, err := active.client.GetNowBlock()
-	if err == nil {
+	if p.nodeHealthy(active) {
 		// Active is healthy — if we're on fallback, try to recover to primary
 		if active == p.fallback {
-			_, primaryErr := p.primary.client.GetNowBlock()
-			if primaryErr == nil {
+			if p.nodeHealthy(p.primary) {
 				p.Recover()
 			}
 		}
@@ -147,6 +147,18 @@ func (p *Pool) CheckHealth() bool {
 	// Active is unhealthy — try failover
 	p.Failover()
 	return false
+}
+
+// healthCheckTimeout bounds a single node probe in CheckHealth.
+const healthCheckTimeout = 5 * time.Second
+
+// nodeHealthy reports whether n answers GetNowBlock within healthCheckTimeout.
+// Any error, including a closed connection, counts as unhealthy.
+func (p *Pool) nodeHealthy(n *node) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), healthCheckTimeout)
+	defer cancel()
+	_, err := n.client.GetNowBlockCtx(ctx)
+	return err == nil
 }
 
 // Stop closes all client connections.

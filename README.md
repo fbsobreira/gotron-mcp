@@ -146,6 +146,7 @@ claude mcp add gotron --scope user --transport http https://mcp.gotron.sh/mcp
 | `get_bandwidth_prices` | Get bandwidth price history |
 | `list_proposals` | List governance proposals |
 | `get_network` | Get current network connection info |
+| `get_pq_capabilities` | Report node and build support for post-quantum (TIP-899) signing |
 
 ### Transaction Builders (both modes)
 
@@ -164,6 +165,17 @@ claude mcp add gotron --scope user --transport http https://mcp.gotron.sh/mcp
 |------|-------------|
 | `sign_transaction` | Sign transaction using local keystore |
 | `broadcast_transaction` | Broadcast signed transaction to network |
+
+### Post-quantum signing (TIP-899, Nile)
+
+`create_wallet(name, key_type?)` accepts `ecdsa` (default), `ml_dsa_44` or `fn_dsa_512`; `list_wallets` and signing results report `key_type`. `sign_transaction`, `sign_and_broadcast`, `sign_and_confirm` and `request_limit_override` accept PQ wallets with the same policy limits, Telegram approval and elicitation as ECDSA wallets.
+
+- TIP-899 is a draft, live only on Nile (`grpc.nile.trongrid.io:50051`); governance switches each scheme on or off and mainnet reports none. Use `get_pq_capabilities` to check the node and this build.
+- Before any policy check or approval, a PQ signature requires that the node has the scheme enabled and that the wallet's address is a key of the transaction's permission (`permission_id`) on the owner account. A fresh PQ address must receive TRX first.
+- PQ keys are stored encrypted with `GOTRON_MCP_KEYSTORE_PASSPHRASE` under `<keystore-dir>/pq-keys/<name>/` (wallet-cli compatible, same layout as tronctl). Point `--keystore-dir` at a tronctl config root (e.g. `~/.tronctl`) to reuse its keys; the passphrase must match their password. Wallet names are unique across ECDSA and PQ wallets; `list_wallets` flags `duplicate_name: true` and such a wallet cannot sign until one copy is renamed.
+- The signature goes into `pq_auth_sig` (txid unchanged); a transaction carries at most 5 signatures, ECDSA and PQ combined. PQ transactions are about 10-22x larger than ECDSA ones (roughly 10x for FN-DSA-512, 22x for ML-DSA-44), so they use more bandwidth.
+- ML-DSA-44 is pure Go and works in every build. FN-DSA-512 (Falcon-512, currently enabled on Nile) needs a build with `-tags falcon`, CGO and liboqs installed via pkg-config: `CGO_ENABLED=1 go build -tags falcon ./cmd/gotron-mcp`. Without it, FN-DSA create/sign returns an error pointing to the `gotron-mcp-pq` build; release binaries for it are planned (GOT-97).
+- Not supported yet: adding a PQ key to an existing account's permissions from MCP (GOT-98; use tronctl or the [SDK guide](https://github.com/fbsobreira/gotron-sdk/blob/master/docs/post-quantum.md)) and co-signing one transaction with several MCP wallets (GOT-99).
 
 ## Configuration
 
