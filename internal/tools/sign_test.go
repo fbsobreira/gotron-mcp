@@ -15,6 +15,7 @@ import (
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/policy"
 	"github.com/fbsobreira/gotron-mcp/internal/wallet"
+	"github.com/fbsobreira/gotron-sdk/pkg/address"
 	"github.com/fbsobreira/gotron-sdk/pkg/client/transaction"
 	"github.com/fbsobreira/gotron-sdk/pkg/keystore"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
@@ -2446,6 +2447,152 @@ func TestSigningTools_AmbiguousWallet_FailsBeforePolicy(t *testing.T) {
 			assert.Equal(t, int32(0), pricer.calls.Load(), "pe.Check must not run")
 			assert.Equal(t, int32(0), approver.calls.Load(), "no approval may be requested")
 			assert.False(t, session.called, "the confirmation prompt must not be sent")
+		})
+	}
+}
+
+// --- unknown wallet and undecodable transactions ---
+
+// TestSign_UnknownWallet_FailsBeforePolicyAndPrompt checks that a wallet
+// missing from the keystore fails at the lookup, before any spend
+// reservation, approval request or confirmation prompt: signing it could
+// never succeed.
+func TestSign_UnknownWallet_FailsBeforePolicyAndPrompt(t *testing.T) {
+	tests := []struct {
+		name   string
+		tool   string
+		policy bool
+		call   func(*server.MCPServer, *nodepool.Pool, *wallet.Manager, *policy.Engine) server.ToolHandlerFunc
+	}{
+		{"sign_and_broadcast with policy", "sign_and_broadcast", true, handleSignAndBroadcast},
+		{"sign_and_broadcast without policy", "sign_and_broadcast", false, handleSignAndBroadcast},
+		{"sign_and_confirm with policy", "sign_and_confirm", true, handleSignAndConfirm},
+		{"sign_and_confirm without policy", "sign_and_confirm", false, handleSignAndConfirm},
+		{"request_limit_override", "request_limit_override", true, func(_ *server.MCPServer, pool *nodepool.Pool, wm *wallet.Manager, pe *policy.Engine) server.ToolHandlerFunc {
+			return handleRequestLimitOverride(pool, wm, pe)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockWalletServer{BroadcastTransactionFunc: failBroadcast(t)}
+			wm, pool := newTestSignSetup(t, mock)
+
+			var pe *policy.Engine
+			approver := &countingApprover{approved: true}
+			if tt.policy {
+				pe = newTestPolicyEngine(t, pqApprovalPolicy("ghost"))
+				pe.SetApprover(approver)
+			}
+			mcpSrv := server.NewMCPServer("test", "1.0.0", server.WithElicitation())
+			session := &captureElicitSession{id: "unknown-wallet"}
+			ctx := mcpSrv.WithContext(context.Background(), session)
+
+			result := callToolWithCtx(t, ctx, tt.call(mcpSrv, pool, wm, pe), map[string]any{
+				"transaction_hex": buildTransferTxHexPerm(t, testAddr(0x11), testAddr(0x22), 10_000_000, 0),
+				"wallet":          "ghost",
+				"reason":          "payout",
+			})
+			require.True(t, result.IsError, "expected tool error, got: %s", resultText(result))
+			assert.Equal(t, tt.tool+`: wallet "ghost" not found`, resultText(result))
+			assert.Equal(t, int32(0), approver.calls.Load(), "no approval may be requested")
+			assert.False(t, session.called, "the confirmation prompt must not be sent")
+			if pe != nil {
+				assert.InDelta(t, 0.0, trxSpentToday(t, pe, "ghost"), 1e-9, "no daily spend may stay reserved")
+			}
+		})
+	}
+}
+
+// buildUndecodableTxHex returns a transaction whose contract type the SDK
+// decoder does not support (AccountUpdateContract).
+func buildUndecodableTxHex(t *testing.T, owner string, permissionID int32) string {
+	t.Helper()
+	ownerAddr, err := address.Base58ToAddress(owner)
+	require.NoError(t, err)
+	param, err := anypb.New(&core.AccountUpdateContract{OwnerAddress: ownerAddr, AccountName: []byte("renamed")})
+	require.NoError(t, err)
+	tx := &core.Transaction{RawData: &core.TransactionRaw{
+		Contract:   []*core.Transaction_Contract{{Type: core.Transaction_Contract_AccountUpdateContract, Parameter: param, PermissionId: permissionID}},
+		Expiration: time.Now().Add(time.Minute).UnixMilli(),
+	}}
+	_, decErr := transaction.DecodeContractData(tx)
+	require.Error(t, decErr, "the fixture must not be decodable")
+	b, err := proto.Marshal(tx)
+	require.NoError(t, err)
+	return hex.EncodeToString(b)
+}
+
+// TestSign_UndecodableTx_StillConfirms checks that, without a policy engine,
+// a transaction the server cannot decode still gets the confirmation prompt
+// (with a warning instead of details), and that declining it stops the
+// broadcast.
+func TestSign_UndecodableTx_StillConfirms(t *testing.T) {
+	const warning = "Warning: this server could not decode the contract, so its details are not shown. Accept only if you trust where this transaction came from.\n"
+
+	for _, tc := range []struct {
+		name         string
+		permissionID int32
+		permLine     string
+	}{
+		{name: "accepted prompt shows the owner, type and a warning"},
+		{name: "accepted prompt shows the permission", permissionID: 2, permLine: "Permission: 2\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := &mockWalletServer{BroadcastTransactionFunc: okBroadcast(nil)}
+			wm, pool := newTestSignSetup(t, mock)
+			_, err := wm.CreateWallet("signer")
+			require.NoError(t, err)
+
+			mcpSrv := server.NewMCPServer("test", "1.0.0", server.WithElicitation())
+			session := &captureElicitSession{id: "undecodable"}
+			ctx := mcpSrv.WithContext(context.Background(), session)
+
+			owner := testAddr(0x11)
+			result := callToolWithCtx(t, ctx, handleSignAndBroadcast(mcpSrv, pool, wm, nil), map[string]any{
+				"transaction_hex": buildUndecodableTxHex(t, owner, tc.permissionID),
+				"wallet":          "signer",
+			})
+			require.False(t, result.IsError, "expected success, got: %s", resultText(result))
+			require.True(t, session.called, "the confirmation prompt must be sent")
+			want := "Confirm transaction before broadcast:\n\n" +
+				"Type: AccountUpdateContract\n" +
+				fmt.Sprintf("From: %s (wallet: %q)\n", owner, "signer") +
+				tc.permLine +
+				warning
+			assert.Equal(t, want, session.message)
+		})
+	}
+
+	for _, tc := range []struct {
+		name string
+		call func(*server.MCPServer, *nodepool.Pool, *wallet.Manager, *policy.Engine) server.ToolHandlerFunc
+	}{
+		{"sign_and_broadcast declined", handleSignAndBroadcast},
+		{"sign_and_confirm declined", handleSignAndConfirm},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := &mockWalletServer{BroadcastTransactionFunc: failBroadcast(t)}
+			wm, pool := newTestSignSetup(t, mock)
+			_, err := wm.CreateWallet("signer")
+			require.NoError(t, err)
+
+			mcpSrv := server.NewMCPServer("test", "1.0.0", server.WithElicitation())
+			session := &mockElicitSession{
+				id: "undecodable-decline",
+				result: &mcp.ElicitationResult{
+					ElicitationResponse: mcp.ElicitationResponse{Action: mcp.ElicitationResponseActionDecline},
+				},
+			}
+			ctx := mcpSrv.WithContext(context.Background(), session)
+
+			result := callToolWithCtx(t, ctx, tc.call(mcpSrv, pool, wm, nil), map[string]any{
+				"transaction_hex": buildUndecodableTxHex(t, testAddr(0x11), 0),
+				"wallet":          "signer",
+			})
+			require.False(t, result.IsError, "expected JSON result, got: %s", resultText(result))
+			data := parseJSONResult(t, result)
+			assert.Equal(t, "cancelled", data["status"])
+			assert.Contains(t, data["reason"], "cancelled by user")
 		})
 	}
 }

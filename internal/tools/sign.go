@@ -142,7 +142,7 @@ func handleSignTransaction(pool *nodepool.Pool, wm *wallet.Manager) server.ToolH
 		}
 
 		// Look up the wallet and run the post-quantum preflight before signing.
-		walletInfo, local, err := walletPreflight(ctx, pool.Client(), wm, "sign_transaction", walletName, tx)
+		walletInfo, err := walletPreflight(ctx, pool.Client(), wm, "sign_transaction", walletName, tx)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -163,9 +163,7 @@ func handleSignTransaction(pool *nodepool.Pool, wm *wallet.Manager) server.ToolH
 			"wallet":                 walletName,
 			"signed_size_bytes":      len(signedBytes),
 		}
-		if local {
-			result["key_type"] = string(walletInfo.KeyType)
-		}
+		result["key_type"] = string(walletInfo.KeyType)
 
 		return mcp.NewToolResultJSON(result)
 	}
@@ -189,11 +187,11 @@ func handleSignAndBroadcast(mcpSrv *server.MCPServer, pool *nodepool.Pool, wm *w
 
 		// Look up the wallet and run the post-quantum preflight before any
 		// policy reservation, approval or confirmation prompt.
-		walletInfo, local, err := walletPreflight(ctx, pool.Client(), wm, "sign_and_broadcast", walletName, tx)
+		walletInfo, err := walletPreflight(ctx, pool.Client(), wm, "sign_and_broadcast", walletName, tx)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		isPQ := local && walletInfo.KeyType.IsPQ()
+		isPQ := walletInfo.KeyType.IsPQ()
 
 		// Decode contract data for policy enforcement
 		var contractType string
@@ -282,10 +280,15 @@ func handleSignAndBroadcast(mcpSrv *server.MCPServer, pool *nodepool.Pool, wm *w
 			}
 		}
 
-		// Elicitation confirmation (only when no policy engine)
-		if pe == nil && decoded != nil {
+		// Elicitation confirmation (only when no policy engine). A transaction
+		// that could not be decoded is still confirmed, without its details.
+		if pe == nil {
+			confirmData := decoded
+			if decErr != nil {
+				confirmData = nil
+			}
 			progress.Send(3, "Requesting confirmation...")
-			if confirmErr := requestBroadcastConfirmation(ctx, mcpSrv, pool, decoded, walletName, walletInfo.KeyType, tx); confirmErr != nil {
+			if confirmErr := requestBroadcastConfirmation(ctx, mcpSrv, pool, confirmData, walletName, walletInfo.KeyType, tx); confirmErr != nil {
 				return mcp.NewToolResultJSON(map[string]any{
 					"status": "cancelled",
 					"reason": confirmErr.Error(),
@@ -340,9 +343,7 @@ func handleSignAndBroadcast(mcpSrv *server.MCPServer, pool *nodepool.Pool, wm *w
 		if contractData != nil {
 			result["contract_data"] = contractData
 		}
-		if local {
-			result["key_type"] = string(walletInfo.KeyType)
-		}
+		result["key_type"] = string(walletInfo.KeyType)
 		result["signed_size_bytes"] = proto.Size(signedTx)
 
 		return mcp.NewToolResultJSON(result)
@@ -370,11 +371,11 @@ func handleSignAndConfirm(mcpSrv *server.MCPServer, pool *nodepool.Pool, wm *wal
 
 		// Look up the wallet and run the post-quantum preflight before any
 		// policy reservation, approval or confirmation prompt.
-		walletInfo, local, err := walletPreflight(ctx, pool.Client(), wm, "sign_and_confirm", walletName, tx)
+		walletInfo, err := walletPreflight(ctx, pool.Client(), wm, "sign_and_confirm", walletName, tx)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		isPQ := local && walletInfo.KeyType.IsPQ()
+		isPQ := walletInfo.KeyType.IsPQ()
 
 		// Decode contract data for policy enforcement
 		var intent *policy.Intent
@@ -458,10 +459,15 @@ func handleSignAndConfirm(mcpSrv *server.MCPServer, pool *nodepool.Pool, wm *wal
 			}
 		}
 
-		// Elicitation confirmation (only when no policy engine)
-		if pe == nil && decoded != nil {
+		// Elicitation confirmation (only when no policy engine). A transaction
+		// that could not be decoded is still confirmed, without its details.
+		if pe == nil {
+			confirmData := decoded
+			if decErr != nil {
+				confirmData = nil
+			}
 			progress.Send(3, "Requesting confirmation...")
-			if confirmErr := requestBroadcastConfirmation(ctx, mcpSrv, pool, decoded, walletName, walletInfo.KeyType, tx); confirmErr != nil {
+			if confirmErr := requestBroadcastConfirmation(ctx, mcpSrv, pool, confirmData, walletName, walletInfo.KeyType, tx); confirmErr != nil {
 				return mcp.NewToolResultJSON(map[string]any{
 					"status": "cancelled",
 					"reason": confirmErr.Error(),
@@ -535,9 +541,7 @@ func handleSignAndConfirm(mcpSrv *server.MCPServer, pool *nodepool.Pool, wm *wal
 					"bandwidth_used":    info.Receipt.GetNetUsage(),
 					"signed_size_bytes": proto.Size(signedTx),
 				}
-				if local {
-					result["key_type"] = string(walletInfo.KeyType)
-				}
+				result["key_type"] = string(walletInfo.KeyType)
 				return mcp.NewToolResultJSON(result)
 			}
 		}
@@ -643,7 +647,9 @@ func formatTokenAmount(raw *big.Int, decimals int) string {
 
 // requestBroadcastConfirmation asks the user to confirm a transaction before broadcast
 // via MCP elicitation. Returns nil to proceed, or an error to cancel.
-// Gracefully skips if the client doesn't support elicitation or decoded is nil.
+// Gracefully skips if the client doesn't support elicitation or has no active
+// session. A nil decoded (a contract this server cannot decode) still
+// prompts, with the owner, permission and raw type instead of the details.
 func requestBroadcastConfirmation(
 	ctx context.Context,
 	s *server.MCPServer,
@@ -653,17 +659,37 @@ func requestBroadcastConfirmation(
 	keyType wallet.KeyType,
 	tx *core.Transaction,
 ) error {
-	if decoded == nil || s == nil {
+	if s == nil {
 		return nil
 	}
 
 	// Build human-readable confirmation message from decoded contract fields.
 	// For TRC20 transfers, decode ABI data and resolve decimals for human-readable amounts.
+	// A transaction this server cannot decode still gets a prompt: without a
+	// policy engine it is the only safeguard, and an unknown contract is where
+	// the user most needs to look before signing.
 	var msg strings.Builder
 	msg.WriteString("Confirm transaction before broadcast:\n\n")
-	fmt.Fprintf(&msg, "Type: %s\n", decoded.Type)
-	if from, ok := decoded.Fields["owner_address"]; ok {
-		fmt.Fprintf(&msg, "From: %v (wallet: %q)\n", from, walletName)
+	if decoded == nil {
+		// OwnerAndPermission reads any contract type, so the user still sees
+		// which account the transaction acts on, which matters most when the
+		// wallet is a key on someone else's account.
+		if owner, permID, ct, err := transaction.OwnerAndPermission(tx); err == nil {
+			fmt.Fprintf(&msg, "Type: %s\n", ct)
+			fmt.Fprintf(&msg, "From: %s (wallet: %q)\n", owner, walletName)
+			if permID != 0 {
+				fmt.Fprintf(&msg, "Permission: %d\n", permID)
+			}
+		} else {
+			fmt.Fprintf(&msg, "Type: %s\n", rawContractType(tx))
+			fmt.Fprintf(&msg, "Wallet: %q\n", walletName)
+		}
+		msg.WriteString("Warning: this server could not decode the contract, so its details are not shown. Accept only if you trust where this transaction came from.\n")
+	} else {
+		fmt.Fprintf(&msg, "Type: %s\n", decoded.Type)
+		if from, ok := decoded.Fields["owner_address"]; ok {
+			fmt.Fprintf(&msg, "From: %v (wallet: %q)\n", from, walletName)
+		}
 	}
 	if keyType.IsPQ() {
 		fmt.Fprintf(&msg, "Signature: %s (post-quantum, TIP-899)\n", pqDisplayName(keyType))
@@ -677,7 +703,7 @@ func requestBroadcastConfirmation(
 
 	// Try to decode TRC20 transfer details from ABI data
 	trc20Decoded := false
-	if decoded.Type == "TriggerSmartContract" {
+	if decoded != nil && decoded.Type == "TriggerSmartContract" {
 		if intent, err := policy.IntentFromContractData(walletName, decoded); err == nil && intent.TokenID != "TRX" {
 			fmt.Fprintf(&msg, "To: %s\n", intent.ToAddr)
 			fmt.Fprintf(&msg, "Token contract: %s\n", intent.TokenID)
@@ -707,7 +733,7 @@ func requestBroadcastConfirmation(
 		}
 	}
 
-	if !trc20Decoded {
+	if decoded != nil && !trc20Decoded {
 		if to, ok := decoded.Fields["to_address"]; ok {
 			fmt.Fprintf(&msg, "To: %v\n", to)
 		}
@@ -761,6 +787,16 @@ func requestBroadcastConfirmation(
 	return fmt.Errorf("transaction broadcast cancelled by user")
 }
 
+// rawContractType names the first contract's type straight from the
+// transaction, for a confirmation prompt when the contract cannot be decoded.
+func rawContractType(tx *core.Transaction) string {
+	contracts := tx.GetRawData().GetContract()
+	if len(contracts) == 0 {
+		return "unknown (no contract)"
+	}
+	return contracts[0].GetType().String()
+}
+
 func handleRequestLimitOverride(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.Engine) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		txHex := req.GetString("transaction_hex", "")
@@ -781,11 +817,11 @@ func handleRequestLimitOverride(pool *nodepool.Pool, wm *wallet.Manager, pe *pol
 
 		// Look up the wallet and run the post-quantum preflight before asking
 		// the approver.
-		walletInfo, local, err := walletPreflight(ctx, pool.Client(), wm, "request_limit_override", walletName, tx)
+		walletInfo, err := walletPreflight(ctx, pool.Client(), wm, "request_limit_override", walletName, tx)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		isPQ := local && walletInfo.KeyType.IsPQ()
+		isPQ := walletInfo.KeyType.IsPQ()
 
 		// Decode intent
 		decoded, decErr := transaction.DecodeContractData(tx)
@@ -878,9 +914,7 @@ func handleRequestLimitOverride(pool *nodepool.Pool, wm *wallet.Manager, pe *pol
 			"override":          true,
 			"signed_size_bytes": proto.Size(signedTx),
 		}
-		if local {
-			result["key_type"] = string(walletInfo.KeyType)
-		}
+		result["key_type"] = string(walletInfo.KeyType)
 		return mcp.NewToolResultJSON(result)
 	}
 }

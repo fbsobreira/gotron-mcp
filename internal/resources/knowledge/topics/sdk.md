@@ -1,6 +1,6 @@
 # GoTRON Fluent Builder API
 
-The GoTRON SDK (v0.27.0) provides a fluent builder API for constructing, signing, and broadcasting TRON transactions. These packages sit on top of the low-level `pkg/client` gRPC methods and offer a more ergonomic, type-safe interface.
+The GoTRON SDK (v0.27.1) provides a fluent builder API for constructing, signing, and broadcasting TRON transactions. These packages sit on top of the low-level `pkg/client` gRPC methods and offer a more ergonomic, type-safe interface.
 
 ## SDK Entry Point (`pkg/tron`)
 

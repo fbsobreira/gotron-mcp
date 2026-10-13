@@ -102,7 +102,9 @@ func handleTransferChecklist(_ context.Context, req mcp.GetPromptRequest) (*mcp.
 					Type: "text",
 					Text: fmt.Sprintf(
 						"I want to transfer %s %s from %s to %s. "+
-							"Before building the transaction: validate both addresses, "+
+							"Before building the transaction: if the sender is a wallet name "+
+							"rather than a T... address, resolve it to its address with "+
+							"list_wallets first; then validate both addresses, "+
 							"check the sender's balance is sufficient, estimate the energy "+
 							"and bandwidth cost, and verify the sender has enough resources "+
 							"to cover fees. Report any issues. Only build the transfer if "+

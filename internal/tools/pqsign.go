@@ -16,24 +16,22 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/txcore"
 )
 
-// walletPreflight looks up walletName and runs pqPreflight for a local
+// walletPreflight looks up walletName and runs pqPreflight for a
 // post-quantum wallet. Every signing handler calls it before any policy
-// reservation, approval request or confirmation prompt. A wallet that is not
-// local is not an error: local is false and the caller keeps its previous
-// flow. Any other failure (an ambiguous name, an unreadable key, a failed
-// preflight) is returned as the tool error text, prefixed with tool.
-func walletPreflight(ctx context.Context, conn *client.GrpcClient, wm *wallet.Manager, tool, walletName string, tx *core.Transaction) (info wallet.WalletInfo, local bool, err error) {
-	info, err = wm.LookupWallet(walletName)
-	if errors.Is(err, wallet.ErrWalletNotFound) {
-		return info, false, nil
-	}
+// reservation, approval request or confirmation prompt, so a wallet that
+// cannot sign fails here rather than after a human has approved it. Any
+// failure (a wallet not in the keystore, an ambiguous name, an unreadable
+// key, a failed preflight) is returned as the tool error text, prefixed with
+// tool.
+func walletPreflight(ctx context.Context, conn *client.GrpcClient, wm *wallet.Manager, tool, walletName string, tx *core.Transaction) (wallet.WalletInfo, error) {
+	info, err := wm.LookupWallet(walletName)
 	if err != nil {
-		return info, false, errors.New(signErrorMessage(tool, err))
+		return info, errors.New(signErrorMessage(tool, err))
 	}
 	if err := pqPreflight(ctx, conn, info, tx); err != nil {
-		return info, true, fmt.Errorf("%s: %w", tool, err)
+		return info, fmt.Errorf("%s: %w", tool, err)
 	}
-	return info, true, nil
+	return info, nil
 }
 
 // pqPreflight runs the TIP-899 checks for a post-quantum wallet before any
