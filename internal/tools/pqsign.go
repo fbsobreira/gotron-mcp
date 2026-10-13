@@ -16,6 +16,26 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/txcore"
 )
 
+// walletPreflight looks up walletName and runs pqPreflight for a local
+// post-quantum wallet. Every signing handler calls it before any policy
+// reservation, approval request or confirmation prompt. A wallet that is not
+// local is not an error: local is false and the caller keeps its previous
+// flow. Any other failure (an ambiguous name, an unreadable key, a failed
+// preflight) is returned as the tool error text, prefixed with tool.
+func walletPreflight(ctx context.Context, conn *client.GrpcClient, wm *wallet.Manager, tool, walletName string, tx *core.Transaction) (info wallet.WalletInfo, local bool, err error) {
+	info, err = wm.LookupWallet(walletName)
+	if errors.Is(err, wallet.ErrWalletNotFound) {
+		return info, false, nil
+	}
+	if err != nil {
+		return info, false, errors.New(signErrorMessage(tool, err))
+	}
+	if err := pqPreflight(ctx, conn, info, tx); err != nil {
+		return info, true, fmt.Errorf("%s: %w", tool, err)
+	}
+	return info, true, nil
+}
+
 // pqPreflight runs the TIP-899 checks for a post-quantum wallet before any
 // policy reservation, approval request or confirmation prompt: it asks the
 // node whether the wallet's scheme is enabled, then checks that the wallet

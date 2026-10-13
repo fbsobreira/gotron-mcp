@@ -141,18 +141,10 @@ func handleSignTransaction(pool *nodepool.Pool, wm *wallet.Manager) server.ToolH
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		// Post-quantum wallets: check node support and the owner permission
-		// before signing. A wallet that is not local keeps the previous flow;
-		// any other lookup error (an ambiguous name, an unreadable key) stops
-		// here.
-		walletInfo, lookupErr := wm.LookupWallet(walletName)
-		if lookupErr != nil && !errors.Is(lookupErr, wallet.ErrWalletNotFound) {
-			return mcp.NewToolResultError(signErrorMessage("sign_transaction", lookupErr)), nil
-		}
-		if lookupErr == nil && walletInfo.KeyType.IsPQ() {
-			if pqErr := pqPreflight(ctx, pool.Client(), walletInfo, tx); pqErr != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("sign_transaction: %v", pqErr)), nil
-			}
+		// Look up the wallet and run the post-quantum preflight before signing.
+		walletInfo, local, err := walletPreflight(ctx, pool.Client(), wm, "sign_transaction", walletName, tx)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
 		}
 
 		progress.Send(2, "Signing with wallet...")
@@ -171,7 +163,7 @@ func handleSignTransaction(pool *nodepool.Pool, wm *wallet.Manager) server.ToolH
 			"wallet":                 walletName,
 			"signed_size_bytes":      len(signedBytes),
 		}
-		if lookupErr == nil {
+		if local {
 			result["key_type"] = string(walletInfo.KeyType)
 		}
 
@@ -195,20 +187,13 @@ func handleSignAndBroadcast(mcpSrv *server.MCPServer, pool *nodepool.Pool, wm *w
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		// Post-quantum wallets: check node support and the owner permission
-		// before any policy reservation, approval or confirmation prompt.
-		// A wallet that is not local keeps the previous flow; any other
-		// lookup error (an ambiguous name, an unreadable key) stops here.
-		walletInfo, lookupErr := wm.LookupWallet(walletName)
-		if lookupErr != nil && !errors.Is(lookupErr, wallet.ErrWalletNotFound) {
-			return mcp.NewToolResultError(signErrorMessage("sign_and_broadcast", lookupErr)), nil
+		// Look up the wallet and run the post-quantum preflight before any
+		// policy reservation, approval or confirmation prompt.
+		walletInfo, local, err := walletPreflight(ctx, pool.Client(), wm, "sign_and_broadcast", walletName, tx)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
 		}
-		isPQ := lookupErr == nil && walletInfo.KeyType.IsPQ()
-		if isPQ {
-			if pqErr := pqPreflight(ctx, pool.Client(), walletInfo, tx); pqErr != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: %v", pqErr)), nil
-			}
-		}
+		isPQ := local && walletInfo.KeyType.IsPQ()
 
 		// Decode contract data for policy enforcement
 		var contractType string
@@ -355,7 +340,7 @@ func handleSignAndBroadcast(mcpSrv *server.MCPServer, pool *nodepool.Pool, wm *w
 		if contractData != nil {
 			result["contract_data"] = contractData
 		}
-		if lookupErr == nil {
+		if local {
 			result["key_type"] = string(walletInfo.KeyType)
 		}
 		result["signed_size_bytes"] = proto.Size(signedTx)
@@ -383,20 +368,13 @@ func handleSignAndConfirm(mcpSrv *server.MCPServer, pool *nodepool.Pool, wm *wal
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		// Post-quantum wallets: check node support and the owner permission
-		// before any policy reservation, approval or confirmation prompt.
-		// A wallet that is not local keeps the previous flow; any other
-		// lookup error (an ambiguous name, an unreadable key) stops here.
-		walletInfo, lookupErr := wm.LookupWallet(walletName)
-		if lookupErr != nil && !errors.Is(lookupErr, wallet.ErrWalletNotFound) {
-			return mcp.NewToolResultError(signErrorMessage("sign_and_confirm", lookupErr)), nil
+		// Look up the wallet and run the post-quantum preflight before any
+		// policy reservation, approval or confirmation prompt.
+		walletInfo, local, err := walletPreflight(ctx, pool.Client(), wm, "sign_and_confirm", walletName, tx)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
 		}
-		isPQ := lookupErr == nil && walletInfo.KeyType.IsPQ()
-		if isPQ {
-			if pqErr := pqPreflight(ctx, pool.Client(), walletInfo, tx); pqErr != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: %v", pqErr)), nil
-			}
-		}
+		isPQ := local && walletInfo.KeyType.IsPQ()
 
 		// Decode contract data for policy enforcement
 		var intent *policy.Intent
@@ -557,7 +535,7 @@ func handleSignAndConfirm(mcpSrv *server.MCPServer, pool *nodepool.Pool, wm *wal
 					"bandwidth_used":    info.Receipt.GetNetUsage(),
 					"signed_size_bytes": proto.Size(signedTx),
 				}
-				if lookupErr == nil {
+				if local {
 					result["key_type"] = string(walletInfo.KeyType)
 				}
 				return mcp.NewToolResultJSON(result)
@@ -801,20 +779,13 @@ func handleRequestLimitOverride(pool *nodepool.Pool, wm *wallet.Manager, pe *pol
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		// Post-quantum wallets: check node support and the owner permission
-		// before asking the approver. A wallet that is not local keeps the
-		// previous flow; any other lookup error (an ambiguous name, an
-		// unreadable key) stops here.
-		walletInfo, lookupErr := wm.LookupWallet(walletName)
-		if lookupErr != nil && !errors.Is(lookupErr, wallet.ErrWalletNotFound) {
-			return mcp.NewToolResultError(signErrorMessage("request_limit_override", lookupErr)), nil
+		// Look up the wallet and run the post-quantum preflight before asking
+		// the approver.
+		walletInfo, local, err := walletPreflight(ctx, pool.Client(), wm, "request_limit_override", walletName, tx)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
 		}
-		isPQ := lookupErr == nil && walletInfo.KeyType.IsPQ()
-		if isPQ {
-			if pqErr := pqPreflight(ctx, pool.Client(), walletInfo, tx); pqErr != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: %v", pqErr)), nil
-			}
-		}
+		isPQ := local && walletInfo.KeyType.IsPQ()
 
 		// Decode intent
 		decoded, decErr := transaction.DecodeContractData(tx)
@@ -907,7 +878,7 @@ func handleRequestLimitOverride(pool *nodepool.Pool, wm *wallet.Manager, pe *pol
 			"override":          true,
 			"signed_size_bytes": proto.Size(signedTx),
 		}
-		if lookupErr == nil {
+		if local {
 			result["key_type"] = string(walletInfo.KeyType)
 		}
 		return mcp.NewToolResultJSON(result)
