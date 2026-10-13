@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ["1.25", "1.26"]
+        go-version: ["1.26", "1.27"]
     steps:
       - uses: actions/checkout@v6
 
@@ -20,14 +20,13 @@ jobs:
           go-version: ${{ matrix.go-version }}
 
       - name: Check formatting
-        if: matrix.go-version == '1.25'
+        if: matrix.go-version == '1.26'
         run: |
-          # x/tools v0.50.0 and later require Go 1.26.
-          go install golang.org/x/tools/cmd/goimports@v0.49.0
+          go install golang.org/x/tools/cmd/goimports@latest
           test -z "$(goimports -l .)"
 
       - name: Lint
-        if: matrix.go-version == '1.25'
+        if: matrix.go-version == '1.26'
         uses: golangci/golangci-lint-action@v9
         with:
           version: latest
@@ -36,7 +35,7 @@ jobs:
         run: go test -race -shuffle=on -coverprofile=coverage.out ./...
 
       - name: Upload coverage
-        if: matrix.go-version == '1.25'
+        if: matrix.go-version == '1.26'
         uses: codecov/codecov-action@v5
         with:
           files: coverage.out
