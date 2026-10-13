@@ -1,6 +1,6 @@
 # GoTRON Fluent Builder API
 
-The GoTRON SDK (v0.26.0) provides a fluent builder API for constructing, signing, and broadcasting TRON transactions. These packages sit on top of the low-level `pkg/client` gRPC methods and offer a more ergonomic, type-safe interface.
+The GoTRON SDK (v0.27.1) provides a fluent builder API for constructing, signing, and broadcasting TRON transactions. These packages sit on top of the low-level `pkg/client` gRPC methods and offer a more ergonomic, type-safe interface.
 
 ## SDK Entry Point (`pkg/tron`)
 
@@ -46,6 +46,9 @@ s := signer.NewKeystorePassphraseSigner(ks, account, "passphrase")
 
 // From Ledger hardware wallet
 s, err := signer.NewLedgerSigner()
+
+// From a post-quantum key (TIP-899, pkg/pqc); signs into pq_auth_sig
+s, err := signer.NewPQSigner(pqKey)
 ```
 
 ## Transaction Builder (`pkg/txbuilder`)

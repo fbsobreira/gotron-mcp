@@ -29,8 +29,10 @@ GOTRON_MCP_KEYSTORE_PASSPHRASE=... # Passphrase for wallet encryption
 3. Register in the `Register*Tools` function
 4. If it's a new file, wire it up in `internal/server/server.go`
 5. Read-only tools go in the read section; transaction builders are always registered; wallet management and sign/broadcast require local mode + keystore
-   - Wallet management: create and list wallets (create_wallet, list_wallets) [local mode + keystore]
+   - Wallet management: create and list wallets (create_wallet, list_wallets); wallets have a key type (`ecdsa`, `ml_dsa_44`, `fn_dsa_512`) [local mode + keystore]
    - Sign transactions: sign only, sign+broadcast, or sign+broadcast+confirm (sign_transaction, sign_and_broadcast, sign_and_confirm, broadcast_transaction) [local mode + keystore]
+     - Tools that sign with a PQ wallet must run the `pqPreflight` check (`internal/tools/pqsign.go`) before policy/approval
+   - `get_pq_capabilities` is read-only and always registered, including hosted mode
 
 ## GoTRON SDK Usage
 

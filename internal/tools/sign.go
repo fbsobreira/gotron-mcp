@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
+	"math/big"
 	"strings"
 	"time"
 
@@ -14,6 +16,8 @@ import (
 	"github.com/fbsobreira/gotron-mcp/internal/wallet"
 	"github.com/fbsobreira/gotron-sdk/pkg/client/transaction"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
+	"github.com/fbsobreira/gotron-sdk/pkg/signer"
+	trc20Std "github.com/fbsobreira/gotron-sdk/pkg/standards/trc20"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"google.golang.org/protobuf/proto"
@@ -57,7 +61,7 @@ func RegisterSignTools(s *server.MCPServer, pool *nodepool.Pool, wm *wallet.Mana
 			mcp.WithString("wallet", mcp.Required(), mcp.Description("Wallet name or address")),
 			mcp.WithString("reason", mcp.Description("Reason for this transaction — shown in approval messages")),
 		),
-		handleSignAndBroadcast(pool, wm, pe),
+		handleSignAndBroadcast(s, pool, wm, pe),
 	)
 
 	s.AddTool(
@@ -67,7 +71,7 @@ func RegisterSignTools(s *server.MCPServer, pool *nodepool.Pool, wm *wallet.Mana
 			mcp.WithString("wallet", mcp.Required(), mcp.Description("Wallet name or address")),
 			mcp.WithString("reason", mcp.Description("Reason for this transaction — shown in approval messages")),
 		),
-		handleSignAndConfirm(pool, wm, pe),
+		handleSignAndConfirm(s, pool, wm, pe),
 	)
 
 	// sign_transaction and broadcast_transaction only available when no policy engine
@@ -79,12 +83,12 @@ func RegisterSignTools(s *server.MCPServer, pool *nodepool.Pool, wm *wallet.Mana
 				mcp.WithString("transaction_hex", mcp.Required(), mcp.Description("Unsigned transaction hex")),
 				mcp.WithString("wallet", mcp.Required(), mcp.Description("Wallet name or address")),
 			),
-			handleSignTransaction(wm),
+			handleSignTransaction(pool, wm),
 		)
 
 		s.AddTool(
 			mcp.NewTool("broadcast_transaction",
-				mcp.WithDescription("Broadcast a signed transaction to the TRON network"),
+				mcp.WithDescription("Broadcast a signed transaction to the TRON network. Post-quantum (TIP-899) signatures are checked against the node first, and their schemes and addresses are returned as pq_signers."),
 				mcp.WithString("signed_transaction_hex", mcp.Required(), mcp.Description("Signed transaction hex")),
 			),
 			handleBroadcastTransaction(pool),
@@ -121,7 +125,7 @@ func computeTxID(tx *core.Transaction) (string, error) {
 	return hex.EncodeToString(txHash[:]), nil
 }
 
-func handleSignTransaction(wm *wallet.Manager) server.ToolHandlerFunc {
+func handleSignTransaction(pool *nodepool.Pool, wm *wallet.Manager) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		progress := newProgressReporter(ctx, req, 2)
 		txHex := req.GetString("transaction_hex", "")
@@ -137,15 +141,16 @@ func handleSignTransaction(wm *wallet.Manager) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		progress.Send(2, "Signing with wallet...")
-		s, err := wm.GetSigner(walletName)
+		// Look up the wallet and run the post-quantum preflight before signing.
+		walletInfo, err := walletPreflight(ctx, pool.Client(), wm, "sign_transaction", walletName, tx)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("sign_transaction: %v", err)), nil
+			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		signedTx, err := s.Sign(tx)
+		progress.Send(2, "Signing with wallet...")
+		signedTx, err := wm.SignTransaction(walletName, tx)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to sign transaction: %v", err)), nil
+			return mcp.NewToolResultError(signErrorMessage("sign_transaction", err)), nil
 		}
 
 		signedBytes, err := proto.Marshal(signedTx)
@@ -156,15 +161,17 @@ func handleSignTransaction(wm *wallet.Manager) server.ToolHandlerFunc {
 		result := map[string]any{
 			"signed_transaction_hex": hex.EncodeToString(signedBytes),
 			"wallet":                 walletName,
+			"signed_size_bytes":      len(signedBytes),
 		}
+		result["key_type"] = string(walletInfo.KeyType)
 
 		return mcp.NewToolResultJSON(result)
 	}
 }
 
-func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.Engine) server.ToolHandlerFunc {
+func handleSignAndBroadcast(mcpSrv *server.MCPServer, pool *nodepool.Pool, wm *wallet.Manager, pe *policy.Engine) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		progress := newProgressReporter(ctx, req, 4)
+		progress := newProgressReporter(ctx, req, 5)
 		txHex := req.GetString("transaction_hex", "")
 		walletName := wm.ResolveWalletName(req.GetString("wallet", ""))
 
@@ -177,6 +184,14 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
+
+		// Look up the wallet and run the post-quantum preflight before any
+		// policy reservation, approval or confirmation prompt.
+		walletInfo, err := walletPreflight(ctx, pool.Client(), wm, "sign_and_broadcast", walletName, tx)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		isPQ := walletInfo.KeyType.IsPQ()
 
 		// Decode contract data for policy enforcement
 		var contractType string
@@ -242,9 +257,17 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.
 					}
 					// Approved — rebuild TX fresh (original may have expired during approval)
 					progress.Send(3, "Rebuilding transaction...")
-					freshTx, rebuildErr := rebuildTransaction(ctx, pool, intent)
+					freshTx, rebuildErr := rebuildTransaction(ctx, pool, intent, txPermissionID(tx))
 					if rebuildErr != nil {
 						return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: failed to rebuild TX after approval: %v", rebuildErr)), nil
+					}
+					// The account may have changed during approval. A failure
+					// here returns after Check, so the deferred rollback
+					// releases the reservation.
+					if isPQ {
+						if pqErr := pqOwnerCheck(ctx, pool.Client(), walletInfo, freshTx); pqErr != nil {
+							return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: rebuilt transaction: %v", pqErr)), nil
+						}
 					}
 					tx = freshTx
 				} else {
@@ -257,15 +280,26 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.
 			}
 		}
 
-		progress.Send(3, "Signing with wallet...")
-		s, err := wm.GetSigner(walletName)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: %v", err)), nil
+		// Elicitation confirmation (only when no policy engine). A transaction
+		// that could not be decoded is still confirmed, without its details.
+		if pe == nil {
+			confirmData := decoded
+			if decErr != nil {
+				confirmData = nil
+			}
+			progress.Send(3, "Requesting confirmation...")
+			if confirmErr := requestBroadcastConfirmation(ctx, mcpSrv, pool, confirmData, walletName, walletInfo.KeyType, tx); confirmErr != nil {
+				return mcp.NewToolResultJSON(map[string]any{
+					"status": "cancelled",
+					"reason": confirmErr.Error(),
+				})
+			}
 		}
 
-		signedTx, err := s.Sign(tx)
+		progress.Send(4, "Signing with wallet...")
+		signedTx, err := wm.SignTransaction(walletName, tx)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to sign transaction: %v", err)), nil
+			return mcp.NewToolResultError(signErrorMessage("sign_and_broadcast", err)), nil
 		}
 
 		txid, err := computeTxID(signedTx)
@@ -273,8 +307,11 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		progress.Send(4, "Broadcasting to network...")
+		progress.Send(5, "Broadcasting to network...")
 		conn := pool.Client()
+		if err := checkSignedPQSchemes(ctx, conn, signedTx); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: %v", err)), nil
+		}
 		ret, err := conn.BroadcastCtx(ctx, signedTx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("sign_and_broadcast: %v", err)), nil
@@ -306,16 +343,18 @@ func handleSignAndBroadcast(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.
 		if contractData != nil {
 			result["contract_data"] = contractData
 		}
+		result["key_type"] = string(walletInfo.KeyType)
+		result["signed_size_bytes"] = proto.Size(signedTx)
 
 		return mcp.NewToolResultJSON(result)
 	}
 }
 
-func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.Engine) server.ToolHandlerFunc {
+func handleSignAndConfirm(mcpSrv *server.MCPServer, pool *nodepool.Pool, wm *wallet.Manager, pe *policy.Engine) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		const maxConfirmAttempts = 20
-		// 4 setup steps + polling attempts + 1 confirmation step
-		progress := newProgressReporter(ctx, req, 5+maxConfirmAttempts)
+		// 5 setup steps + polling attempts + 1 confirmation step
+		progress := newProgressReporter(ctx, req, 6+maxConfirmAttempts)
 
 		txHex := req.GetString("transaction_hex", "")
 		walletName := wm.ResolveWalletName(req.GetString("wallet", ""))
@@ -329,6 +368,14 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.En
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
+
+		// Look up the wallet and run the post-quantum preflight before any
+		// policy reservation, approval or confirmation prompt.
+		walletInfo, err := walletPreflight(ctx, pool.Client(), wm, "sign_and_confirm", walletName, tx)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		isPQ := walletInfo.KeyType.IsPQ()
 
 		// Decode contract data for policy enforcement
 		var intent *policy.Intent
@@ -389,9 +436,17 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.En
 					}
 					// Approved — rebuild TX fresh
 					progress.Send(3, "Rebuilding transaction...")
-					freshTx, rebuildErr := rebuildTransaction(ctx, pool, intent)
+					freshTx, rebuildErr := rebuildTransaction(ctx, pool, intent, txPermissionID(tx))
 					if rebuildErr != nil {
 						return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: failed to rebuild TX after approval: %v", rebuildErr)), nil
+					}
+					// The account may have changed during approval. A failure
+					// here returns after Check, so the deferred rollback
+					// releases the reservation.
+					if isPQ {
+						if pqErr := pqOwnerCheck(ctx, pool.Client(), walletInfo, freshTx); pqErr != nil {
+							return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: rebuilt transaction: %v", pqErr)), nil
+						}
 					}
 					tx = freshTx
 				} else {
@@ -404,15 +459,26 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.En
 			}
 		}
 
-		progress.Send(3, "Signing with wallet...")
-		s, err := wm.GetSigner(walletName)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: %v", err)), nil
+		// Elicitation confirmation (only when no policy engine). A transaction
+		// that could not be decoded is still confirmed, without its details.
+		if pe == nil {
+			confirmData := decoded
+			if decErr != nil {
+				confirmData = nil
+			}
+			progress.Send(3, "Requesting confirmation...")
+			if confirmErr := requestBroadcastConfirmation(ctx, mcpSrv, pool, confirmData, walletName, walletInfo.KeyType, tx); confirmErr != nil {
+				return mcp.NewToolResultJSON(map[string]any{
+					"status": "cancelled",
+					"reason": confirmErr.Error(),
+				})
+			}
 		}
 
-		signedTx, err := s.Sign(tx)
+		progress.Send(4, "Signing with wallet...")
+		signedTx, err := wm.SignTransaction(walletName, tx)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to sign transaction: %v", err)), nil
+			return mcp.NewToolResultError(signErrorMessage("sign_and_confirm", err)), nil
 		}
 
 		txid, err := computeTxID(signedTx)
@@ -420,8 +486,11 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.En
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		progress.Send(4, "Broadcasting to network...")
+		progress.Send(5, "Broadcasting to network...")
 		conn := pool.Client()
+		if err := checkSignedPQSchemes(ctx, conn, signedTx); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: %v", err)), nil
+		}
 		ret, err := conn.BroadcastCtx(ctx, signedTx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: broadcast failed: %v", err)), nil
@@ -451,7 +520,7 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.En
 			case <-ticker.C:
 			}
 
-			progress.Send(5+attempt, fmt.Sprintf("Waiting for confirmation (attempt %d/%d)...", attempt+1, maxConfirmAttempts))
+			progress.Send(6+attempt, fmt.Sprintf("Waiting for confirmation (attempt %d/%d)...", attempt+1, maxConfirmAttempts))
 
 			info, infoErr := conn.GetTransactionInfoByIDCtx(ctx, txid)
 			if infoErr != nil {
@@ -461,16 +530,19 @@ func handleSignAndConfirm(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.En
 				return mcp.NewToolResultError(fmt.Sprintf("sign_and_confirm: %v", infoErr)), nil
 			}
 			if info != nil && info.BlockNumber > 0 {
-				progress.Send(5+maxConfirmAttempts, fmt.Sprintf("Confirmed in block %d", info.BlockNumber))
-				return mcp.NewToolResultJSON(map[string]any{
-					"txid":           txid,
-					"success":        info.GetResult() != core.TransactionInfo_FAILED,
-					"confirmed":      true,
-					"block_number":   info.BlockNumber,
-					"fee":            info.Fee,
-					"energy_used":    info.Receipt.GetEnergyUsageTotal(),
-					"bandwidth_used": info.Receipt.GetNetUsage(),
-				})
+				progress.Send(6+maxConfirmAttempts, fmt.Sprintf("Confirmed in block %d", info.BlockNumber))
+				result := map[string]any{
+					"txid":              txid,
+					"success":           info.GetResult() != core.TransactionInfo_FAILED,
+					"confirmed":         true,
+					"block_number":      info.BlockNumber,
+					"fee":               info.Fee,
+					"energy_used":       info.Receipt.GetEnergyUsageTotal(),
+					"bandwidth_used":    info.Receipt.GetNetUsage(),
+					"signed_size_bytes": proto.Size(signedTx),
+				}
+				result["key_type"] = string(walletInfo.KeyType)
+				return mcp.NewToolResultJSON(result)
 			}
 		}
 
@@ -495,9 +567,20 @@ func handleBroadcastTransaction(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
+		pqSigs, err := signer.PQSignatures(tx)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("broadcast_transaction: %v", err)), nil
+		}
+		if err := checkSignedPQSchemes(ctx, pool.Client(), tx); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("broadcast_transaction: %v", err)), nil
+		}
 		ret, err := pool.Client().BroadcastCtx(ctx, tx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("broadcast_transaction: %v", err)), nil
+		}
+		pqSigners := make([]map[string]string, 0, len(pqSigs))
+		for _, sig := range pqSigs {
+			pqSigners = append(pqSigners, map[string]string{"scheme": sig.Scheme.String(), "address": sig.Address.String()})
 		}
 
 		return mcp.NewToolResultJSON(map[string]any{
@@ -505,13 +588,17 @@ func handleBroadcastTransaction(pool *nodepool.Pool) server.ToolHandlerFunc {
 			"success":        ret.Result,
 			"code":           ret.Code.String(),
 			"message":        string(ret.Message),
+			"pq_signers":     pqSigners,
 		})
 	}
 }
 
 // rebuildTransaction creates a fresh transaction from the intent after approval.
 // This ensures the TX has a valid on-chain expiry (TRON TXs expire ~60s).
-func rebuildTransaction(ctx context.Context, pool *nodepool.Pool, intent *policy.Intent) (*core.Transaction, error) {
+// The node builds the transaction with permission 0, so permissionID (the
+// original transaction's) is set on its contract. That changes the raw data,
+// so the node's Txid is stale: callers compute the txid from the signed tx.
+func rebuildTransaction(ctx context.Context, pool *nodepool.Pool, intent *policy.Intent, permissionID int32) (*core.Transaction, error) {
 	if intent.Action != "TransferContract" {
 		return nil, fmt.Errorf("cannot rebuild %s transactions — approval only supported for TransferContract", intent.Action)
 	}
@@ -526,7 +613,188 @@ func rebuildTransaction(ctx context.Context, pool *nodepool.Pool, intent *policy
 	if err != nil {
 		return nil, fmt.Errorf("rebuilding transfer: %w", err)
 	}
+	contracts := ext.GetTransaction().GetRawData().GetContract()
+	if len(contracts) != 1 || contracts[0] == nil {
+		return nil, fmt.Errorf("rebuilding transfer: node returned %d contracts, want 1", len(contracts))
+	}
+	contracts[0].PermissionId = permissionID
 	return ext.Transaction, nil
+}
+
+// formatTokenAmount formats a raw big.Int token amount with decimal point insertion.
+// For example, formatTokenAmount(big.NewInt(1000000), 6) returns "1.000000".
+func formatTokenAmount(raw *big.Int, decimals int) string {
+	if raw == nil {
+		return "0"
+	}
+	s := raw.String()
+	if decimals <= 0 {
+		return s
+	}
+	// Pad with leading zeros if needed
+	for len(s) <= decimals {
+		s = "0" + s
+	}
+	intPart := s[:len(s)-decimals]
+	fracPart := s[len(s)-decimals:]
+	// Trim trailing zeros from fractional part for cleaner display
+	fracPart = strings.TrimRight(fracPart, "0")
+	if fracPart == "" {
+		return intPart
+	}
+	return intPart + "." + fracPart
+}
+
+// requestBroadcastConfirmation asks the user to confirm a transaction before broadcast
+// via MCP elicitation. Returns nil to proceed, or an error to cancel.
+// Gracefully skips if the client doesn't support elicitation or has no active
+// session. A nil decoded (a contract this server cannot decode) still
+// prompts, with the owner, permission and raw type instead of the details.
+func requestBroadcastConfirmation(
+	ctx context.Context,
+	s *server.MCPServer,
+	pool *nodepool.Pool,
+	decoded *transaction.ContractData,
+	walletName string,
+	keyType wallet.KeyType,
+	tx *core.Transaction,
+) error {
+	if s == nil {
+		return nil
+	}
+
+	// Build human-readable confirmation message from decoded contract fields.
+	// For TRC20 transfers, decode ABI data and resolve decimals for human-readable amounts.
+	// A transaction this server cannot decode still gets a prompt: without a
+	// policy engine it is the only safeguard, and an unknown contract is where
+	// the user most needs to look before signing.
+	var msg strings.Builder
+	msg.WriteString("Confirm transaction before broadcast:\n\n")
+	if decoded == nil {
+		// OwnerAndPermission reads any contract type, so the user still sees
+		// which account the transaction acts on, which matters most when the
+		// wallet is a key on someone else's account.
+		if owner, permID, ct, err := transaction.OwnerAndPermission(tx); err == nil {
+			fmt.Fprintf(&msg, "Type: %s\n", ct)
+			fmt.Fprintf(&msg, "From: %s (wallet: %q)\n", owner, walletName)
+			if permID != 0 {
+				fmt.Fprintf(&msg, "Permission: %d\n", permID)
+			}
+		} else {
+			fmt.Fprintf(&msg, "Type: %s\n", rawContractType(tx))
+			fmt.Fprintf(&msg, "Wallet: %q\n", walletName)
+		}
+		msg.WriteString("Warning: this server could not decode the contract, so its details are not shown. Accept only if you trust where this transaction came from.\n")
+	} else {
+		fmt.Fprintf(&msg, "Type: %s\n", decoded.Type)
+		if from, ok := decoded.Fields["owner_address"]; ok {
+			fmt.Fprintf(&msg, "From: %v (wallet: %q)\n", from, walletName)
+		}
+	}
+	if keyType.IsPQ() {
+		fmt.Fprintf(&msg, "Signature: %s (post-quantum, TIP-899)\n", pqDisplayName(keyType))
+		msg.WriteString("Note: post-quantum signatures make the transaction about 10-22x larger, so it uses more bandwidth\n")
+		if scheme, ok := keyType.PQScheme(); ok && tx != nil {
+			if bw, err := transaction.EstimateBandwidth(tx, scheme); err == nil {
+				fmt.Fprintf(&msg, "Estimated bandwidth: about %d bytes\n", bw)
+			}
+		}
+	}
+
+	// Try to decode TRC20 transfer details from ABI data
+	trc20Decoded := false
+	if decoded != nil && decoded.Type == "TriggerSmartContract" {
+		if intent, err := policy.IntentFromContractData(walletName, decoded); err == nil && intent.TokenID != "TRX" {
+			fmt.Fprintf(&msg, "To: %s\n", intent.ToAddr)
+			fmt.Fprintf(&msg, "Token contract: %s\n", intent.TokenID)
+			// Try to resolve token decimals and symbol for human-readable display
+			if pool != nil {
+				token := trc20Std.New(pool.Client(), intent.TokenID)
+				if symbol, sErr := token.Symbol(ctx); sErr == nil {
+					if decimals, dErr := token.Decimals(ctx); dErr == nil && decimals > 0 && intent.RawTokenAmt != nil {
+						// Use big.Int string with decimal point insertion for exact precision
+						fmt.Fprintf(&msg, "Amount: %s %s\n", formatTokenAmount(intent.RawTokenAmt, int(decimals)), symbol)
+					} else if intent.RawTokenAmt != nil {
+						fmt.Fprintf(&msg, "Amount: %s raw units (%s)\n", intent.RawTokenAmt.String(), symbol)
+					} else {
+						fmt.Fprintf(&msg, "Amount: %.0f raw units (%s)\n", intent.TokenAmount, symbol)
+					}
+				} else if intent.RawTokenAmt != nil {
+					fmt.Fprintf(&msg, "Amount: %s raw units\n", intent.RawTokenAmt.String())
+				} else {
+					fmt.Fprintf(&msg, "Amount: %.0f raw units\n", intent.TokenAmount)
+				}
+			} else if intent.RawTokenAmt != nil {
+				fmt.Fprintf(&msg, "Amount: %s raw units\n", intent.RawTokenAmt.String())
+			} else {
+				fmt.Fprintf(&msg, "Amount: %.0f raw units\n", intent.TokenAmount)
+			}
+			trc20Decoded = true
+		}
+	}
+
+	if decoded != nil && !trc20Decoded {
+		if to, ok := decoded.Fields["to_address"]; ok {
+			fmt.Fprintf(&msg, "To: %v\n", to)
+		}
+		if contract, ok := decoded.Fields["contract_address"]; ok {
+			fmt.Fprintf(&msg, "Contract: %v\n", contract)
+		}
+		if amount, ok := decoded.Fields["amount"]; ok {
+			switch v := amount.(type) {
+			case string:
+				// TransferContract: SDK already converts to human-readable TRX string
+				fmt.Fprintf(&msg, "Amount: %s TRX\n", v)
+			case int64:
+				// TransferAssetContract (TRC10): raw units
+				fmt.Fprintf(&msg, "Amount: %d (raw units)\n", v)
+			case float64:
+				fmt.Fprintf(&msg, "Amount: %g (raw units)\n", v)
+			default:
+				fmt.Fprintf(&msg, "Amount: %v\n", amount)
+			}
+		}
+		if callValue, ok := decoded.Fields["call_value"]; ok {
+			// SDK converts call_value via sunToTRX() — returns string
+			if cv, isStr := callValue.(string); isStr && cv != "" && cv != "0.000000" {
+				fmt.Fprintf(&msg, "Call Value: %s TRX\n", cv)
+			}
+		}
+	}
+
+	elicitReq := mcp.ElicitationRequest{
+		Params: mcp.ElicitationParams{
+			Message: msg.String(),
+			RequestedSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+	}
+
+	result, err := s.RequestElicitation(ctx, elicitReq)
+	if err != nil {
+		if errors.Is(err, server.ErrElicitationNotSupported) || errors.Is(err, server.ErrNoActiveSession) {
+			return nil
+		}
+		return fmt.Errorf("transaction broadcast cancelled: %w", err)
+	}
+
+	if result.Action == mcp.ElicitationResponseActionAccept {
+		return nil
+	}
+
+	return fmt.Errorf("transaction broadcast cancelled by user")
+}
+
+// rawContractType names the first contract's type straight from the
+// transaction, for a confirmation prompt when the contract cannot be decoded.
+func rawContractType(tx *core.Transaction) string {
+	contracts := tx.GetRawData().GetContract()
+	if len(contracts) == 0 {
+		return "unknown (no contract)"
+	}
+	return contracts[0].GetType().String()
 }
 
 func handleRequestLimitOverride(pool *nodepool.Pool, wm *wallet.Manager, pe *policy.Engine) server.ToolHandlerFunc {
@@ -546,6 +814,14 @@ func handleRequestLimitOverride(pool *nodepool.Pool, wm *wallet.Manager, pe *pol
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
+
+		// Look up the wallet and run the post-quantum preflight before asking
+		// the approver.
+		walletInfo, err := walletPreflight(ctx, pool.Client(), wm, "request_limit_override", walletName, tx)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		isPQ := walletInfo.KeyType.IsPQ()
 
 		// Decode intent
 		decoded, decErr := transaction.DecodeContractData(tx)
@@ -591,19 +867,19 @@ func handleRequestLimitOverride(pool *nodepool.Pool, wm *wallet.Manager, pe *pol
 		}
 
 		// Approved — rebuild TX fresh, sign, broadcast
-		freshTx, rebuildErr := rebuildTransaction(ctx, pool, intent)
+		freshTx, rebuildErr := rebuildTransaction(ctx, pool, intent, txPermissionID(tx))
 		if rebuildErr != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: failed to rebuild TX: %v", rebuildErr)), nil
 		}
-
-		s, err := wm.GetSigner(walletName)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: %v", err)), nil
+		if isPQ {
+			if pqErr := pqOwnerCheck(ctx, pool.Client(), walletInfo, freshTx); pqErr != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: rebuilt transaction: %v", pqErr)), nil
+			}
 		}
 
-		signedTx, err := s.Sign(freshTx)
+		signedTx, err := wm.SignTransaction(walletName, freshTx)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: failed to sign: %v", err)), nil
+			return mcp.NewToolResultError(signErrorMessage("request_limit_override", err)), nil
 		}
 
 		txid, err := computeTxID(signedTx)
@@ -611,6 +887,9 @@ func handleRequestLimitOverride(pool *nodepool.Pool, wm *wallet.Manager, pe *pol
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
+		if err := checkSignedPQSchemes(ctx, pool.Client(), signedTx); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: %v", err)), nil
+		}
 		ret, err := pool.Client().BroadcastCtx(ctx, signedTx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("request_limit_override: broadcast failed: %v", err)), nil
@@ -626,14 +905,17 @@ func handleRequestLimitOverride(pool *nodepool.Pool, wm *wallet.Manager, pe *pol
 		}
 		pe.NotifyBroadcast(ctx, txid, true)
 
-		return mcp.NewToolResultJSON(map[string]any{
-			"status":   "override_approved",
-			"txid":     txid,
-			"success":  true,
-			"code":     ret.Code.String(),
-			"message":  string(ret.Message),
-			"override": true,
-		})
+		result := map[string]any{
+			"status":            "override_approved",
+			"txid":              txid,
+			"success":           true,
+			"code":              ret.Code.String(),
+			"message":           string(ret.Message),
+			"override":          true,
+			"signed_size_bytes": proto.Size(signedTx),
+		}
+		result["key_type"] = string(walletInfo.KeyType)
+		return mcp.NewToolResultJSON(result)
 	}
 }
 

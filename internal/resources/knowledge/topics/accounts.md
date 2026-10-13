@@ -159,6 +159,36 @@ defer ks.Close()
 defer s.Forget(ks)
 ```
 
+## SDK: Post-Quantum Keys (TIP-899)
+
+```go
+import (
+    "crypto/rand"
+
+    "github.com/fbsobreira/gotron-sdk/pkg/pqc"
+    "github.com/fbsobreira/gotron-sdk/pkg/signer"
+    "github.com/fbsobreira/gotron-sdk/pkg/store"
+)
+
+// Generate a key (core.PQScheme selects ML-DSA-44 or FN-DSA-512)
+key, err := pqc.GenerateKey(scheme, rand.Reader)
+defer key.Destroy()
+
+// Encrypted PQ keystore (wallet-cli compatible), stored under <root>/pq-keys/<name>/
+acct, err := s.SavePQKey("pq-bot", key, "passphrase", scryptN, scryptP)
+accts, err := s.PQAccounts()
+
+// DecryptPQKey returns a new key that the caller owns: destroy it too
+loaded, err := s.DecryptPQKey(acct, "passphrase")
+defer loaded.Destroy()
+
+// Sign: the signature goes into pq_auth_sig
+sg, err := signer.NewPQSigner(loaded)
+signedTx, err := signer.SignTransactionPQ(tx, loaded)
+```
+
+See the SDK guide: https://github.com/fbsobreira/gotron-sdk/blob/master/docs/post-quantum.md
+
 ## SDK: Mnemonic Generation
 
 ```go
@@ -212,8 +242,9 @@ The MCP server manages wallets in an isolated directory (`~/.gotron-mcp/wallets/
 
 ### Wallet Tools
 
-- `create_wallet(name)` — create a new named wallet, returns address
-- `list_wallets()` — list all wallets with names and addresses
+- `create_wallet(name, key_type?)` — create a new named wallet, returns address and `key_type`. `key_type` is `ecdsa` (default), `ml_dsa_44` or `fn_dsa_512` (post-quantum, TIP-899; PQ wallets also return notes)
+- `list_wallets()` — list all wallets with names, addresses and `key_type`. A name that exists as both an ECDSA and a PQ wallet is flagged `duplicate_name: true` and cannot sign until one copy is renamed
+- `get_pq_capabilities()` — read-only, also in hosted mode: the node's `fn_dsa_512` / `ml_dsa_44` flags, whether this build can sign each, `can_sign`, and a hint
 
 ### Sign Tools
 
@@ -222,6 +253,19 @@ The MCP server manages wallets in an isolated directory (`~/.gotron-mcp/wallets/
 - `sign_and_confirm(wallet, transaction_hex)` — sign + broadcast + poll for on-chain confirmation
 - `broadcast_transaction(signed_transaction_hex)` — broadcast a pre-signed transaction
 
+### Post-Quantum Wallets (TIP-899)
+
+> **Note:** TIP-899 is a draft, live only on Nile (`grpc.nile.trongrid.io:50051`). Governance switches each scheme on or off; mainnet reports none enabled.
+
+- PQ keys are stored encrypted with the same passphrase under `<keystore-dir>/pq-keys/<name>/` (wallet-cli compatible keystore JSON, the same layout tronctl uses). Wallet names are unique across ECDSA and PQ wallets.
+- `--keystore-dir` can point at a tronctl config root (e.g. `~/.tronctl`) to reuse its keys; the MCP passphrase must match the keys' password.
+- `sign_transaction`, `sign_and_broadcast`, `sign_and_confirm` and `request_limit_override` accept PQ wallets. Before any policy check, approval or confirmation, the tool (1) asks the node whether the scheme is enabled and (2) checks that the wallet's address is a key of the permission the transaction uses (`permission_id`) on the owner account. A fresh PQ address must receive TRX first.
+- PQ wallets get the same policy limits, Telegram approval and elicitation as ECDSA wallets. Private keys are never tool arguments; a PQ key is decrypted for one signature and destroyed right after.
+- Results include `key_type` and `signed_size_bytes`. The signature goes into the transaction's `pq_auth_sig` field (not `signature`); the txid is unchanged. A transaction carries at most 5 signatures, ECDSA and PQ combined.
+- PQ transactions are about 10-22x larger than ECDSA ones (roughly 10x for FN-DSA-512, 22x for ML-DSA-44), so they use more bandwidth.
+- ML-DSA-44 is pure Go and works in every build. FN-DSA-512 (Falcon-512, currently enabled on Nile) needs a build with `-tags falcon`, CGO and liboqs (`CGO_ENABLED=1 go build -tags falcon ./cmd/gotron-mcp`). Without it, creating or signing FN-DSA returns an error pointing to the `gotron-mcp-pq` build (release binaries planned, not shipped yet).
+- Not supported yet: adding a PQ key to an existing account's permissions from MCP (use tronctl or the SDK guide), and co-signing one transaction with several MCP wallets.
+
 ## MCP Tools
 
 - `get_account` — Get account balance and details
@@ -229,6 +273,7 @@ The MCP server manages wallets in an isolated directory (`~/.gotron-mcp/wallets/
 - `validate_address` — Validate and convert address formats
 - `create_wallet` — Create a new named wallet
 - `list_wallets` — List all managed wallets
+- `get_pq_capabilities` — Report node and build support for post-quantum schemes
 - `sign_transaction` — Sign a transaction with a managed wallet
 - `sign_and_broadcast` — Sign and broadcast in one step
 - `sign_and_confirm` — Sign, broadcast, and wait for confirmation

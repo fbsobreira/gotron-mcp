@@ -13,6 +13,7 @@ import (
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/policy"
 	"github.com/fbsobreira/gotron-mcp/internal/price"
+	"github.com/fbsobreira/gotron-mcp/internal/prompts"
 	"github.com/fbsobreira/gotron-mcp/internal/resources"
 	"github.com/fbsobreira/gotron-mcp/internal/tools"
 	"github.com/fbsobreira/gotron-mcp/internal/trongrid"
@@ -31,6 +32,8 @@ func New(cfg *config.Config, pool *nodepool.Pool) (*server.MCPServer, *wallet.Ma
 		version.Version,
 		server.WithToolCapabilities(false),
 		server.WithResourceCapabilities(false, false),
+		server.WithPromptCapabilities(false),
+		server.WithElicitation(),
 		server.WithInstructions(`GoTRON MCP server for TRON blockchain interaction.
 
 Available capabilities:
@@ -44,6 +47,7 @@ Available capabilities:
 - Estimate energy costs (estimate_energy). Automatically falls back to secondary node if primary does not support this RPC
 - Validate and convert addresses between base58, hex, and Ethereum 0x formats (validate_address)
 - Network info, chain parameters, energy/bandwidth prices (get_network, get_chain_parameters)
+- TIP-899 post-quantum signature support of the connected node and this build (get_pq_capabilities)
 - Transaction lookup (get_transaction)
 - Transaction history, TRC20 transfers, contract events via TronGrid REST API (get_transaction_history, get_trc20_transfers, get_contract_events)
 - Comprehensive account overview in one call (analyze_account)
@@ -58,7 +62,7 @@ Available capabilities:
 - Resource delegation (delegate_resource, undelegate_resource)
 - Vote for super representatives (vote_witness)
 - Smart contract write calls (trigger_contract)
-- Sign and broadcast transactions via keystore (sign_transaction, broadcast_transaction) [local mode + keystore]
+- Sign and broadcast transactions via keystore (sign_transaction, broadcast_transaction), including TIP-899 post-quantum signing with ml_dsa_44 / fn_dsa_512 wallets (create_wallet key_type) [local mode + keystore]
 
 Knowledge base resources available at gotron://knowledge/ for TRON concepts and SDK usage guides.`),
 	)
@@ -66,12 +70,16 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 	// Knowledge base resources
 	resources.RegisterResources(s)
 
+	// Prompt workflows
+	prompts.RegisterPrompts(s)
+
 	// Always register read-only tools
 	tools.RegisterAccountTools(s, pool)
 	tools.RegisterBlockTools(s, pool)
 	trc20Cache := tools.RegisterTokenTools(s, pool)
 	tools.RegisterContractReadTools(s, pool)
 	tools.RegisterNetworkTools(s, pool, cfg.Network, cfg.Node)
+	tools.RegisterPQTools(s, pool)
 	tools.RegisterAddressTools(s)
 	tools.RegisterWitnessReadTools(s, pool)
 	tools.RegisterProposalTools(s, pool)
@@ -90,8 +98,7 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 	tgClient := trongrid.NewClient(cfg.Network, cfg.APIKey)
 	tools.RegisterHistoryTools(s, tgClient)
 
-	// Transaction builders — always available (return unsigned tx hex)
-	tools.RegisterTransferTools(s, pool, trc20Cache)
+	// Transaction builders (non-transfer) — always available
 	tools.RegisterResourceTools(s, pool)
 	tools.RegisterWitnessWriteTools(s, pool)
 	tools.RegisterContractWriteTools(s, pool)
@@ -118,6 +125,9 @@ Knowledge base resources available at gotron://knowledge/ for TRON concepts and 
 			}
 		}
 	}
+
+	// Transfer builders — registered after wallet manager so wallet names resolve in "from"
+	tools.RegisterTransferTools(s, pool, trc20Cache, wm)
 
 	return s, wm, pe
 }

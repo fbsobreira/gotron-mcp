@@ -10,6 +10,7 @@ import (
 	"github.com/fbsobreira/gotron-mcp/internal/nodepool"
 	"github.com/fbsobreira/gotron-mcp/internal/retry"
 	"github.com/fbsobreira/gotron-mcp/internal/util"
+	"github.com/fbsobreira/gotron-mcp/internal/wallet"
 	"github.com/fbsobreira/gotron-sdk/pkg/contract"
 	"github.com/fbsobreira/gotron-sdk/pkg/standards/trc20"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -189,17 +190,18 @@ func handleEstimateTRC20Energy(pool *nodepool.Pool, cache *trc20.MetadataCache) 
 }
 
 // handleTransferTRC20 builds an unsigned TRC20 transfer using the shared trc20Token helper.
-func handleTransferTRC20(pool *nodepool.Pool, cache *trc20.MetadataCache) server.ToolHandlerFunc {
+func handleTransferTRC20(pool *nodepool.Pool, cache *trc20.MetadataCache, wm *wallet.Manager) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		from := req.GetString("from", "")
+		fromInput := req.GetString("from", "")
 		to := req.GetString("to", "")
 		contractAddr := req.GetString("contract_address", "")
 		amountStr := req.GetString("amount", "")
 		feeLimit := req.GetInt("fee_limit", 100)
 		conn := pool.Client()
 
-		if err := validateAddress(from); err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("invalid from address: %v", err)), nil
+		from, err := resolveFromAddress(wm, fromInput)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("transfer_trc20: %v", err)), nil
 		}
 		if err := validateAddress(to); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid to address: %v", err)), nil
