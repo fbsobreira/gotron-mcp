@@ -127,6 +127,7 @@ See the `sdk` topic (`gotron://knowledge/topics/sdk`) for the full API reference
 - **Active** (ID 2+): Customizable, limited operations
 - Transactions can require multiple signatures based on permission thresholds
 - Useful for exchanges, DAOs, and shared wallets
+- **Post-quantum (TIP-899, draft, Nile only):** a PQ key (ML-DSA-44 or FN-DSA-512) can be a permission key. Its hybrid signature goes in the transaction's `pq_auth_sig` field, the txid is unchanged, and a transaction carries at most 5 signatures (ECDSA and PQ combined). Mainnet does not enable any PQ scheme yet.
 
 ## Context Propagation
 

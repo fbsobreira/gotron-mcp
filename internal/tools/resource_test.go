@@ -79,7 +79,8 @@ func TestFreezeBalance_Success(t *testing.T) {
 	mock := &mockWalletServer{
 		FreezeBalanceV2Func: func(_ context.Context, _ *core.FreezeBalanceV2Contract) (*api.TransactionExtention, error) {
 			return &api.TransactionExtention{
-				Txid: []byte{0x01, 0x02, 0x03},
+				Txid:   []byte{0x01, 0x02, 0x03},
+				Result: &api.Return{Result: true},
 				Transaction: &core.Transaction{
 					RawData: &core.TransactionRaw{},
 				},
@@ -145,7 +146,8 @@ func TestUnfreezeBalance_Success(t *testing.T) {
 	mock := &mockWalletServer{
 		UnfreezeBalanceV2Func: func(_ context.Context, _ *core.UnfreezeBalanceV2Contract) (*api.TransactionExtention, error) {
 			return &api.TransactionExtention{
-				Txid: []byte{0x04, 0x05, 0x06},
+				Txid:   []byte{0x04, 0x05, 0x06},
+				Result: &api.Return{Result: true},
 				Transaction: &core.Transaction{
 					RawData: &core.TransactionRaw{},
 				},
@@ -204,7 +206,8 @@ func TestDelegateResource_Success(t *testing.T) {
 	mock := &mockWalletServer{
 		DelegateResourceFunc: func(_ context.Context, _ *core.DelegateResourceContract) (*api.TransactionExtention, error) {
 			return &api.TransactionExtention{
-				Txid: []byte{0x0a, 0x0b, 0x0c},
+				Txid:   []byte{0x0a, 0x0b, 0x0c},
+				Result: &api.Return{Result: true},
 				Transaction: &core.Transaction{
 					RawData: &core.TransactionRaw{},
 				},
@@ -231,7 +234,8 @@ func TestDelegateResource_WithLock(t *testing.T) {
 			assert.True(t, in.Lock, "expected lock=true")
 			assert.Equal(t, int64(86400), in.LockPeriod)
 			return &api.TransactionExtention{
-				Txid: []byte{0x0d, 0x0e, 0x0f},
+				Txid:   []byte{0x0d, 0x0e, 0x0f},
+				Result: &api.Return{Result: true},
 				Transaction: &core.Transaction{
 					RawData: &core.TransactionRaw{},
 				},
@@ -301,7 +305,8 @@ func TestUndelegateResource_Success(t *testing.T) {
 	mock := &mockWalletServer{
 		UnDelegateResourceFunc: func(_ context.Context, _ *core.UnDelegateResourceContract) (*api.TransactionExtention, error) {
 			return &api.TransactionExtention{
-				Txid: []byte{0x10, 0x11, 0x12},
+				Txid:   []byte{0x10, 0x11, 0x12},
+				Result: &api.Return{Result: true},
 				Transaction: &core.Transaction{
 					RawData: &core.TransactionRaw{},
 				},
@@ -333,7 +338,8 @@ func TestWithdrawExpireUnfreeze_Success(t *testing.T) {
 	mock := &mockWalletServer{
 		WithdrawExpireUnfreezeFunc: func(_ context.Context, _ *core.WithdrawExpireUnfreezeContract) (*api.TransactionExtention, error) {
 			return &api.TransactionExtention{
-				Txid: []byte{0x13, 0x14, 0x15},
+				Txid:   []byte{0x13, 0x14, 0x15},
+				Result: &api.Return{Result: true},
 				Transaction: &core.Transaction{
 					RawData: &core.TransactionRaw{},
 				},
