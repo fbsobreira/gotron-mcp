@@ -44,7 +44,10 @@ func RegisterTransferTools(s *server.MCPServer, pool *nodepool.Pool, cache *trc2
 		walletMgr = wm[0]
 	}
 
-	fromDesc := "Sender address (base58) or wallet name"
+	fromDesc := "Sender address (base58, starts with T)"
+	if walletMgr != nil {
+		fromDesc = "Sender address (base58) or wallet name"
+	}
 	s.AddTool(
 		mcp.NewTool("transfer_trx",
 			mcp.WithDescription("Create an unsigned TRX transfer transaction. Returns transaction hex for signing."),

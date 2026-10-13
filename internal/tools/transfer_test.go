@@ -7,8 +7,10 @@ import (
 	"testing"
 
 	"github.com/fbsobreira/gotron-mcp/internal/wallet"
+	"github.com/fbsobreira/gotron-sdk/pkg/address"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -281,4 +283,87 @@ func TestResolveFromAddress_WithWM_UnknownName(t *testing.T) {
 	_, err = resolveFromAddress(wm, "unknown-wallet")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "list_wallets", "should hint to use list_wallets")
+}
+
+// --- wallet names through the transfer handlers ---
+
+func TestTransferTools_WalletNameFrom(t *testing.T) {
+	wm := newTestWalletManager(t)
+	walletAddr, err := wm.CreateWallet("payer")
+	require.NoError(t, err)
+
+	t.Run("transfer_trx", func(t *testing.T) {
+		var owner string
+		mock := &mockWalletServer{
+			CreateTransaction2Func: func(_ context.Context, tc *core.TransferContract) (*api.TransactionExtention, error) {
+				owner = address.BytesToAddress(tc.OwnerAddress).String()
+				return &api.TransactionExtention{
+					Txid:        []byte{0x0a},
+					Result:      &api.Return{Result: true},
+					Transaction: &core.Transaction{RawData: &core.TransactionRaw{}},
+				}, nil
+			},
+		}
+		result := callTool(t, handleTransferTRX(newMockPool(t, mock), wm), map[string]any{
+			"from":   "payer",
+			"to":     "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+			"amount": "1",
+		})
+		require.False(t, result.IsError, "expected success, got: %s", resultText(result))
+		assert.Equal(t, walletAddr, owner, "the builder must get the wallet's address")
+		assert.Equal(t, walletAddr, parseJSONResult(t, result)["from"])
+	})
+
+	t.Run("transfer_trc20", func(t *testing.T) {
+		var owner string
+		mock := &mockWalletServer{
+			TriggerConstantContractFunc: func(_ context.Context, _ *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+				return &api.TransactionExtention{
+					ConstantResult: [][]byte{abiEncodeUint256(big.NewInt(6))},
+					Result:         &api.Return{Result: true},
+				}, nil
+			},
+			TriggerContractFunc: func(_ context.Context, in *core.TriggerSmartContract) (*api.TransactionExtention, error) {
+				owner = address.BytesToAddress(in.OwnerAddress).String()
+				return &api.TransactionExtention{
+					Result:      &api.Return{Result: true},
+					Txid:        []byte{0x0d},
+					Transaction: &core.Transaction{RawData: &core.TransactionRaw{}},
+				}, nil
+			},
+		}
+		result := callTool(t, handleTransferTRC20(newMockPool(t, mock), nil, wm), map[string]any{
+			"from":             "payer",
+			"to":               "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+			"contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+			"amount":           "1",
+		})
+		require.False(t, result.IsError, "expected success, got: %s", resultText(result))
+		assert.Equal(t, walletAddr, owner, "the builder must get the wallet's address")
+		assert.Equal(t, walletAddr, parseJSONResult(t, result)["from"])
+	})
+}
+
+func TestRegisterTransferTools_FromDescription(t *testing.T) {
+	tests := []struct {
+		name string
+		wm   []*wallet.Manager
+		want string
+	}{
+		{name: "no wallet manager", want: "Sender address (base58, starts with T)"},
+		{name: "with wallet manager", wm: []*wallet.Manager{newTestWalletManager(t)}, want: "Sender address (base58) or wallet name"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := server.NewMCPServer("test", "1.0")
+			RegisterTransferTools(s, newMockPool(t, &mockWalletServer{}), nil, tt.wm...)
+			tools := s.ListTools()
+			for _, name := range []string{"transfer_trx", "transfer_trc20"} {
+				require.NotNil(t, tools[name], "%s registered", name)
+				from, ok := tools[name].Tool.InputSchema.Properties["from"].(map[string]any)
+				require.True(t, ok, "%s has a from property", name)
+				assert.Equal(t, tt.want, from["description"], name)
+			}
+		})
+	}
 }

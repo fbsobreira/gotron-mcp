@@ -177,11 +177,14 @@ defer key.Destroy()
 // Encrypted PQ keystore (wallet-cli compatible), stored under <root>/pq-keys/<name>/
 acct, err := s.SavePQKey("pq-bot", key, "passphrase", scryptN, scryptP)
 accts, err := s.PQAccounts()
-key, err = s.DecryptPQKey(acct, "passphrase")
+
+// DecryptPQKey returns a new key that the caller owns: destroy it too
+loaded, err := s.DecryptPQKey(acct, "passphrase")
+defer loaded.Destroy()
 
 // Sign: the signature goes into pq_auth_sig
-sg, err := signer.NewPQSigner(key)
-signedTx, err := signer.SignTransactionPQ(tx, key)
+sg, err := signer.NewPQSigner(loaded)
+signedTx, err := signer.SignTransactionPQ(tx, loaded)
 ```
 
 See the SDK guide: https://github.com/fbsobreira/gotron-sdk/blob/master/docs/post-quantum.md
