@@ -1,0 +1,54 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.fbsobreira/gotron-mcp",
+  "title": "GoTRON MCP",
+  "description": "TRON blockchain: accounts, TRC20 tokens, staking, contracts, resources and transaction builders",
+  "websiteUrl": "https://gotron.sh/docs/mcp-server",
+  "repository": {
+    "url": "https://github.com/fbsobreira/gotron-mcp",
+    "source": "github"
+  },
+  "version": "0.4.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/fbsobreira/gotron-mcp:0.4.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "named",
+          "name": "--transport",
+          "value": "stdio"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "GOTRON_MCP_NETWORK",
+          "description": "TRON network to connect to",
+          "default": "mainnet",
+          "choices": ["mainnet", "nile", "shasta"],
+          "isRequired": false
+        },
+        {
+          "name": "GOTRON_NODE_API_KEY",
+          "description": "TronGrid API key for higher rate limits",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "GOTRON_MCP_NODE",
+          "description": "TRON gRPC node address (default: the public node for the network)",
+          "isRequired": false
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.gotron.sh/mcp"
+    }
+  ]
+}
