@@ -20,6 +20,7 @@ jobs:
       release: ${{ steps.check.outputs.release }}
       stable: ${{ steps.check.outputs.stable }}
       version: ${{ steps.check.outputs.version }}
+      short_sha: ${{ steps.check.outputs.short_sha }}
     steps:
       - id: check
         run: |
@@ -34,6 +35,7 @@ jobs:
             echo "release=$release"
             echo "stable=$stable"
             echo "version=$version"
+            echo "short_sha=${GITHUB_SHA::7}"
           } >> "$GITHUB_OUTPUT"
 
   docker:
@@ -67,8 +69,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ github.ref_name }}
-            COMMIT=${{ github.sha }}
+            VERSION=${{ needs.tag.outputs.version || github.ref_name }}
+            COMMIT=${{ needs.tag.outputs.short_sha }}
 
   mcp-registry:
     # Publishes server.json to the MCP Registry once the image is pushed:
