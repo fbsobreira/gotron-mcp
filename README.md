@@ -54,7 +54,7 @@ docker run -i --rm ghcr.io/fbsobreira/gotron-mcp --transport stdio
 
 ### MCP Registry
 
-Published to the [MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.fbsobreira/gotron-mcp` on each release tag, from v0.4.1, with the Docker image (stdio) and the hosted endpoint.
+Published to the [MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.fbsobreira/gotron-mcp` on each stable release tag (vX.Y.Z), from v0.4.1, with the Docker image (stdio) and the hosted endpoint.
 
 ### Hosted (zero install)
 
