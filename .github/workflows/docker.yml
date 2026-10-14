@@ -10,12 +10,42 @@ permissions:
   packages: write
 
 jobs:
+  tag:
+    # Classifies the ref once for both jobs below. A stable release is
+    # vX.Y.Z; a pre-release is vX.Y.Z-<suffix>. Anything else (a branch, or
+    # a tag such as vfoo) builds the image without pushing it.
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+      stable: ${{ steps.check.outputs.stable }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - id: check
+        run: |
+          release=false stable=false version=
+          if [[ "$GITHUB_REF" =~ ^refs/tags/v([0-9]+\.[0-9]+\.[0-9]+)(-[0-9A-Za-z.-]+)?$ ]]; then
+            release=true
+            version="${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+            [[ -z "${BASH_REMATCH[2]}" ]] && stable=true
+          fi
+          echo "release=$release stable=$stable version=$version"
+          {
+            echo "release=$release"
+            echo "stable=$stable"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+
   docker:
+    needs: tag
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - uses: docker/login-action@v4
+        if: needs.tag.outputs.release == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -28,12 +58,12 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
+            type=raw,value=latest,enable=${{ needs.tag.outputs.stable == 'true' }}
 
       - uses: docker/build-push-action@v7
         with:
           context: .
-          push: true
+          push: ${{ needs.tag.outputs.release == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -44,10 +74,10 @@ jobs:
     # Publishes server.json to the MCP Registry once the image is pushed:
     # the registry checks the image's io.modelcontextprotocol.server.name
     # label before it accepts the entry.
-    needs: docker
-    # Pre-release tags (v1.2.0-rc.1) are skipped: the registry would rank
-    # them as the latest version, and its versions cannot be changed.
-    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+    needs: [tag, docker]
+    # Only stable tags: the registry would rank a pre-release (v1.2.0-rc.1)
+    # as the latest version, and its versions cannot be changed.
+    if: needs.tag.outputs.stable == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -57,6 +87,8 @@ jobs:
       MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Install mcp-publisher
         run: |
@@ -65,9 +97,10 @@ jobs:
           tar -xzf mcp-publisher.tar.gz mcp-publisher
 
       - name: Set version from tag
+        env:
+          VERSION: ${{ needs.tag.outputs.version }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          jq --arg v "$version" \
+          jq --arg v "$VERSION" \
             '.version = $v | .packages[0].identifier = "ghcr.io/fbsobreira/gotron-mcp:" + $v' \
             server.json > server.json.tmp
           mv server.json.tmp server.json
