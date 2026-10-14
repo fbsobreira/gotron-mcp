@@ -46,6 +46,16 @@ curl -fsSL gotron.sh/install-mcp | sh
 docker run -p 8080:8080 ghcr.io/fbsobreira/gotron-mcp
 ```
 
+The image starts the HTTP transport. For stdio, append `--transport stdio`:
+
+```bash
+docker run -i --rm ghcr.io/fbsobreira/gotron-mcp --transport stdio
+```
+
+### MCP Registry
+
+Published to the [MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.fbsobreira/gotron-mcp` on each release tag, from v0.4.1, with the Docker image (stdio) and the hosted endpoint.
+
 ### Hosted (zero install)
 
 Connect directly to `https://mcp.gotron.sh/mcp` — no installation needed.
