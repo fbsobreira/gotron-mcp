@@ -50,6 +50,8 @@ present a guess as the estimate.
 Show one summary and wait for an explicit yes:
 
 - network
+- sender address, and on the local path the wallet that will sign (name
+  and address)
 - token symbol and contract
 - amount
 - full recipient address (not shortened)

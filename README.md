@@ -132,7 +132,7 @@ Add to current project:
 claude mcp add gotron --scope project -- gotron-mcp --network mainnet
 ```
 
-With keystore:
+With keystore, prefer the [`gotron-local` plugin](#claude-code-plugin), which keeps the passphrase in your system keychain. To add the server by hand instead (this stores the passphrase in plain text in `~/.claude.json`):
 
 ```bash
 claude mcp add gotron --scope user -e GOTRON_MCP_KEYSTORE_PASSPHRASE=your-keystore-passphrase -- gotron-mcp --network mainnet

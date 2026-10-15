@@ -26,6 +26,14 @@ var policyOnlyTools = map[string]bool{
 	"request_limit_override": true,
 }
 
+// skillToolVerbs are the tool verbs the skills use. They are fixed here, not
+// only derived from the registry, so renaming every tool with a verb leaves
+// the old names recognized as tool references and failing the check.
+var skillToolVerbs = []string{
+	"analyze", "delegate", "estimate", "freeze", "get", "is", "list",
+	"request", "sign", "transfer", "validate",
+}
+
 var (
 	codeSpanRe    = regexp.MustCompile("`([^`]+)`")
 	snakeCaseRe   = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)+$`)
@@ -105,8 +113,8 @@ func TestPluginLocalSkillsMatchHosted(t *testing.T) {
 // TestPluginSkillsReferenceRegisteredTools fails when a skill names a tool
 // the server doesn't register, so renaming a tool breaks CI until the
 // skills are updated. A code span counts as a tool reference when it is
-// snake_case and starts with the verb of a registered tool (get_, sign_, ...),
-// which keeps output fields such as `transaction_hex` out of the check.
+// snake_case and starts with a tool verb (get_, sign_, ...), which keeps
+// output fields such as `transaction_hex` out of the check.
 func TestPluginSkillsReferenceRegisteredTools(t *testing.T) {
 	cfg := &config.Config{
 		Transport:    "stdio",
@@ -121,6 +129,9 @@ func TestPluginSkillsReferenceRegisteredTools(t *testing.T) {
 
 	registered := s.ListTools()
 	verbs := map[string]bool{}
+	for _, v := range skillToolVerbs {
+		verbs[v] = true
+	}
 	for name := range registered {
 		verbs[strings.SplitN(name, "_", 2)[0]] = true
 	}

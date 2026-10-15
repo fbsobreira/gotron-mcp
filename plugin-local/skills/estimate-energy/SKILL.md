@@ -55,7 +55,8 @@ choose; don't push either:
 - **Stake for energy:** staking TRX (`freeze_balance` with `resource` set to
   `ENERGY`) gives a share of the network's daily energy, which regenerates
   over 24 hours. It suits regular senders. Staked TRX stays the user's, but
-  getting it back takes an unstake and a waiting period (14 days on mainnet).
+  getting it back takes an unstake and a waiting period (currently 14 days
+  on mainnet; it is a network parameter and can change).
   These tools don't report how much energy one staked TRX yields, so don't
   quote a figure for it. After staking, `get_account_resources` shows the
   new `energy_limit`.
@@ -64,7 +65,8 @@ choose; don't push either:
   shows how much an account can still delegate.
 
 Staking and delegation build unsigned transactions like any write tool. If the
-user goes ahead, follow the same confirm-then-sign steps as a transfer.
+user goes ahead, follow the same confirm-then-sign steps as a transfer,
+including signing with their own wallet on the hosted server.
 
 ## Reporting
 
@@ -72,3 +74,7 @@ Give the user, in this order: the total TRX they will burn (or that staked
 resources cover it), what drives it (energy or bandwidth), and the inputs
 behind it (energy required, available, price). Round TRX to two decimals in
 prose, and keep the exact figures available if they ask.
+
+For a smart contract call, `estimate_energy` covers energy only. Report that
+figure as the energy cost, not the total, and say bandwidth isn't included:
+an account without enough bandwidth also burns TRX for it.
