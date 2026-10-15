@@ -1,0 +1,19 @@
+{
+  "name": "gotron",
+  "displayName": "GoTRON",
+  "description": "TRON blockchain tools and skills: accounts, TRC20 and USDT transfers, energy and bandwidth costs, staking and SR voting, through the GoTRON MCP server",
+  "author": {
+    "name": "Fernando Sobreira",
+    "url": "https://github.com/fbsobreira"
+  },
+  "homepage": "https://gotron.sh/docs/mcp-server",
+  "repository": "https://github.com/fbsobreira/gotron-mcp",
+  "license": "LGPL-3.0",
+  "keywords": ["tron", "trx", "trc20", "usdt", "blockchain", "energy", "mcp"],
+  "mcpServers": {
+    "gotron": {
+      "type": "http",
+      "url": "https://mcp.gotron.sh/mcp"
+    }
+  }
+}
