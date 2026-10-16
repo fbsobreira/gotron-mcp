@@ -1,0 +1,53 @@
+{
+  "name": "gotron-local",
+  "displayName": "GoTRON (local signing)",
+  "description": "TRON blockchain tools and skills with local keystore signing: accounts, TRC20 and USDT transfers, energy costs, staking and SR voting, through a gotron-mcp binary on your PATH",
+  "author": {
+    "name": "Fernando Sobreira",
+    "url": "https://github.com/fbsobreira"
+  },
+  "homepage": "https://gotron.sh/docs/mcp-server",
+  "repository": "https://github.com/fbsobreira/gotron-mcp",
+  "license": "LGPL-3.0",
+  "keywords": ["tron", "trx", "trc20", "usdt", "blockchain", "energy", "wallet", "mcp"],
+  "userConfig": {
+    "network": {
+      "type": "string",
+      "title": "Network",
+      "description": "TRON network to connect to",
+      "options": ["mainnet", "nile", "shasta"],
+      "default": "mainnet"
+    },
+    "keystore_passphrase": {
+      "type": "string",
+      "title": "Keystore passphrase",
+      "description": "Encrypts and unlocks the wallets in the keystore directory. The signing tools are enabled only when it is set.",
+      "required": true,
+      "sensitive": true
+    },
+    "keystore_dir": {
+      "type": "directory",
+      "title": "Keystore directory",
+      "description": "Wallet directory. Leave empty for ~/.gotron-mcp/wallets",
+      "default": ""
+    },
+    "api_key": {
+      "type": "string",
+      "title": "TronGrid API key",
+      "description": "Optional, for higher TronGrid rate limits",
+      "sensitive": true
+    }
+  },
+  "mcpServers": {
+    "gotron": {
+      "command": "gotron-mcp",
+      "args": ["--transport", "stdio"],
+      "env": {
+        "GOTRON_MCP_NETWORK": "${user_config.network}",
+        "GOTRON_MCP_KEYSTORE_PASSPHRASE": "${user_config.keystore_passphrase}",
+        "GOTRON_MCP_KEYSTORE_DIR": "${user_config.keystore_dir}",
+        "GOTRON_NODE_API_KEY": "${user_config.api_key}"
+      }
+    }
+  }
+}
