@@ -65,8 +65,9 @@ choose; don't push either:
   shows how much an account can still delegate.
 
 Staking and delegation build unsigned transactions like any write tool. If the
-user goes ahead, follow the same confirm-then-sign steps as a transfer,
-including signing with their own wallet on the hosted server.
+user goes ahead, follow the same confirm-then-sign steps as a transfer: sign
+with the local keystore when signing tools are available, otherwise hand the
+user the transaction to sign with their own wallet.
 
 ## Reporting
 
