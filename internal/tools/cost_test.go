@@ -66,6 +66,9 @@ func TestAnalyzeTransferCost_ResourceError(t *testing.T) {
 
 func TestAnalyzeTransferCost_TRXTransfer(t *testing.T) {
 	mock := &mockWalletServer{
+		GetAccountFunc: func(_ context.Context, in *core.Account) (*core.Account, error) {
+			return &core.Account{Address: in.Address}, nil
+		},
 		GetAccountResourceFunc: func(_ context.Context, _ *core.Account) (*api.AccountResourceMessage, error) {
 			return &api.AccountResourceMessage{
 				EnergyLimit:  50000,
@@ -109,6 +112,9 @@ func TestAnalyzeTransferCost_TRXTransfer(t *testing.T) {
 
 func TestAnalyzeTransferCost_TRXTransfer_InsufficientBandwidth(t *testing.T) {
 	mock := &mockWalletServer{
+		GetAccountFunc: func(_ context.Context, in *core.Account) (*core.Account, error) {
+			return &core.Account{Address: in.Address}, nil
+		},
 		GetAccountResourceFunc: func(_ context.Context, _ *core.Account) (*api.AccountResourceMessage, error) {
 			return &api.AccountResourceMessage{
 				NetLimit:     100,
@@ -300,7 +306,7 @@ func TestBuildCostResult(t *testing.T) {
 		FreeNetLimit: 600,
 		FreeNetUsed:  0,
 	}
-	result := buildCostResult("TRX", "Tfrom", "Tto", "", 0, 267, res, 420, 1000, true)
+	result := buildCostResult("TRX", "Tfrom", "Tto", "", 0, 267, res, 420, 1000, true, nil)
 	assert.Equal(t, "TRX", result["transfer_type"])
 	assert.Equal(t, int64(0), result["total_estimated_cost_sun"])
 	assert.Equal(t, int64(5600), result["account_bandwidth_available"])

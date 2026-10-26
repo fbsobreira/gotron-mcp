@@ -3,7 +3,7 @@ module github.com/fbsobreira/gotron-mcp
 go 1.26.0
 
 require (
-	github.com/fbsobreira/gotron-sdk v0.27.1
+	github.com/fbsobreira/gotron-sdk v0.27.2-0.20261016133416-b45071181537
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/uuid v1.6.0
 	github.com/mark3labs/mcp-go v0.45.0

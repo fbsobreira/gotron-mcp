@@ -302,7 +302,7 @@ func handleTriggerConstantContract(pool *nodepool.Pool) server.ToolHandlerFunc {
 			return mcp.NewToolResultError("trigger_constant_contract: token_id and token_value must both be provided together"), nil
 		}
 
-		call := contract.New(conn, contractAddr).From(from)
+		call := contract.New(pool.ContractClient(), contractAddr).From(from)
 		if callValue > 0 {
 			call = call.WithCallValue(callValue)
 		}

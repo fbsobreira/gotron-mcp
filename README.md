@@ -160,6 +160,7 @@ claude mcp add gotron --scope user --transport http https://mcp.gotron.sh/mcp
 | `get_account_resources` | Get energy/bandwidth usage and limits |
 | `get_trc20_balance` | Get TRC20 token balance for an account |
 | `get_trc20_token_info` | Get TRC20 token name, symbol, and decimals |
+| `analyze_transfer_cost` | Estimate TRX or TRC20 transfer costs, including account activation fees for new TRX recipients |
 | `get_block` | Get block by number or latest |
 | `get_transaction` | Get transaction details by ID |
 | `list_witnesses` | List all super representatives |
@@ -229,6 +230,10 @@ claude mcp add gotron --scope user --transport http https://mcp.gotron.sh/mcp
 | shasta | `grpc.shasta.trongrid.io:50051` |
 
 Explicit `--node` overrides network presets.
+
+Contract reads require a node with `vm.supportConstant = true`. If a node reports that constant execution is unsupported, reads try `--fallback-node` when configured. TRC20 reads also use the fallback for empty results, since token reads require return data. General contract simulations can succeed without return data. The fallback must serve the same network. This fallback applies per call, independently of block health checks; contract reverts are returned as errors.
+
+For TRX transfers to unactivated recipients, `analyze_transfer_cost` reads the account creation fees and bandwidth multiplier from chain parameters. Only staked or delegated bandwidth can cover account creation; free bandwidth cannot. If recipient activation or the required fee parameters cannot be determined, the tool returns an error instead of quoting zero.
 
 ## Security
 
