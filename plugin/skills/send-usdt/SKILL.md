@@ -91,10 +91,10 @@ Any change to these after confirmation needs a new confirmation.
 
 ## 4. Build the transaction
 
-Call `transfer_trc20` with `from`, `to`, `contract_address` and `amount` in
-token units (for example `"25.5"`, not the raw integer).
-
-Use the whole-TRX `fee_limit` calculated and confirmed above.
+Call `transfer_trc20` with `from`, `to`, `contract_address`, `amount`, and
+`fee_limit`. Pass `amount` in token units (for example `"25.5"`, not the raw
+integer), and explicitly pass the confirmed `fee_limit` as whole TRX. Do not
+omit `fee_limit` and let the tool substitute its default ceiling.
 
 The result is an unsigned `transaction_hex` and its `txid`.
 

@@ -27,16 +27,20 @@ different networks.
 
 ## Settings
 
-When you enable the plugin, Claude Code asks for:
+The manual MCP setup linked above stores explicitly configured environment
+values, including the keystore passphrase and any API key, in plain text in
+`~/.claude.json`.
+
+The plugin configuration defines the following settings for when marketplace
+installation becomes available:
 
 - **Network**: mainnet (the default), nile or shasta.
 - **Keystore passphrase** (required): encrypts and unlocks your wallets.
-  Claude Code keeps it in your system's secure credential storage and passes
-  it to the binary as an environment variable. The server doesn't start
-  until it is set.
+  It is passed to the binary as an environment variable. Wallet and signing
+  tools are enabled when it is set.
 - **Keystore directory**: leave empty for `~/.gotron-mcp/wallets`.
-- **TronGrid API key** (optional): for higher rate limits. Stored like the
-  passphrase.
+- **TronGrid API key** (optional): for higher rate limits. Passed to the
+  binary as an environment variable.
 
 ## Skills
 
