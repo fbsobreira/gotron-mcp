@@ -148,7 +148,7 @@ func initPolicyEngine(cfg *config.Config, pool *nodepool.Pool, priceSvc *price.S
 	policyCfg.ResolveDecimals(func(contractAddr string) (int, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		token := trc20.New(pool.Client(), contractAddr)
+		token := trc20.New(pool.TRC20Client(), contractAddr)
 		d, dErr := token.Decimals(ctx)
 		return int(d), dErr
 	})

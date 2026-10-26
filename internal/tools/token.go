@@ -74,21 +74,21 @@ func handleGetTRC20Balance(pool *nodepool.Pool, cache *trc20.MetadataCache) serv
 		}
 
 		bal, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (*trc20.Balance, error) {
-			return trc20Token(pool.Client(), contractAddr, cache).BalanceOf(ctx, addr)
+			return trc20Token(pool.TRC20Client(), contractAddr, cache).BalanceOf(ctx, addr)
 		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_balance: %v", err)), nil
 		}
 
 		name, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (string, error) {
-			return trc20Token(pool.Client(), contractAddr, cache).Name(ctx)
+			return trc20Token(pool.TRC20Client(), contractAddr, cache).Name(ctx)
 		})
 		if err != nil {
 			name = ""
 		}
 
 		decimals, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (uint8, error) {
-			return trc20Token(pool.Client(), contractAddr, cache).Decimals(ctx)
+			return trc20Token(pool.TRC20Client(), contractAddr, cache).Decimals(ctx)
 		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_balance: failed to get decimals: %v", err)), nil
@@ -116,7 +116,7 @@ func handleGetTRC20TokenInfo(pool *nodepool.Pool, cache *trc20.MetadataCache) se
 		}
 
 		info, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (*trc20.TokenInfo, error) {
-			return trc20Token(pool.Client(), contractAddr, cache).Info(ctx)
+			return trc20Token(pool.TRC20Client(), contractAddr, cache).Info(ctx)
 		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_token_info: %v", err)), nil
@@ -151,7 +151,7 @@ func handleEstimateTRC20Energy(pool *nodepool.Pool, cache *trc20.MetadataCache) 
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		token := trc20Token(pool.Client(), contractAddr, cache)
+		token := trc20Token(pool.TRC20Client(), contractAddr, cache)
 		decimals, err := token.Decimals(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("estimate_trc20_energy: failed to get decimals: %v", err)), nil
@@ -197,7 +197,6 @@ func handleTransferTRC20(pool *nodepool.Pool, cache *trc20.MetadataCache, wm *wa
 		contractAddr := req.GetString("contract_address", "")
 		amountStr := req.GetString("amount", "")
 		feeLimit := req.GetInt("fee_limit", 100)
-		conn := pool.Client()
 
 		from, err := resolveFromAddress(wm, fromInput)
 		if err != nil {
@@ -210,7 +209,7 @@ func handleTransferTRC20(pool *nodepool.Pool, cache *trc20.MetadataCache, wm *wa
 			return mcp.NewToolResultError(fmt.Sprintf("invalid contract address: %v", err)), nil
 		}
 
-		token := trc20Token(conn, contractAddr, cache)
+		token := trc20Token(pool.TRC20Client(), contractAddr, cache)
 		decimals, err := token.Decimals(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("transfer_trc20: failed to get decimals: %v", err)), nil

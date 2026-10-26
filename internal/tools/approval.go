@@ -71,7 +71,7 @@ func handleGetTRC20Allowance(pool *nodepool.Pool, cache *trc20.MetadataCache) se
 
 		// Get allowance
 		allowance, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (*big.Int, error) {
-			return trc20Token(pool.Client(), contractAddr, cache).Allowance(ctx, owner, spender)
+			return trc20Token(pool.TRC20Client(), contractAddr, cache).Allowance(ctx, owner, spender)
 		})
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get_trc20_allowance: %v", err)), nil
@@ -79,7 +79,7 @@ func handleGetTRC20Allowance(pool *nodepool.Pool, cache *trc20.MetadataCache) se
 
 		// Get token decimals for display
 		decimals, dErr := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (uint8, error) {
-			return trc20Token(pool.Client(), contractAddr, cache).Decimals(ctx)
+			return trc20Token(pool.TRC20Client(), contractAddr, cache).Decimals(ctx)
 		})
 		if dErr != nil {
 			decimals = 0 // fallback — show raw value
@@ -136,7 +136,7 @@ func handleRevokeApproval(pool *nodepool.Pool, cache *trc20.MetadataCache) serve
 			return mcp.NewToolResultError("fee_limit must be between 0 and 15000 TRX"), nil
 		}
 
-		token := trc20Token(pool.Client(), contractAddr, cache)
+		token := trc20Token(pool.TRC20Client(), contractAddr, cache)
 
 		// approve(spender, 0) to revoke
 		call := token.Approve(owner, spender, big.NewInt(0)).

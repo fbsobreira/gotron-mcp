@@ -22,8 +22,8 @@ github.com/ethereum/go-ethereum v1.17.1 h1:IjlQDjgxg2uL+GzPRkygGULPMLzcYWncEI7wb
 github.com/ethereum/go-ethereum v1.17.1/go.mod h1:7UWOVHL7K3b8RfVRea022btnzLCaanwHtBuH1jUCH/I=
 github.com/fbsobreira/go-bip39 v1.2.0 h1:zp3VDGrQeGu8/iPB5wsHVSaOwQhBSLR71CE3nJVz4mY=
 github.com/fbsobreira/go-bip39 v1.2.0/go.mod h1:PRuO9kYh4Kn+tRALmXYtbizPeD8G2qm8FTVgxDaiXTM=
-github.com/fbsobreira/gotron-sdk v0.27.1 h1:I1NPe86XQAXQG3jugEDMK9omABbNfGq/rVHyAZ54d/Q=
-github.com/fbsobreira/gotron-sdk v0.27.1/go.mod h1:Jt+gncBafxanEI/okbT9W6Cjsvp1fXJFMQKerer0XKk=
+github.com/fbsobreira/gotron-sdk v0.27.2-0.20261016133416-b45071181537 h1:f8zBODY36a1zY6PC9kBDpBAhgLxf7E3TvY+K4K4SXz8=
+github.com/fbsobreira/gotron-sdk v0.27.2-0.20261016133416-b45071181537/go.mod h1:mcNywIviEpJjTyDl757OtGTJlEZc0bW5xvIf++OYQ4o=
 github.com/frankban/quicktest v1.14.6 h1:7Xjx+VpznH+oBnejlPUj8oUpdxnVs4f8XU8WnHkI4W8=
 github.com/frankban/quicktest v1.14.6/go.mod h1:4ptaffx2x8+WTWXmUCuVU6aPUX1/Mz7zb5vbUoiM6w0=
 github.com/fsnotify/fsnotify v1.9.0 h1:2Ml+OJNzbYCTzsxtv8vKSFD9PbJjmhYF14k/jKC7S9k=

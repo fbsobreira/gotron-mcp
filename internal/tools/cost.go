@@ -2,8 +2,10 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"math"
 	"math/big"
 	"strings"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/fbsobreira/gotron-sdk/pkg/client"
 	"github.com/fbsobreira/gotron-sdk/pkg/contract"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
+	"github.com/fbsobreira/gotron-sdk/pkg/proto/core"
 	"github.com/fbsobreira/gotron-sdk/pkg/standards/trc20"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -85,7 +88,7 @@ func handleAnalyzeTransferCost(pool *nodepool.Pool, cache *trc20.MetadataCache) 
 			progress.Send(3, "Estimating energy for TRC20 transfer...")
 
 			// Get decimals to build proper transfer call
-			token := trc20Token(pool.Client(), contractAddr, cache)
+			token := trc20Token(pool.TRC20Client(), contractAddr, cache)
 			decimals, dErr := token.Decimals(ctx)
 			if dErr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("analyze_transfer_cost: failed to get token decimals: %v", dErr)), nil
@@ -124,11 +127,22 @@ func handleAnalyzeTransferCost(pool *nodepool.Pool, cache *trc20.MetadataCache) 
 			bandwidthRequired = 267
 		}
 
+		var creation *accountCreationCost
+		if !isTRC20 {
+			if amount, parseErr := util.TRXToSun(amountStr); parseErr != nil || amount <= 0 {
+				return mcp.NewToolResultError("amount must be a positive TRX amount with at most 6 decimal places"), nil
+			}
+			creation, err = getAccountCreationCost(ctx, pool, to, bandwidthRequired)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("analyze_transfer_cost: %v", err)), nil
+			}
+		}
+
 		result := buildCostResult(
 			transferType, from, to, contractAddr,
 			energyRequired, bandwidthRequired,
 			res, energyPrice, bandwidthPrice,
-			energyEstimated,
+			energyEstimated, creation,
 		)
 
 		return mcp.NewToolResultJSON(result)
@@ -141,6 +155,7 @@ func buildCostResult(
 	res *api.AccountResourceMessage,
 	energyPrice, bandwidthPrice int64,
 	energyEstimated bool,
+	creation *accountCreationCost,
 ) map[string]any {
 	energyAvailable := max(0, res.EnergyLimit-res.EnergyUsed)
 	bandwidthAvailable := max(0, res.NetLimit-res.NetUsed) + max(0, res.FreeNetLimit-res.FreeNetUsed)
@@ -188,6 +203,24 @@ func buildCostResult(
 		}
 	}
 
+	if transferType == "TRX" {
+		result["recipient_activated"] = creation == nil
+	}
+	if creation != nil {
+		// Account creation cannot consume free bandwidth. Its bandwidth charge
+		// is a fixed fee if the staked/delegated quota cannot cover it in full.
+		bandwidthRequired = creation.bandwidthRequired
+		bandwidthAvailable = max(0, res.NetLimit-res.NetUsed)
+		result["bandwidth_required"] = bandwidthRequired
+		result["account_bandwidth_available"] = bandwidthAvailable
+		options = append(options, map[string]any{
+			"resource": "account_activation", "method": "burn_trx",
+			"cost_sun": creation.fee, "cost_trx": util.SunToTRX(creation.fee),
+			"note": "Recipient is not activated; account creation fee applies",
+		})
+		totalCost += creation.fee
+	}
+
 	// Bandwidth cost
 	if bandwidthAvailable >= bandwidthRequired {
 		options = append(options, map[string]any{
@@ -200,6 +233,11 @@ func buildCostResult(
 	} else {
 		deficit := bandwidthRequired - bandwidthAvailable
 		burnCost := deficit * bandwidthPrice
+		note := fmt.Sprintf("Need %d more bandwidth (have %d, need %d)", deficit, bandwidthAvailable, bandwidthRequired)
+		if creation != nil {
+			burnCost = creation.bandwidthFee
+			note = "Insufficient staked or delegated bandwidth for account creation; fixed bandwidth fee applies"
+		}
 		totalCost += burnCost
 		options = append(options, map[string]any{
 			"resource":          "bandwidth",
@@ -207,7 +245,7 @@ func buildCostResult(
 			"cost_sun":          burnCost,
 			"cost_trx":          util.SunToTRX(burnCost),
 			"bandwidth_deficit": deficit,
-			"note":              fmt.Sprintf("Need %d more bandwidth (have %d, need %d)", deficit, bandwidthAvailable, bandwidthRequired),
+			"note":              note,
 		})
 	}
 
@@ -254,4 +292,49 @@ func estimateTRC20Energy(ctx context.Context, pool *nodepool.Pool, from, to, con
 		}
 	}
 	return energy, err
+}
+
+// accountCreationCost contains chain-controlled fees for a direct TRX transfer
+// to an address that does not yet exist on-chain.
+type accountCreationCost struct {
+	fee, bandwidthFee, bandwidthRequired int64
+}
+
+func getAccountCreationCost(ctx context.Context, pool *nodepool.Pool, to string, bandwidth int64) (*accountCreationCost, error) {
+	_, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (*core.Account, error) {
+		return pool.Client().GetAccountCtx(ctx, to)
+	})
+	if err == nil {
+		return nil, nil
+	}
+	if !errors.Is(err, client.ErrAccountNotFound) {
+		return nil, fmt.Errorf("checking recipient activation: %w", err)
+	}
+
+	params, err := retry.DoWithFailover(ctx, pool, func(ctx context.Context) (*core.ChainParameters, error) {
+		return pool.Client().GetChainParametersCtx(ctx)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("fetching account creation fees: %w", err)
+	}
+	values := make(map[string]int64)
+	for _, p := range params.GetChainParameter() {
+		values[p.GetKey()] = p.GetValue()
+	}
+	keys := []string{"getCreateNewAccountFeeInSystemContract", "getCreateAccountFee", "getCreateNewAccountBandwidthRate"}
+	for _, key := range keys {
+		value, ok := values[key]
+		if !ok || value < 0 {
+			return nil, fmt.Errorf("account creation parameter %s is missing or invalid", key)
+		}
+	}
+	rate := values[keys[2]]
+	if rate < 1 || bandwidth > math.MaxInt64/rate {
+		return nil, fmt.Errorf("invalid account creation bandwidth rate: %d", rate)
+	}
+	fee, bandwidthFee := values[keys[0]], values[keys[1]]
+	if fee > math.MaxInt64-bandwidthFee {
+		return nil, fmt.Errorf("account creation fees overflow")
+	}
+	return &accountCreationCost{fee: fee, bandwidthFee: bandwidthFee, bandwidthRequired: bandwidth * rate}, nil
 }
