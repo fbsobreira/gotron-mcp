@@ -17,15 +17,13 @@ brew install fbsobreira/tap/gotron-mcp
 # or: go install github.com/fbsobreira/gotron-mcp/cmd/gotron-mcp@latest
 ```
 
-Then install the plugin:
+Public marketplace installation is not available yet. To use local signing
+now, follow the [Claude Code MCP setup](../README.md#claude-code) in the main
+README after installing the binary.
 
-```bash
-/plugin marketplace add fbsobreira/gotron-plugins
-/plugin install gotron-local@gotron
-```
-
-Install either this plugin or the hosted `gotron` plugin, not both. With both,
-Claude sees two servers that can be on different networks.
+When plugins become available, install either this plugin or the hosted
+`gotron` plugin, not both. With both, Claude sees two servers that can be on
+different networks.
 
 ## Settings
 
