@@ -8,10 +8,9 @@ contract calls. It can't sign or broadcast.
 
 ## Install
 
-```bash
-/plugin marketplace add fbsobreira/gotron-plugins
-/plugin install gotron@gotron
-```
+Public marketplace installation is not available yet. To use the hosted MCP
+server now, follow the [Claude Code MCP setup](../README.md#claude-code) in
+the main README.
 
 ## Skills
 
@@ -36,9 +35,10 @@ server sees which addresses you ask about.
 
 ## Signing locally
 
-To sign with a local keystore, use the `gotron-local` plugin from the same
-marketplace instead. It runs the `gotron-mcp` binary on your machine. Install
-one of the two plugins, not both.
+The [`gotron-local`](../plugin-local) plugin source supports local keystore
+signing through a `gotron-mcp` binary on your machine. Until marketplace
+installation is available, use the local signing setup in the main README.
+When plugins become available, install one of the two, not both.
 
 ## Links
 

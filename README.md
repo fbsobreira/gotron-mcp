@@ -62,20 +62,9 @@ Connect directly to `https://mcp.gotron.sh/mcp` — no installation needed.
 
 ### Claude Code plugin
 
-The `gotron` plugin bundles the hosted server with skills for common TRON tasks (send USDT, estimate energy):
+The [`gotron`](plugin) plugin bundles the hosted server with skills for USDT transfers and energy estimates. The [`gotron-local`](plugin-local) plugin runs the `gotron-mcp` binary locally and supports keystore signing.
 
-```bash
-/plugin marketplace add fbsobreira/gotron-plugins
-/plugin install gotron@gotron
-```
-
-The plugin connects to the hosted server, so it builds unsigned transactions but can't sign. For signing, install the `gotron-local` plugin instead: it runs the `gotron-mcp` binary from your PATH and asks for the keystore passphrase when you enable it.
-
-```bash
-/plugin install gotron-local@gotron
-```
-
-Install one of the two, not both. The plugins live in [`plugin/`](plugin) and [`plugin-local/`](plugin-local) and install from `main`, so they update with each release.
+Public marketplace installation is not available yet. To connect today, use the [Claude Code MCP setup](#claude-code) below. Plugin source and configuration details are in the directories linked above.
 
 ## Claude Desktop Configuration
 
@@ -132,7 +121,7 @@ Add to current project:
 claude mcp add gotron --scope project -- gotron-mcp --network mainnet
 ```
 
-With keystore, prefer the [`gotron-local` plugin](#claude-code-plugin), which keeps the passphrase in your system keychain. To add the server by hand instead (this stores the passphrase in plain text in `~/.claude.json`):
+For local keystore signing, add the server with the passphrase environment variable (this stores the passphrase in plain text in `~/.claude.json`):
 
 ```bash
 claude mcp add gotron --scope user -e GOTRON_MCP_KEYSTORE_PASSPHRASE=your-keystore-passphrase -- gotron-mcp --network mainnet

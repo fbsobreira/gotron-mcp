@@ -53,10 +53,3 @@ fi
 
 chmod +x "$INSTALL_DIR/$BINARY"
 echo "$BINARY $VERSION installed to $INSTALL_DIR/$BINARY"
-
-if command -v claude >/dev/null 2>&1; then
-  echo ""
-  echo "To use it from Claude Code with local signing, add the GoTRON plugin:"
-  echo "  claude plugin marketplace add fbsobreira/gotron-plugins"
-  echo "  claude plugin install gotron-local@gotron"
-fi

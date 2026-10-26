@@ -17,28 +17,30 @@ brew install fbsobreira/tap/gotron-mcp
 # or: go install github.com/fbsobreira/gotron-mcp/cmd/gotron-mcp@latest
 ```
 
-Then install the plugin:
+Public marketplace installation is not available yet. To use local signing
+now, follow the [Claude Code MCP setup](../README.md#claude-code) in the main
+README after installing the binary.
 
-```bash
-/plugin marketplace add fbsobreira/gotron-plugins
-/plugin install gotron-local@gotron
-```
-
-Install either this plugin or the hosted `gotron` plugin, not both. With both,
-Claude sees two servers that can be on different networks.
+When plugins become available, install either this plugin or the hosted
+`gotron` plugin, not both. With both, Claude sees two servers that can be on
+different networks.
 
 ## Settings
 
-When you enable the plugin, Claude Code asks for:
+The manual MCP setup linked above stores explicitly configured environment
+values, including the keystore passphrase and any API key, in plain text in
+`~/.claude.json`.
+
+The plugin configuration defines the following settings for when marketplace
+installation becomes available:
 
 - **Network**: mainnet (the default), nile or shasta.
 - **Keystore passphrase** (required): encrypts and unlocks your wallets.
-  Claude Code keeps it in your system's secure credential storage and passes
-  it to the binary as an environment variable. The server doesn't start
-  until it is set.
+  It is passed to the binary as an environment variable. Wallet and signing
+  tools are enabled when it is set.
 - **Keystore directory**: leave empty for `~/.gotron-mcp/wallets`.
-- **TronGrid API key** (optional): for higher rate limits. Stored like the
-  passphrase.
+- **TronGrid API key** (optional): for higher rate limits. Passed to the
+  binary as an environment variable.
 
 ## Skills
 

@@ -45,6 +45,35 @@ If the result has a `warning` that energy estimation is unavailable, tell the
 user the cost is unknown and give the typical range from the warning. Don't
 present a guess as the estimate.
 
+### Choose the Energy fee limit
+
+Set `fee_limit` from the full Energy requirement and current price returned
+by `analyze_transfer_cost`, including Energy covered by staking:
+
+```text
+fee_limit = ceil(energy_required * energy_price_sun * 1.5 / 1_000_000)
+```
+
+This adds 50% headroom and rounds up to whole TRX, as required by the tool.
+Do not subtract staked Energy or use `total_estimated_cost_trx` for this
+calculation: `fee_limit` caps the caller's Energy budget even when staking
+covers it. Bandwidth burn is separate from this Energy ceiling.
+
+For example, 65,000 Energy at 100 SUN per Energy needs a `fee_limit` of
+10 TRX with headroom, even if available staked Energy makes the estimated
+TRX burn zero. The same Energy demand and price give the same limit whether
+staking covers all, some or none of the Energy.
+
+Use a positive integer no greater than the tool's 15,000 TRX maximum. If the
+calculated limit exceeds that maximum, stop and explain that the requested
+headroom cannot be provided; do not silently clamp it or build the transfer.
+If the Energy estimate or a positive Energy price is unavailable, leave the
+100 TRX default and explain that its sufficiency is unverified, rather than
+calculating a zero limit from missing data. Include the chosen ceiling in
+the confirmation summary; a change to it needs a new confirmation.
+
+`fee_limit` is a ceiling, not a charge: unused budget is not charged.
+
 ## 3. Confirm with the user
 
 Show one summary and wait for an explicit yes:
@@ -56,16 +85,16 @@ Show one summary and wait for an explicit yes:
 - amount
 - full recipient address (not shortened)
 - estimated TRX burn, or that staked energy covers it
+- chosen Energy fee ceiling (`fee_limit` in TRX)
 
 Any change to these after confirmation needs a new confirmation.
 
 ## 4. Build the transaction
 
-Call `transfer_trc20` with `from`, `to`, `contract_address` and `amount` in
-token units (for example `"25.5"`, not the raw integer). Set `fee_limit` in
-TRX to cover `total_estimated_cost_trx` with headroom, for example the estimate
-plus 50%, and at least the 100 TRX default when you have no estimate.
-`fee_limit` is a ceiling, not a charge: the transfer burns only what it uses.
+Call `transfer_trc20` with `from`, `to`, `contract_address`, `amount`, and
+`fee_limit`. Pass `amount` in token units (for example `"25.5"`, not the raw
+integer), and explicitly pass the confirmed `fee_limit` as whole TRX. Do not
+omit `fee_limit` and let the tool substitute its default ceiling.
 
 The result is an unsigned `transaction_hex` and its `txid`.
 
