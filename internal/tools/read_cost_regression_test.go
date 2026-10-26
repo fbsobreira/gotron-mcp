@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/big"
 	"net"
 	"testing"
@@ -189,6 +190,15 @@ func TestAnalyzeTransferCost_ActivationParametersUnavailable(t *testing.T) {
 	}{
 		{name: "missing", params: &core.ChainParameters{}},
 		{name: "RPC failure", err: fmt.Errorf("chain parameters unavailable")},
+		{name: "bandwidth overflow", params: &core.ChainParameters{ChainParameter: []*core.ChainParameters_ChainParameter{
+			{Key: "getCreateNewAccountFeeInSystemContract", Value: 1_000_000}, {Key: "getCreateAccountFee", Value: 100_000}, {Key: "getCreateNewAccountBandwidthRate", Value: math.MaxInt64},
+		}}},
+		{name: "fee overflow", params: &core.ChainParameters{ChainParameter: []*core.ChainParameters_ChainParameter{
+			{Key: "getCreateNewAccountFeeInSystemContract", Value: math.MaxInt64}, {Key: "getCreateAccountFee", Value: 1}, {Key: "getCreateNewAccountBandwidthRate", Value: 1},
+		}}},
+		{name: "negative fee", params: &core.ChainParameters{ChainParameter: []*core.ChainParameters_ChainParameter{
+			{Key: "getCreateNewAccountFeeInSystemContract", Value: -1}, {Key: "getCreateAccountFee", Value: 100_000}, {Key: "getCreateNewAccountBandwidthRate", Value: 1},
+		}}},
 		{name: "invalid rate", params: &core.ChainParameters{ChainParameter: []*core.ChainParameters_ChainParameter{
 			{Key: "getCreateNewAccountFeeInSystemContract", Value: 1_000_000}, {Key: "getCreateAccountFee", Value: 100_000}, {Key: "getCreateNewAccountBandwidthRate", Value: 0},
 		}}},
@@ -266,5 +276,22 @@ func TestTriggerConstantContract_SuccessWithoutReturnData(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+func TestAnalyzeTransferCost_InvalidTRXAmount(t *testing.T) {
+	for _, amount := range []string{"", "0", "-1", "0.0000001", "invalid"} {
+		t.Run(amount, func(t *testing.T) {
+			mock := &mockWalletServer{
+				GetAccountResourceFunc: func(context.Context, *core.Account) (*api.AccountResourceMessage, error) {
+					return &api.AccountResourceMessage{FreeNetLimit: 600}, nil
+				},
+			}
+			result := callTool(t, handleAnalyzeTransferCost(newMockPool(t, mock), nil), map[string]any{
+				"from": "TKSXDA8HfE9E1y39RczVQ1ZascUEtaSToF", "to": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", "amount": amount,
+			})
+			require.True(t, result.IsError)
+			assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "amount must be a positive TRX amount")
+		})
 	}
 }

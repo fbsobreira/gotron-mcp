@@ -211,7 +211,7 @@ func (m *mockWalletServer) GetNowBlock2(_ context.Context, _ *api.EmptyMessage) 
 }
 
 // newBufconnClient creates a gRPC client connected to a bufconn mock server.
-func newBufconnClient(t *testing.T, mock *mockWalletServer) *client.GrpcClient {
+func newBufconnClient(t *testing.T, mock api.WalletServer) *client.GrpcClient {
 	t.Helper()
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
