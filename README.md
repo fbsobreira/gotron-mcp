@@ -17,7 +17,7 @@ Built on the [GoTRON SDK](https://github.com/fbsobreira/gotron-sdk) and the [Mod
 | Transport | stdio | Streamable HTTP |
 | Read tools | All | All |
 | Transaction builders | All (unsigned tx hex) | All (unsigned tx hex) |
-| Sign/Broadcast | Opt-in via `--keystore` | Disabled |
+| Sign/Broadcast | Opt-in via keystore passphrase | Disabled |
 | Install | Required | Zero install |
 
 ## Install
@@ -60,6 +60,23 @@ Published to the [MCP Registry](https://registry.modelcontextprotocol.io) as `io
 
 Connect directly to `https://mcp.gotron.sh/mcp` — no installation needed.
 
+### Claude Code plugin
+
+The `gotron` plugin bundles the hosted server with skills for common TRON tasks (send USDT, estimate energy):
+
+```bash
+/plugin marketplace add fbsobreira/gotron-plugins
+/plugin install gotron@gotron
+```
+
+The plugin connects to the hosted server, so it builds unsigned transactions but can't sign. For signing, install the `gotron-local` plugin instead: it runs the `gotron-mcp` binary from your PATH and asks for the keystore passphrase when you enable it.
+
+```bash
+/plugin install gotron-local@gotron
+```
+
+Install one of the two, not both. The plugins live in [`plugin/`](plugin) and [`plugin-local/`](plugin-local) and install from `main`, so they update with each release.
+
 ## Claude Desktop Configuration
 
 ### Local mode
@@ -85,9 +102,10 @@ Connect directly to `https://mcp.gotron.sh/mcp` — no installation needed.
   "mcpServers": {
     "gotron": {
       "command": "gotron-mcp",
-      "args": ["--network", "mainnet", "--keystore", "~/.tronctl/keystore"],
+      "args": ["--network", "mainnet"],
       "env": {
-        "GOTRON_NODE_API_KEY": "your-trongrid-api-key"
+        "GOTRON_NODE_API_KEY": "your-trongrid-api-key",
+        "GOTRON_MCP_KEYSTORE_PASSPHRASE": "your-keystore-passphrase"
       }
     }
   }
@@ -114,10 +132,10 @@ Add to current project:
 claude mcp add gotron --scope project -- gotron-mcp --network mainnet
 ```
 
-With keystore:
+With keystore, prefer the [`gotron-local` plugin](#claude-code-plugin), which keeps the passphrase in your system keychain. To add the server by hand instead (this stores the passphrase in plain text in `~/.claude.json`):
 
 ```bash
-claude mcp add gotron --scope project -- gotron-mcp --network mainnet --keystore ~/.tronctl/keystore
+claude mcp add gotron --scope user -e GOTRON_MCP_KEYSTORE_PASSPHRASE=your-keystore-passphrase -- gotron-mcp --network mainnet
 ```
 
 Add globally:
@@ -198,7 +216,8 @@ claude mcp add gotron --scope user --transport http https://mcp.gotron.sh/mcp
 | `--port` | — | `8080` | HTTP server port |
 | `--bind` | — | `127.0.0.1` | HTTP server bind address |
 | `--fallback-node` | `GOTRON_MCP_FALLBACK_NODE` | — | Fallback gRPC node (auto-failover) |
-| `--keystore` | — | — | Path to tronctl keystore directory |
+| `--keystore-dir` | `GOTRON_MCP_KEYSTORE_DIR` | `~/.gotron-mcp/wallets` | Wallet directory |
+| `--keystore-pass` | `GOTRON_MCP_KEYSTORE_PASSPHRASE` | — | Keystore passphrase; wallet and sign tools are registered only when set |
 | `--tls` | — | `false` | Use TLS for gRPC connection (default: plaintext) |
 
 ### Network Presets
@@ -215,7 +234,7 @@ Explicit `--node` overrides network presets.
 
 - The server **never** stores or manages private keys directly
 - All write tools return **unsigned transaction hex** — the user decides how to sign
-- Keystore signing is opt-in via `--keystore` flag
+- Keystore signing is opt-in: wallet and sign tools are registered only when a keystore passphrase is set
 - In hosted (HTTP) mode, all write and sign tools are automatically disabled
 - API key is optional and only needed for TronGrid rate limits
 
