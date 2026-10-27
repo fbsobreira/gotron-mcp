@@ -40,8 +40,11 @@ installation becomes available:
 - **Keystore passphrase** (required): encrypts and unlocks your wallets.
   It is passed to the binary as an environment variable. Wallet tools require
   local stdio mode, a passphrase, and successful wallet-manager initialization
-  with a usable keystore directory. Signing also requires a loaded policy
-  when `GOTRON_MCP_REQUIRE_POLICY=true`; otherwise signing tools stay disabled.
+  with a usable keystore directory. Once the wallet manager is initialized,
+  signing tools stay disabled if `GOTRON_MCP_REQUIRE_POLICY=true` and no
+  policy loads. When required-policy mode is off and no policy loads, signing
+  is available without policy enforcement. A loaded policy is enforced in
+  either mode.
 - **Keystore directory**: leave empty for `~/.gotron-mcp/wallets`.
 - **TronGrid API key** (optional): for higher rate limits. Passed to the
   binary as an environment variable.
