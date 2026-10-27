@@ -17,7 +17,7 @@ Built on the [GoTRON SDK](https://github.com/fbsobreira/gotron-sdk) and the [Mod
 | Transport | stdio | Streamable HTTP |
 | Read tools | All | All |
 | Transaction builders | All (unsigned tx hex) | All (unsigned tx hex) |
-| Sign/Broadcast | Opt-in via `--keystore` | Disabled |
+| Sign/Broadcast | Opt-in via keystore passphrase | Disabled |
 | Install | Required | Zero install |
 
 ## Install
@@ -60,6 +60,12 @@ Published to the [MCP Registry](https://registry.modelcontextprotocol.io) as `io
 
 Connect directly to `https://mcp.gotron.sh/mcp` — no installation needed.
 
+### Claude Code plugin
+
+The [`gotron`](plugin) plugin bundles the hosted server with skills for USDT transfers and energy estimates. The [`gotron-local`](plugin-local) plugin runs the `gotron-mcp` binary locally and supports keystore signing.
+
+Public marketplace installation is not available yet. To connect today, use the [Claude Code MCP setup](#claude-code) below. Plugin source and configuration details are in the directories linked above.
+
 ## Claude Desktop Configuration
 
 ### Local mode
@@ -85,9 +91,10 @@ Connect directly to `https://mcp.gotron.sh/mcp` — no installation needed.
   "mcpServers": {
     "gotron": {
       "command": "gotron-mcp",
-      "args": ["--network", "mainnet", "--keystore", "~/.tronctl/keystore"],
+      "args": ["--network", "mainnet"],
       "env": {
-        "GOTRON_NODE_API_KEY": "your-trongrid-api-key"
+        "GOTRON_NODE_API_KEY": "your-trongrid-api-key",
+        "GOTRON_MCP_KEYSTORE_PASSPHRASE": "your-keystore-passphrase"
       }
     }
   }
@@ -108,25 +115,48 @@ Connect directly to `https://mcp.gotron.sh/mcp` — no installation needed.
 
 ### Claude Code
 
-Add to current project:
+Choose one of the following setup options.
+
+**Project-wide local server:**
 
 ```bash
 claude mcp add gotron --scope project -- gotron-mcp --network mainnet
 ```
 
-With keystore:
+**User-wide local server with keystore signing:**
+
+If a project-scoped `gotron` entry already exists, remove it first with `claude mcp remove gotron --scope project`. For a local-scoped entry, use `claude mcp remove gotron --scope local`. Check the selected entry with `claude mcp get gotron`: local and project entries take precedence over user entries, and their settings are not combined. See [Claude Code's scope precedence](https://code.claude.com/docs/en/mcp#scope-hierarchy-and-precedence).
+
+Save an environment-variable reference rather than the passphrase itself. Keep the single quotes so your shell does not expand the reference while registering the server:
 
 ```bash
-claude mcp add gotron --scope project -- gotron-mcp --network mainnet --keystore ~/.tronctl/keystore
+claude mcp add gotron --scope user -e 'GOTRON_MCP_KEYSTORE_PASSPHRASE=${GOTRON_MCP_KEYSTORE_PASSPHRASE:-}' -- gotron-mcp --network mainnet
 ```
 
-Add globally:
+Then launch Claude from Bash or Zsh with a hidden passphrase prompt:
+
+```bash
+(
+  set +x
+  printf 'Keystore passphrase: '
+  IFS= read -r -s GOTRON_MCP_KEYSTORE_PASSPHRASE || exit 1
+  printf '\n'
+  export GOTRON_MCP_KEYSTORE_PASSPHRASE
+  claude
+)
+```
+
+The subshell limits the exported value to that Claude session. The prompt keeps the passphrase out of shell history and command-line arguments; it is still available in the environment of Claude and its MCP server. Repeat the prompt when starting a new signing session. Without a supplied passphrase, the reference expands to an empty value and wallet/signing tools stay disabled.
+
+If you previously registered a literal passphrase with `-e`, it was stored in plain text in `~/.claude.json` and may also remain in shell history. Remove the old user-scoped entry with `claude mcp remove gotron --scope user`, register it again using the reference above, and remove the old history entry. See [Claude Code's environment-variable expansion documentation](https://code.claude.com/docs/en/mcp#environment-variable-expansion-in-mcp-json).
+
+**User-wide local server without keystore configuration:**
 
 ```bash
 claude mcp add gotron --scope user -- gotron-mcp --network mainnet
 ```
 
-Hosted (zero install):
+**Hosted server (zero install):**
 
 ```bash
 claude mcp add gotron --scope user --transport http https://mcp.gotron.sh/mcp
@@ -142,6 +172,7 @@ claude mcp add gotron --scope user --transport http https://mcp.gotron.sh/mcp
 | `get_account_resources` | Get energy/bandwidth usage and limits |
 | `get_trc20_balance` | Get TRC20 token balance for an account |
 | `get_trc20_token_info` | Get TRC20 token name, symbol, and decimals |
+| `analyze_transfer_cost` | Estimate TRX or TRC20 transfer costs, including account activation fees for new TRX recipients |
 | `get_block` | Get block by number or latest |
 | `get_transaction` | Get transaction details by ID |
 | `list_witnesses` | List all super representatives |
@@ -198,7 +229,8 @@ claude mcp add gotron --scope user --transport http https://mcp.gotron.sh/mcp
 | `--port` | — | `8080` | HTTP server port |
 | `--bind` | — | `127.0.0.1` | HTTP server bind address |
 | `--fallback-node` | `GOTRON_MCP_FALLBACK_NODE` | — | Fallback gRPC node (auto-failover) |
-| `--keystore` | — | — | Path to tronctl keystore directory |
+| `--keystore-dir` | `GOTRON_MCP_KEYSTORE_DIR` | `~/.gotron-mcp/wallets` | Wallet directory |
+| `--keystore-pass` | `GOTRON_MCP_KEYSTORE_PASSPHRASE` | — | Keystore passphrase; wallet and sign tools are registered only when set |
 | `--tls` | — | `false` | Use TLS for gRPC connection (default: plaintext) |
 
 ### Network Presets
@@ -211,11 +243,15 @@ claude mcp add gotron --scope user --transport http https://mcp.gotron.sh/mcp
 
 Explicit `--node` overrides network presets.
 
+Contract reads require a node with `vm.supportConstant = true`. If a node reports that constant execution is unsupported, reads try `--fallback-node` when configured. TRC20 reads also use the fallback for empty results, since token reads require return data. General contract simulations can succeed without return data. The fallback must serve the same network. This fallback applies per call, independently of block health checks; contract reverts are returned as errors.
+
+For TRX transfers to unactivated recipients, `analyze_transfer_cost` reads the account creation fees and bandwidth multiplier from chain parameters. Only staked or delegated bandwidth can cover account creation; free bandwidth cannot. If recipient activation or the required fee parameters cannot be determined, the tool returns an error instead of quoting zero.
+
 ## Security
 
 - The server **never** stores or manages private keys directly
 - All write tools return **unsigned transaction hex** — the user decides how to sign
-- Keystore signing is opt-in via `--keystore` flag
+- Keystore signing is opt-in: wallet and sign tools are registered only when a keystore passphrase is set
 - In hosted (HTTP) mode, all write and sign tools are automatically disabled
 - API key is optional and only needed for TronGrid rate limits
 
