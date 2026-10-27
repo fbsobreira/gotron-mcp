@@ -115,13 +115,19 @@ Public marketplace installation is not available yet. To connect today, use the 
 
 ### Claude Code
 
-Add to current project:
+Choose one of the following setup options.
+
+**Project-wide local server:**
 
 ```bash
 claude mcp add gotron --scope project -- gotron-mcp --network mainnet
 ```
 
-For local keystore signing, save an environment-variable reference rather than the passphrase itself. Keep the single quotes so your shell does not expand the reference while registering the server:
+**User-wide local server with keystore signing:**
+
+If a project-scoped `gotron` entry already exists, remove it first with `claude mcp remove gotron --scope project`. For a local-scoped entry, use `claude mcp remove gotron --scope local`. Check the selected entry with `claude mcp get gotron`: local and project entries take precedence over user entries, and their settings are not combined. See [Claude Code's scope precedence](https://code.claude.com/docs/en/mcp#scope-hierarchy-and-precedence).
+
+Save an environment-variable reference rather than the passphrase itself. Keep the single quotes so your shell does not expand the reference while registering the server:
 
 ```bash
 claude mcp add gotron --scope user -e 'GOTRON_MCP_KEYSTORE_PASSPHRASE=${GOTRON_MCP_KEYSTORE_PASSPHRASE:-}' -- gotron-mcp --network mainnet
@@ -144,13 +150,13 @@ The subshell limits the exported value to that Claude session. The prompt keeps 
 
 If you previously registered a literal passphrase with `-e`, it was stored in plain text in `~/.claude.json` and may also remain in shell history. Remove the old user-scoped entry with `claude mcp remove gotron --scope user`, register it again using the reference above, and remove the old history entry. See [Claude Code's environment-variable expansion documentation](https://code.claude.com/docs/en/mcp#environment-variable-expansion-in-mcp-json).
 
-Add globally:
+**User-wide local server without keystore configuration:**
 
 ```bash
 claude mcp add gotron --scope user -- gotron-mcp --network mainnet
 ```
 
-Hosted (zero install):
+**Hosted server (zero install):**
 
 ```bash
 claude mcp add gotron --scope user --transport http https://mcp.gotron.sh/mcp
