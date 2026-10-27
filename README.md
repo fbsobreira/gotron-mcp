@@ -121,11 +121,28 @@ Add to current project:
 claude mcp add gotron --scope project -- gotron-mcp --network mainnet
 ```
 
-For local keystore signing, add the server with the passphrase environment variable (this stores the passphrase in plain text in `~/.claude.json`):
+For local keystore signing, save an environment-variable reference rather than the passphrase itself. Keep the single quotes so your shell does not expand the reference while registering the server:
 
 ```bash
-claude mcp add gotron --scope user -e GOTRON_MCP_KEYSTORE_PASSPHRASE=your-keystore-passphrase -- gotron-mcp --network mainnet
+claude mcp add gotron --scope user -e 'GOTRON_MCP_KEYSTORE_PASSPHRASE=${GOTRON_MCP_KEYSTORE_PASSPHRASE:-}' -- gotron-mcp --network mainnet
 ```
+
+Then launch Claude from Bash or Zsh with a hidden passphrase prompt:
+
+```bash
+(
+  set +x
+  printf 'Keystore passphrase: '
+  IFS= read -r -s GOTRON_MCP_KEYSTORE_PASSPHRASE || exit 1
+  printf '\n'
+  export GOTRON_MCP_KEYSTORE_PASSPHRASE
+  claude
+)
+```
+
+The subshell limits the exported value to that Claude session. The prompt keeps the passphrase out of shell history and command-line arguments; it is still available in the environment of Claude and its MCP server. Repeat the prompt when starting a new signing session. Without a supplied passphrase, the reference expands to an empty value and wallet/signing tools stay disabled.
+
+If you previously registered a literal passphrase with `-e`, it was stored in plain text in `~/.claude.json` and may also remain in shell history. Remove the old user-scoped entry with `claude mcp remove gotron --scope user`, register it again using the reference above, and remove the old history entry. See [Claude Code's environment-variable expansion documentation](https://code.claude.com/docs/en/mcp#environment-variable-expansion-in-mcp-json).
 
 Add globally:
 
